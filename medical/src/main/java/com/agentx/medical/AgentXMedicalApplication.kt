@@ -88,9 +88,15 @@ class AgentXMedicalApplication : Application() {
         database = AgentXMedicalDatabase.getInstance(this)
         modelFileManager = ModelFileManager(this)
         huggingFaceDownloader = HuggingFaceDownloader(this, modelFileManager)
-        val localEngine = LlamaCppEngine()
+        val localLlama = LlamaCppEngine()
+        val airLlm = com.agentx.medical.core.inference.AirLlmEngine()
         val cloudEngine = CloudInferenceEngine()
-        hybridInferenceEngine = HybridInferenceEngine(localEngine, cloudEngine)
+        hybridInferenceEngine = HybridInferenceEngine(
+            llamaEngine = localLlama,
+            airLlmEngine = airLlm,
+            cloudEngine = cloudEngine,
+            activeLocalBackend = com.agentx.medical.core.inference.LocalBackendType.AIR_LLM
+        )
         inferenceEngine = hybridInferenceEngine
 
         // Repositories
