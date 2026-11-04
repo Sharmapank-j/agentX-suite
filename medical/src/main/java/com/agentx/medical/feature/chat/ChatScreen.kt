@@ -768,7 +768,7 @@ fun ChatMessageItem(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
-            if (message.tokenCount != null && message.tokenCount > 0) {
+            if (message.tokenCount > 0) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "• ${message.tokenCount} tokens",

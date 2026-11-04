@@ -5,10 +5,11 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
-    name: Build & Verify AgentX Suite
+    name: Build & Verify AgentX Suite (3 Applications)
     runs-on: ubuntu-latest
 
     steps:
@@ -20,26 +21,31 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: Grant Execute Permission to Gradlew
         run: chmod +x gradlew
 
-      - name: Run Unit Tests (:app:testDebugUnitTest)
-        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+      - name: Run Unit Tests (All 3 Modules)
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build Debug APKs (:app, :medical, and :admin)
-        run: ./gradlew :app:assembleDebug :medical:assembleDebug :admin:assembleDebug --no-daemon
+      - name: Build Debug APKs (All 3 Applications)
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: app/build/reports/tests/testDebugUnitTest/
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            medical/build/reports/tests/testDebugUnitTest/
+            admin/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
 
       - name: Upload Debug APKs
         uses: actions/upload-artifact@v4

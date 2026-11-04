@@ -1074,7 +1074,7 @@ fun ChatMessageItem(
                     fontWeight = FontWeight.Bold,
                     color = NeonIndigo
                 )
-                if (message.tokenCount != null && message.tokenCount > 0) {
+                if (message.tokenCount > 0) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "• ${message.tokenCount} tokens",

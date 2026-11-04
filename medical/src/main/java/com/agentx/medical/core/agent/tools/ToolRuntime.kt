@@ -56,6 +56,136 @@ object ToolArgumentValidator {
 // ─── Clinical Tool Implementations ────────────────────────────────────────────
 
 /**
+ * Cockcroft-Gault Creatinine Clearance (CrCl) Calculator.
+ * Used for renal drug dosage adjustments (FDA drug labeling standard).
+ * CrCl = [ (140 - Age) * Weight (kg) ] / [ 72 * Serum Creatinine (mg/dL) ] * (0.85 if Female)
+ */
+object CockcroftGaultCalculator {
+    fun calculate(age: Int, weightKg: Double, serumCrMgDl: Double, sex: String): String {
+        if (age <= 0 || weightKg <= 0.0 || serumCrMgDl <= 0.0) {
+            return "Invalid input: Age, weight, and serum creatinine must all be positive values."
+        }
+        val isFemale = sex.uppercase() == "F"
+        val rawCrCl = ((140 - age) * weightKg) / (72.0 * serumCrMgDl)
+        val finalCrCl = if (isFemale) rawCrCl * 0.85 else rawCrCl
+
+        val stage = when {
+            finalCrCl >= 90.0 -> "Normal Renal Clearance (≥90 mL/min)"
+            finalCrCl >= 60.0 -> "Mild Renal Impairment (60–89 mL/min)"
+            finalCrCl >= 30.0 -> "Moderate Renal Impairment (30–59 mL/min)"
+            finalCrCl >= 15.0 -> "Severe Renal Impairment (15–29 mL/min)"
+            else -> "End-Stage Renal Disease (<15 mL/min)"
+        }
+
+        return """
+## Cockcroft-Gault Creatinine Clearance (CrCl)
+
+| Parameter | Value |
+|-----------|-------|
+| Calculated CrCl | ${String.format("%.1f", finalCrCl)} mL/min |
+| Impairment Tier | $stage |
+| Input Age | $age years |
+| Input Weight | $weightKg kg |
+| Serum Creatinine | $serumCrMgDl mg/dL |
+| Biological Sex | $sex |
+
+> ${if (finalCrCl < 50.0) "⚠️ Significant renal impairment. Review antibiotic (Vancomycin, Aminoglycosides), DOAC (Apixaban, Rivaroxaban), and Enoxaparin dosing guidelines." else "Standard renally cleared medication dosing applies."}
+        """.trimIndent()
+    }
+}
+
+/**
+ * Serum Anion Gap & Delta-Delta Ratio Calculator for Acid-Base Disorders.
+ * AG = [Na+] - ([Cl-] + [HCO3-])
+ * Normal: 8–12 mEq/L
+ */
+object AnionGapCalculator {
+    fun calculate(sodium: Double, chloride: Double, bicarbonate: Double, albumin: Double? = null): String {
+        if (sodium <= 0.0 || chloride <= 0.0 || bicarbonate <= 0.0) {
+            return "Invalid input: Sodium, chloride, and bicarbonate must be positive values."
+        }
+        val unadjustedAg = sodium - (chloride + bicarbonate)
+        val correctedAg = if (albumin != null && albumin > 0.0) {
+            unadjustedAg + 2.5 * (4.0 - albumin)
+        } else {
+            unadjustedAg
+        }
+
+        val classification = when {
+            correctedAg > 12.0 -> "High Anion Gap Metabolic Acidosis (HAGMA)"
+            correctedAg < 8.0 -> "Low Anion Gap (Hypoalbuminemia, multiple myeloma, lithium intoxication)"
+            else -> "Normal Anion Gap (Non-Anion Gap Metabolic Acidosis / NAGMA or Normal)"
+        }
+
+        val differential = if (correctedAg > 12.0) {
+            """
+### Differential Diagnosis (GOLDMARK / MUDPILES):
+• **G**lycols (Ethylene glycol, Propylene glycol)
+• **O**xoproline (Chronic acetaminophen use)
+• **L**-Lactate (Shock, hypoperfusion, mesenteric ischemia)
+• **D**-Lactate (Short bowel syndrome)
+• **M**ethanol intoxication
+• **A**spirin / Salicylates
+• **R**enal failure (Uremia, retention of sulfates/phosphates)
+• **K**etoacidosis (DKA, Alcoholic ketoacidosis, Starvation)
+            """.trimIndent()
+        } else {
+            """
+### Normal Anion Gap Causes (HARDUPS):
+• Hyperalimentation, Acetazolamide, Renal tubular acidosis (RTA), Diarrhea, Uretero-enteric fistula, Pancreatic fistula, Saline resuscitation.
+            """.trimIndent()
+        }
+
+        return """
+## Serum Anion Gap Evaluation
+
+| Parameter | Value |
+|-----------|-------|
+| Measured Anion Gap | ${String.format("%.1f", unadjustedAg)} mEq/L |
+${if (albumin != null) "| Albumin-Corrected AG | ${String.format("%.1f", correctedAg)} mEq/L (Albumin: $albumin g/dL) |\n" else ""}| Reference Range | 8.0–12.0 mEq/L |
+| Interpretation | **$classification** |
+
+$differential
+
+> ⚕️ Correlate with Arterial Blood Gas (pH, PaCO2) and delta-gap ratio to rule out mixed acid-base disorders.
+        """.trimIndent()
+    }
+}
+
+/**
+ * Corrected Calcium Calculator for Hypoalbuminemia.
+ * Ca_corrected = Total Ca (mg/dL) + 0.8 * (4.0 - Albumin [g/dL])
+ */
+object CorrectedCalciumCalculator {
+    fun calculate(measuredCalciumMgDl: Double, albuminGDl: Double): String {
+        if (measuredCalciumMgDl <= 0.0 || albuminGDl <= 0.0) {
+            return "Invalid input: Measured calcium and albumin must be positive values."
+        }
+        val correctedCa = measuredCalciumMgDl + 0.8 * (4.0 - albuminGDl)
+        val status = when {
+            correctedCa < 8.5 -> "Hypocalcemia (<8.5 mg/dL) — Assess Chvostek/Trousseau signs, ECG QTc prolongation"
+            correctedCa > 10.5 -> "Hypercalcemia (>10.5 mg/dL) — Rule out hyperparathyroidism or malignancy"
+            else -> "Normal Ionized/Corrected Calcium (8.5–10.5 mg/dL)"
+        }
+
+        return """
+## Corrected Calcium Assessment
+
+| Parameter | Value |
+|-----------|-------|
+| Measured Serum Calcium | $measuredCalciumMgDl mg/dL |
+| Serum Albumin | $albuminGDl g/dL |
+| **Corrected Calcium** | **${String.format("%.2f", correctedCa)} mg/dL** |
+| Reference Range | 8.5–10.5 mg/dL |
+| Clinical Interpretation | $status |
+
+> ⚕️ If clinically significant abnormality is suspected, verify directly with Ionized Calcium (free Ca²⁺).
+        """.trimIndent()
+    }
+}
+
+
+/**
  * eGFR calculator using CKD-EPI 2021 (race-free) equation.
  * Input args: { "age": int, "sex": "M"|"F", "creatinine_mg_dl": float }
  */
@@ -369,7 +499,26 @@ class ClinicalToolExecutor : ToolExecutor {
                             val sex = args["sex"]?.jsonPrimitive?.content ?: "M"
                             ToolCallResult(toolId, Cha2ds2VascCalculator.calculate(chf, htn, age, dm, stroke, vasc, sex), true)
                         }
-                        else -> ToolCallResult(toolId, "Unknown calculation type: $calc. Supported: egfr, cha2ds2vasc", false, "Unknown calc")
+                        "cockcroft_gault", "crcl" -> {
+                            val age = args["age"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 60
+                            val weight = args["weight_kg"]?.jsonPrimitive?.doubleOrNull ?: 70.0
+                            val cr = args["creatinine_mg_dl"]?.jsonPrimitive?.doubleOrNull ?: 1.0
+                            val sex = args["sex"]?.jsonPrimitive?.content ?: "M"
+                            ToolCallResult(toolId, CockcroftGaultCalculator.calculate(age, weight, cr, sex), true)
+                        }
+                        "anion_gap" -> {
+                            val na = args["sodium"]?.jsonPrimitive?.doubleOrNull ?: 140.0
+                            val cl = args["chloride"]?.jsonPrimitive?.doubleOrNull ?: 102.0
+                            val hco3 = args["bicarbonate"]?.jsonPrimitive?.doubleOrNull ?: 24.0
+                            val alb = args["albumin"]?.jsonPrimitive?.doubleOrNull
+                            ToolCallResult(toolId, AnionGapCalculator.calculate(na, cl, hco3, alb), true)
+                        }
+                        "corrected_calcium" -> {
+                            val ca = args["calcium"]?.jsonPrimitive?.doubleOrNull ?: 8.0
+                            val alb = args["albumin"]?.jsonPrimitive?.doubleOrNull ?: 2.5
+                            ToolCallResult(toolId, CorrectedCalciumCalculator.calculate(ca, alb), true)
+                        }
+                        else -> ToolCallResult(toolId, "Unknown calculation type: $calc. Supported: egfr, cha2ds2vasc, cockcroft_gault, anion_gap, corrected_calcium", false, "Unknown calc")
                     }
                 }
 
@@ -431,7 +580,7 @@ object ClinicalToolDefinitions {
         ToolDefinition(
             id = "tool_clinical_calc",
             name = "Clinical Risk & Dosage Calculator",
-            description = "Calculates eGFR (CKD-EPI 2021 race-free) and CHA₂DS₂-VASc stroke risk scores for non-valvular AF. Input: { calculation: 'egfr'|'cha2ds2vasc', ...params }",
+            description = "Calculates eGFR (CKD-EPI 2021), CHA₂DS₂-VASc, Cockcroft-Gault CrCl, Anion Gap, and Corrected Calcium. Input: { calculation: 'egfr'|'cha2ds2vasc'|'cockcroft_gault'|'anion_gap'|'corrected_calcium', ...params }",
             parametersJsonSchema = """{"type":"object","properties":{"calculation":{"type":"string"},"age":{"type":"number"},"sex":{"type":"string"},"creatinine_mg_dl":{"type":"number"}}}""",
             requiresExplicitPermission = false
         ),
