@@ -280,7 +280,7 @@ class AgentXAdminServer(
     }
 
     private fun handleGetModels(clientIp: String, startTime: Long, writer: PrintWriter) {
-        val modelsJson = localEngine.curatedCatalog.joinToString(",") { model ->
+        val modelsJson = localEngine.allAvailableModels.joinToString(",") { model ->
             """
             {
               "id": "${model.id}",

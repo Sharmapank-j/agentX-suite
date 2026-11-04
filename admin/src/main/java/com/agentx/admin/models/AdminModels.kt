@@ -28,7 +28,10 @@ data class LocalServerModel(
     val memoryFootprintMb: Long = 196L,
     val description: String,
     val isLoaded: Boolean = false,
-    val isServing: Boolean = false
+    val isServing: Boolean = false,
+    val filePath: String? = null,
+    val fileSizeBytes: Long = 0L,
+    val isCustomStorageModel: Boolean = false
 )
 
 @Serializable

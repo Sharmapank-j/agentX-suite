@@ -1,5 +1,7 @@
 package com.agentx.admin.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -36,10 +38,12 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SdStorage
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
@@ -110,6 +114,14 @@ fun AdminDashboardScreen(
     var newKeyClientName by remember { mutableStateOf("") }
     var showApiKey by remember { mutableStateOf(false) }
     var portInput by remember(state.selectedPort) { mutableStateOf(state.selectedPort.toString()) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let {
+            viewModel.importModelFromUri(it, context)
+        }
+    }
 
     LaunchedEffect(state.notificationMessage) {
         state.notificationMessage?.let {
@@ -267,6 +279,15 @@ fun AdminDashboardScreen(
                         onServingModeChange = { viewModel.setServingMode(it) },
                         onLoadModel = { viewModel.loadLocalModel(it) },
                         onUnloadModel = { viewModel.unloadLocalModel() },
+                        onPickModelFromStorage = {
+                            try {
+                                filePickerLauncher.launch(arrayOf("*/*", "application/octet-stream"))
+                            } catch (_: Exception) {
+                                filePickerLauncher.launch(arrayOf("*/*"))
+                            }
+                        },
+                        onScanStorage = { viewModel.scanDeviceStorage(context) },
+                        onRemoveStorageModel = { viewModel.removeStorageModel(it) },
                         onTestPromptChange = { viewModel.setTestPrompt(it) },
                         onRunTest = { viewModel.runLocalModelTest() },
                         onClearTest = { viewModel.clearTestResponse() },
@@ -342,6 +363,9 @@ private fun LocalModelsTab(
     onServingModeChange: (ServingMode) -> Unit,
     onLoadModel: (String) -> Unit,
     onUnloadModel: () -> Unit,
+    onPickModelFromStorage: () -> Unit,
+    onScanStorage: () -> Unit,
+    onRemoveStorageModel: (String) -> Unit,
     onTestPromptChange: (String) -> Unit,
     onRunTest: () -> Unit,
     onClearTest: () -> Unit,
@@ -527,7 +551,152 @@ private fun LocalModelsTab(
             }
         }
 
-        // Section 3: Curated Models Catalog
+        // Section 3: Choose Models from Phone Storage
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Phone Storage Models (.gguf)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Choose or scan local models saved in your phone storage, Downloads, or SD Card.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onPickModelFromStorage,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.SdStorage, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pick Model File", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onScanStorage,
+                        enabled = !state.isScanningStorage,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (state.isScanningStorage) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Scanning...", fontSize = 11.sp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Scan Downloads", fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                if (state.storageModels.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text("Imported Storage Models (${state.storageModels.size})", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    state.storageModels.forEach { model ->
+                        val isActive = state.activeLocalModel?.id == model.id && state.localModelStatus == LocalModelStatus.LOADED
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(model.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(
+                                            "${model.architecture} • ${model.parameterCount} • ${model.quantization} • ${formatFileSize(model.fileSizeBytes)}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        model.filePath?.let { path ->
+                                            Text(
+                                                path.takeLast(40).let { if (path.length > 40) "...$it" else it },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (isActive) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFF10B981)
+                                            ) {
+                                                Text(
+                                                    "Serving",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 10.sp,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        } else {
+                                            Button(
+                                                onClick = { onLoadModel(model.id) },
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text("Load & Serve", fontSize = 11.sp)
+                                            }
+                                        }
+                                        IconButton(onClick = { onRemoveStorageModel(model.id) }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "No custom models selected yet. Tap 'Pick Model File' to select any .gguf or .bin file stored on your phone.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 4: Curated Models Catalog
         Text("Curated Open-Source Edge Models", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
 
         state.curatedLocalModels.forEach { model ->
@@ -585,7 +754,7 @@ private fun LocalModelsTab(
             }
         }
 
-        // Section 4: Built-in Interactive Live Test Console
+        // Section 5: Built-in Interactive Live Test Console
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -702,6 +871,16 @@ private fun LocalModelsTab(
                 }
             }
         }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes >= 1024L * 1024 * 1024 -> String.format("%.2f GB", bytes.toDouble() / (1024 * 1024 * 1024))
+        bytes >= 1024L * 1024 -> String.format("%.1f MB", bytes.toDouble() / (1024 * 1024))
+        bytes >= 1024L -> String.format("%.0f KB", bytes.toDouble() / 1024)
+        bytes > 0L -> "$bytes B"
+        else -> "Storage Model"
     }
 }
 

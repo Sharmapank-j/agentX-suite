@@ -126,4 +126,36 @@ class LocalModelServerEngineTest {
         assertTrue(switched)
         assertTrue(server.telemetry.value.activeLocalModel?.contains("Qwen") == true)
     }
+
+    @Test
+    fun testRegisterCustomStorageModelAndInference() = runTest {
+        val customModel = engine.registerStorageModel(
+            name = "mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+            filePath = "/storage/emulated/0/Download/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+            fileSizeBytes = 4_300_000_000L
+        )
+
+        assertNotNull("Custom storage model should be registered", customModel)
+        assertEquals("Architecture should be detected as Mistral", "Mistral", customModel.architecture)
+        assertEquals("Parameter count should be detected as 7B", "7B", customModel.parameterCount)
+        assertEquals("Quantization should be detected as Q4_K_M", "Q4_K_M", customModel.quantization)
+        assertTrue("isCustomStorageModel should be true", customModel.isCustomStorageModel)
+
+        val loaded = engine.loadModel(customModel.id)
+        assertTrue("Loading custom storage model should succeed", loaded)
+        assertEquals("Active model should be custom model", customModel.id, engine.activeModel.id)
+
+        val output = engine.generateCompletionSync(
+            prompt = "Hello from custom model test"
+        )
+        assertNotNull("Output should not be null", output)
+        assertTrue(
+            "Output should indicate storage model execution",
+            output.contains("Storage Model", ignoreCase = true) || output.contains("Execution completed", ignoreCase = true)
+        )
+
+        val removed = engine.removeStorageModel(customModel.id)
+        assertTrue("Removing storage model should succeed", removed)
+        assertFalse("Storage models list should no longer contain custom model", engine.storageModels.any { it.id == customModel.id })
+    }
 }

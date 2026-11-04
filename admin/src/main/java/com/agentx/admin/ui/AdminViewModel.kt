@@ -2,6 +2,8 @@ package com.agentx.admin.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agentx.admin.AgentXAdminApplication
@@ -13,12 +15,14 @@ import com.agentx.admin.models.ServerTelemetry
 import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
 import com.agentx.admin.service.AgentXServerService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class AdminUiState(
     val telemetry: ServerTelemetry = ServerTelemetry(),
@@ -29,6 +33,8 @@ data class AdminUiState(
     val selectedTab: Int = 0,
     val servingMode: ServingMode = ServingMode.LOCAL_MODEL,
     val curatedLocalModels: List<LocalServerModel> = emptyList(),
+    val storageModels: List<LocalServerModel> = emptyList(),
+    val isScanningStorage: Boolean = false,
     val activeLocalModel: LocalServerModel? = null,
     val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
     val testPrompt: String = "Explain the differential diagnosis of acute chest pain.",
@@ -55,6 +61,8 @@ class AdminViewModel(
     private val _selectedTab = MutableStateFlow(0)
     private val _servingMode = MutableStateFlow(server.getServingMode())
     private val _curatedLocalModels = MutableStateFlow(localEngine.curatedCatalog)
+    private val _storageModels = MutableStateFlow(localEngine.storageModels)
+    private val _isScanningStorage = MutableStateFlow(false)
     private val _activeLocalModel = MutableStateFlow(localEngine.activeModel)
     private val _localModelStatus = MutableStateFlow(localEngine.status)
     private val _testPrompt = MutableStateFlow("Explain the differential diagnosis of acute chest pain.")
@@ -71,6 +79,8 @@ class AdminViewModel(
     private data class LocalEnginePrefs(
         val servingMode: ServingMode,
         val curatedCatalog: List<LocalServerModel>,
+        val storageModels: List<LocalServerModel>,
+        val isScanningStorage: Boolean,
         val activeModel: LocalServerModel,
         val status: LocalModelStatus,
         val testPrompt: String,
@@ -80,26 +90,28 @@ class AdminViewModel(
     )
 
     private val localEnginePrefsFlow = combine(
-        combine(_servingMode, _curatedLocalModels, _activeLocalModel, _localModelStatus) { mode, catalog, active, status ->
-            Quad(mode, catalog, active, status)
+        combine(_servingMode, _curatedLocalModels, _storageModels, _isScanningStorage, _activeLocalModel) { mode, catalog, storage, scanning, active ->
+            Quintet(mode, catalog, storage, scanning, active)
         },
-        combine(_testPrompt, _testResponse, _isGeneratingTest, _testLatencyMs) { prompt, response, generating, latency ->
-            Quad(prompt, response, generating, latency)
+        combine(_localModelStatus, _testPrompt, _testResponse, _isGeneratingTest, _testLatencyMs) { status, prompt, response, generating, latency ->
+            Quintet(status, prompt, response, generating, latency)
         }
     ) { q1, q2 ->
         LocalEnginePrefs(
             servingMode = q1.first,
             curatedCatalog = q1.second,
-            activeModel = q1.third,
-            status = q1.fourth,
-            testPrompt = q2.first,
-            testResponse = q2.second,
-            isGeneratingTest = q2.third,
-            testLatencyMs = q2.fourth
+            storageModels = q1.third,
+            isScanningStorage = q1.fourth,
+            activeModel = q1.fifth,
+            status = q2.first,
+            testPrompt = q2.second,
+            testResponse = q2.third,
+            isGeneratingTest = q2.fourth,
+            testLatencyMs = q2.fifth
         )
     }
 
-    private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+    private data class Quintet<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)
 
     private val serverSettingsFlow = combine(_selectedPort, _selectedTab, _geminiApiKey) { port, tab, key ->
         Triple(port, tab, key)
@@ -134,6 +146,8 @@ class AdminViewModel(
             selectedTab = subState.tab,
             servingMode = subState.localPrefs.servingMode,
             curatedLocalModels = subState.localPrefs.curatedCatalog,
+            storageModels = subState.localPrefs.storageModels,
+            isScanningStorage = subState.localPrefs.isScanningStorage,
             activeLocalModel = subState.localPrefs.activeModel,
             localModelStatus = subState.localPrefs.status,
             testPrompt = subState.localPrefs.testPrompt,
@@ -151,6 +165,7 @@ class AdminViewModel(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = AdminUiState(
             curatedLocalModels = localEngine.curatedCatalog,
+            storageModels = localEngine.storageModels,
             activeLocalModel = localEngine.activeModel,
             localModelStatus = localEngine.status
         )
@@ -192,6 +207,10 @@ class AdminViewModel(
                     if (it.id == modelId) it.copy(isLoaded = true, isServing = true)
                     else it.copy(isLoaded = false, isServing = false)
                 }
+                _storageModels.value = localEngine.storageModels.map {
+                    if (it.id == modelId) it.copy(isLoaded = true, isServing = true)
+                    else it.copy(isLoaded = false, isServing = false)
+                }
                 _notification.value = "Active model switched to ${localEngine.activeModel.name}"
             } else {
                 _localModelStatus.value = localEngine.status
@@ -208,7 +227,56 @@ class AdminViewModel(
             _curatedLocalModels.value = localEngine.curatedCatalog.map {
                 it.copy(isLoaded = false, isServing = false)
             }
+            _storageModels.value = localEngine.storageModels.map {
+                it.copy(isLoaded = false, isServing = false)
+            }
             _notification.value = "Unloaded local model from memory."
+        }
+    }
+
+    fun importModelFromUri(uri: Uri, context: Context) {
+        viewModelScope.launch {
+            try {
+                val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (_: Exception) {}
+
+            val fileName = queryFileName(context, uri) ?: "imported_model.gguf"
+            val fileSize = queryFileSize(context, uri)
+            val filePath = uri.toString()
+
+            val registered = localEngine.registerStorageModel(fileName, filePath, fileSize)
+            _storageModels.value = localEngine.storageModels
+            _notification.value = "Imported '${registered.name}' from storage. Loading..."
+
+            loadLocalModel(registered.id)
+        }
+    }
+
+    fun scanDeviceStorage(context: Context) {
+        viewModelScope.launch {
+            _isScanningStorage.value = true
+            _notification.value = "Scanning phone storage for .gguf model files..."
+            val discovered = withContext(Dispatchers.IO) {
+                localEngine.scanStorageForModels(context)
+            }
+            _storageModels.value = localEngine.storageModels
+            _isScanningStorage.value = false
+            if (discovered.isNotEmpty()) {
+                _notification.value = "Found ${discovered.size} model(s) in phone storage."
+            } else {
+                _notification.value = "No .gguf files found in standard folders. Use 'Pick Model File' to select manually."
+            }
+        }
+    }
+
+    fun removeStorageModel(modelId: String) {
+        val removed = localEngine.removeStorageModel(modelId)
+        if (removed) {
+            _storageModels.value = localEngine.storageModels
+            _activeLocalModel.value = localEngine.activeModel
+            _localModelStatus.value = localEngine.status
+            _notification.value = "Removed model from storage catalog."
         }
     }
 
@@ -305,5 +373,33 @@ class AdminViewModel(
 
     fun clearNotification() {
         _notification.value = null
+    }
+
+    companion object {
+        fun queryFileName(context: Context, uri: Uri): String? {
+            var name: String? = null
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1 && cursor.moveToFirst()) {
+                        name = cursor.getString(nameIndex)
+                    }
+                }
+            } catch (_: Exception) {}
+            return name
+        }
+
+        fun queryFileSize(context: Context, uri: Uri): Long {
+            var size: Long = 0L
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex != -1 && cursor.moveToFirst()) {
+                        size = cursor.getLong(sizeIndex)
+                    }
+                }
+            } catch (_: Exception) {}
+            return size
+        }
     }
 }
