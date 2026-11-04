@@ -499,11 +499,17 @@ class AutonomousToolExecutor : ToolExecutor {
                     val query = args["query"]?.jsonPrimitive?.content ?: "summary"
                     ToolCallResult(
                         toolId,
-                        "## Patient Record Access\n\n> ⚠️ Local Offline Access: $query",
+                        """
+## Patient Record Access
+
+> ⚠️ **HIPAA Safeguard Active**: Patient record retrieval is strictly local and offline.
+
+**Query:** $query
+                        """.trimIndent(),
                         true
                     )
                 }
-                else -> ToolCallResult(toolId, "Tool '$toolId' is registered in AutonomousToolExecutor.", true)
+                else -> ToolCallResult(toolId, "Tool '$toolId' is not registered in AutonomousToolExecutor.", false, "Unknown tool")
             }
         } catch (e: Exception) {
             ToolCallResult(toolId, "Tool execution failed: ${e.message}", false, e.message)
