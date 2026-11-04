@@ -1,4 +1,4 @@
-package com.agentx.medical.medical
+package com.agentx.medical
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

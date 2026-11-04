@@ -1,4 +1,4 @@
-package com.agentx.medical.medical
+package com.agentx.medical
 
 import android.app.Application
 import com.agentx.medical.core.agent.orchestrator.ClinicalAgentExecutor
