@@ -23,7 +23,7 @@ class HybridInferenceEngine(
         llamaEngine = localEngine,
         airLlmEngine = AirLlmEngine(),
         cloudEngine = cloudEngine,
-        activeLocalBackend = LocalBackendType.LLAMA_CPP
+        activeLocalBackend = LocalBackendType.AIR_LLM
     )
 
     var inferenceMode: InferenceMode = InferenceMode.HYBRID_AUTO
@@ -31,7 +31,10 @@ class HybridInferenceEngine(
     val localEngine: InferenceEngine
         get() = when (activeLocalBackend) {
             LocalBackendType.AIR_LLM -> airLlmEngine
-            LocalBackendType.LLAMA_CPP -> llamaEngine
+            LocalBackendType.LLAMA_CPP -> {
+                if (llamaEngine.getModelStatus().state == ModelLifecycleState.LOADED) llamaEngine
+                else airLlmEngine
+            }
         }
 
     override suspend fun loadModel(config: ModelConfig) {

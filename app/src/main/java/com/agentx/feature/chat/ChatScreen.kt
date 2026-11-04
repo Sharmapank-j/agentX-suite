@@ -366,13 +366,6 @@ fun ChatScreen(
                     onSwitchModelClick = { showModelSwitcherSheet = true }
                 )
 
-                // Agent Selection Filter Chips
-                AgentSelectionRow(
-                    agents = state.availableAgents,
-                    selectedAgent = state.selectedAgent,
-                    onSelect = viewModel::onAgentSelected
-                )
-
                 if (state.messages.isEmpty()) {
                     // Hero Welcome Screen
                     HeroWelcomeCard(
@@ -636,7 +629,7 @@ private fun CyberTopAppBar(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = selectedAgentName,
+                        text = "Autonomous AI • Multi-Agent Engine",
                         style = MaterialTheme.typography.labelSmall,
                         color = ElectricCyan,
                         fontSize = 11.sp
@@ -875,57 +868,6 @@ fun ActiveModelStatusBanner(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Agent Selection Row
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-fun AgentSelectionRow(
-    agents: List<Agent>,
-    selectedAgent: Agent?,
-    onSelect: (Agent) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(agents) { agent ->
-            val isSelected = agent.id == selectedAgent?.id
-            Surface(
-                onClick = { onSelect(agent) },
-                shape = RoundedCornerShape(16.dp),
-                color = if (isSelected) Color(0xFF0E2A47) else SurfaceGlass,
-                border = androidx.compose.foundation.BorderStroke(
-                    1.dp,
-                    if (isSelected) ElectricCyan else SurfaceBorder
-                )
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    Text(
-                        text = agent.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) ElectricCyan else TextSecondary
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Hero Welcome Screen (Empty State)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
@@ -1069,7 +1011,7 @@ fun ChatMessageItem(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = message.senderName,
+                    text = "AgentX",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = NeonIndigo

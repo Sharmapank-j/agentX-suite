@@ -158,7 +158,15 @@ class AgentXAdminServer(
 
             val method = parts[0].uppercase()
             val fullPath = parts[1]
-            val path = fullPath.substringBefore("?")
+            val rawPath = fullPath.substringBefore("?")
+            val path = when {
+                rawPath == "/health" || rawPath == "/api/v1/health" || rawPath.endsWith("/health") -> "/health"
+                rawPath == "/v1/models" || rawPath == "/models" || rawPath.endsWith("/models") -> "/v1/models"
+                rawPath == "/v1/chat/completions" || rawPath == "/chat/completions" || rawPath.endsWith("/chat/completions") -> "/v1/chat/completions"
+                rawPath == "/api/v1/clinical/consult" || rawPath.endsWith("/clinical/consult") -> "/api/v1/clinical/consult"
+                rawPath == "/api/v1/clinical/calc" || rawPath.endsWith("/clinical/calc") -> "/api/v1/clinical/calc"
+                else -> rawPath.trimEnd('/')
+            }
 
             val headers = mutableMapOf<String, String>()
             var line: String?
@@ -352,7 +360,8 @@ class AgentXAdminServer(
             writer.print("Content-Type: text/event-stream; charset=utf-8\r\n")
             writer.print("Cache-Control: no-cache\r\n")
             writer.print("Connection: keep-alive\r\n")
-            writer.print("Access-Control-Allow-Origin: *\r\n\r\n")
+            writer.print("Access-Control-Allow-Origin: *\r\n")
+            writer.print("Access-Control-Allow-Headers: Authorization, Content-Type, X-API-Key, Accept\r\n\r\n")
             writer.flush()
 
             var streamTokenCount = 0
@@ -447,7 +456,8 @@ class AgentXAdminServer(
             writer.print("Content-Type: text/event-stream; charset=utf-8\r\n")
             writer.print("Cache-Control: no-cache\r\n")
             writer.print("Connection: keep-alive\r\n")
-            writer.print("Access-Control-Allow-Origin: *\r\n\r\n")
+            writer.print("Access-Control-Allow-Origin: *\r\n")
+            writer.print("Access-Control-Allow-Headers: Authorization, Content-Type, X-API-Key, Accept\r\n\r\n")
             writer.flush()
 
             val words = completionText.split(" ")

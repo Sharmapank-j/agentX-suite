@@ -16,6 +16,7 @@ import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
 import com.agentx.admin.service.AgentXServerService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,20 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class LiveTestConsoleMetrics(
+    val prompt: String = "Explain how on-device AI models stream layers efficiently on mobile hardware.",
+    val response: String? = null,
+    val isGenerating: Boolean = false,
+    val latencyMs: Long = 0L,
+    val ttftMs: Long = 0L,
+    val tokenCount: Int = 0,
+    val tokensPerSecond: Double = 0.0,
+    val modelTested: String = "",
+    val engineType: String = "",
+    val memoryUsageMb: Long = 0L,
+    val status: String? = null
+)
 
 data class AdminUiState(
     val telemetry: ServerTelemetry = ServerTelemetry(),
@@ -41,6 +56,13 @@ data class AdminUiState(
     val testResponse: String? = null,
     val isGeneratingTest: Boolean = false,
     val testLatencyMs: Long = 0L,
+    val testTtftMs: Long = 0L,
+    val testTokenCount: Int = 0,
+    val testTokensPerSecond: Double = 0.0,
+    val testModelTested: String = "",
+    val testEngineType: String = "",
+    val testMemoryUsageMb: Long = 0L,
+    val testStatus: String? = null,
     val geminiApiKey: String = "",
     val activeModel: String = "gemini-2.5-flash",
     val cloudConnectionStatus: String? = null,
@@ -65,10 +87,7 @@ class AdminViewModel(
     private val _isScanningStorage = MutableStateFlow(false)
     private val _activeLocalModel = MutableStateFlow(localEngine.activeModel)
     private val _localModelStatus = MutableStateFlow(localEngine.status)
-    private val _testPrompt = MutableStateFlow("Explain how on-device AI models stream layers efficiently on mobile hardware.")
-    private val _testResponse = MutableStateFlow<String?>(null)
-    private val _isGeneratingTest = MutableStateFlow(false)
-    private val _testLatencyMs = MutableStateFlow(0L)
+    private val _liveTest = MutableStateFlow(LiveTestConsoleMetrics())
 
     private val _geminiApiKey = MutableStateFlow(cloudGateway.geminiApiKey)
     private val _activeModel = MutableStateFlow(cloudGateway.activeModelName)
@@ -83,31 +102,25 @@ class AdminViewModel(
         val isScanningStorage: Boolean,
         val activeModel: LocalServerModel,
         val status: LocalModelStatus,
-        val testPrompt: String,
-        val testResponse: String?,
-        val isGeneratingTest: Boolean,
-        val testLatencyMs: Long
+        val liveTest: LiveTestConsoleMetrics
     )
 
     private val localEnginePrefsFlow = combine(
         combine(_servingMode, _curatedLocalModels, _storageModels, _isScanningStorage, _activeLocalModel) { mode, catalog, storage, scanning, active ->
             Quintet(mode, catalog, storage, scanning, active)
         },
-        combine(_localModelStatus, _testPrompt, _testResponse, _isGeneratingTest, _testLatencyMs) { status, prompt, response, generating, latency ->
-            Quintet(status, prompt, response, generating, latency)
+        combine(_localModelStatus, _liveTest) { status, liveTest ->
+            Pair(status, liveTest)
         }
-    ) { q1, q2 ->
+    ) { q1, (status, liveTest) ->
         LocalEnginePrefs(
             servingMode = q1.first,
             curatedCatalog = q1.second,
             storageModels = q1.third,
             isScanningStorage = q1.fourth,
             activeModel = q1.fifth,
-            status = q2.first,
-            testPrompt = q2.second,
-            testResponse = q2.third,
-            isGeneratingTest = q2.fourth,
-            testLatencyMs = q2.fifth
+            status = status,
+            liveTest = liveTest
         )
     }
 
@@ -150,10 +163,17 @@ class AdminViewModel(
             isScanningStorage = subState.localPrefs.isScanningStorage,
             activeLocalModel = subState.localPrefs.activeModel,
             localModelStatus = subState.localPrefs.status,
-            testPrompt = subState.localPrefs.testPrompt,
-            testResponse = subState.localPrefs.testResponse,
-            isGeneratingTest = subState.localPrefs.isGeneratingTest,
-            testLatencyMs = subState.localPrefs.testLatencyMs,
+            testPrompt = subState.localPrefs.liveTest.prompt,
+            testResponse = subState.localPrefs.liveTest.response,
+            isGeneratingTest = subState.localPrefs.liveTest.isGenerating,
+            testLatencyMs = subState.localPrefs.liveTest.latencyMs,
+            testTtftMs = subState.localPrefs.liveTest.ttftMs,
+            testTokenCount = subState.localPrefs.liveTest.tokenCount,
+            testTokensPerSecond = subState.localPrefs.liveTest.tokensPerSecond,
+            testModelTested = subState.localPrefs.liveTest.modelTested,
+            testEngineType = subState.localPrefs.liveTest.engineType,
+            testMemoryUsageMb = subState.localPrefs.liveTest.memoryUsageMb,
+            testStatus = subState.localPrefs.liveTest.status,
             geminiApiKey = subState.key,
             activeModel = subState.cloudPrefs.model,
             cloudConnectionStatus = subState.cloudPrefs.status,
@@ -281,30 +301,100 @@ class AdminViewModel(
     }
 
     fun setTestPrompt(prompt: String) {
-        _testPrompt.value = prompt
+        _liveTest.value = _liveTest.value.copy(prompt = prompt)
     }
 
     fun clearTestResponse() {
-        _testResponse.value = null
-        _testLatencyMs.value = 0L
+        _liveTest.value = _liveTest.value.copy(
+            response = null,
+            latencyMs = 0L,
+            ttftMs = 0L,
+            tokenCount = 0,
+            tokensPerSecond = 0.0,
+            status = null
+        )
     }
 
     fun runLocalModelTest() {
         viewModelScope.launch {
-            _isGeneratingTest.value = true
-            _testResponse.value = ""
+            val prompt = _liveTest.value.prompt.ifBlank { "Explain how on-device AI models stream layers efficiently on mobile hardware." }
+            val activeMode = _servingMode.value
+            val isLocal = activeMode == ServingMode.LOCAL_MODEL || (activeMode == ServingMode.HYBRID && !cloudGateway.isConfigured)
+
+            val modelName = if (isLocal) localEngine.activeModel.name else cloudGateway.activeModelName
+            val engineType = if (isLocal) "AirLLM Layer-Stream (Edge)" else "Google Gemini Gateway (Cloud)"
+            val memFootprint = if (isLocal) localEngine.activeModel.memoryFootprintMb else 0L
+
+            _liveTest.value = _liveTest.value.copy(
+                isGenerating = true,
+                response = "",
+                latencyMs = 0L,
+                ttftMs = 0L,
+                tokenCount = 0,
+                tokensPerSecond = 0.0,
+                modelTested = modelName,
+                engineType = engineType,
+                memoryUsageMb = memFootprint,
+                status = "STREAMING"
+            )
+
             val start = System.currentTimeMillis()
-            val prompt = _testPrompt.value.ifBlank { "Explain how on-device AI models stream layers efficiently on mobile hardware." }
+            var firstTokenTime: Long? = null
+            var count = 0
 
             try {
-                localEngine.generateCompletionStream(prompt = prompt).collect { token ->
-                    _testResponse.value = (_testResponse.value ?: "") + token
+                if (isLocal) {
+                    localEngine.generateCompletionStream(prompt = prompt).collect { token ->
+                        val now = System.currentTimeMillis()
+                        if (firstTokenTime == null) {
+                            firstTokenTime = now
+                            _liveTest.value = _liveTest.value.copy(ttftMs = now - start)
+                        }
+                        count++
+                        val currentText = (_liveTest.value.response ?: "") + token
+                        val genSec = (now - (firstTokenTime ?: start)) / 1000.0
+                        val currentSpeed = if (genSec > 0.05) count / genSec else 0.0
+
+                        _liveTest.value = _liveTest.value.copy(
+                            response = currentText,
+                            tokenCount = count,
+                            tokensPerSecond = currentSpeed
+                        )
+                    }
+                } else {
+                    val fullResponse = cloudGateway.generateChatCompletion(prompt = prompt)
+                    val ttft = System.currentTimeMillis() - start
+                    _liveTest.value = _liveTest.value.copy(ttftMs = ttft)
+                    val words = fullResponse.split(" ")
+                    for ((idx, word) in words.withIndex()) {
+                        count++
+                        val piece = if (idx == 0) word else " $word"
+                        val currentText = (_liveTest.value.response ?: "") + piece
+                        _liveTest.value = _liveTest.value.copy(
+                            response = currentText,
+                            tokenCount = count
+                        )
+                        delay(10)
+                    }
                 }
-                _testLatencyMs.value = System.currentTimeMillis() - start
+
+                val totalDuration = System.currentTimeMillis() - start
+                val genDuration = if (firstTokenTime != null) totalDuration - (firstTokenTime!! - start) else totalDuration
+                val finalSec = genDuration / 1000.0
+                val finalSpeed = if (finalSec > 0.05 && count > 0) ((count / finalSec) * 10).toInt() / 10.0 else 0.0
+
+                _liveTest.value = _liveTest.value.copy(
+                    isGenerating = false,
+                    latencyMs = totalDuration,
+                    tokensPerSecond = finalSpeed,
+                    status = "200 OK"
+                )
             } catch (e: Exception) {
-                _testResponse.value = "Error generating inference: ${e.message}"
-            } finally {
-                _isGeneratingTest.value = false
+                _liveTest.value = _liveTest.value.copy(
+                    isGenerating = false,
+                    status = "FAILED",
+                    response = "Inference execution error: ${e.message}"
+                )
             }
         }
     }

@@ -1,6 +1,12 @@
 package com.agentx.medical.feature.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -343,10 +349,49 @@ fun SettingsScreen(
                                     customUrlText = it
                                     viewModel.updateCloudConfig(customBaseUrl = it)
                                 },
-                                label = { Text("Admin Phone Gateway URL") },
+                                label = { Text("AgentX Serve Gateway URL") },
+                                placeholder = { Text("http://192.168.1.100:8080") },
+                                supportingText = { Text("IP:Port displayed in AgentX Serve app") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Quick Preset Chips
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = customUrlText == "http://127.0.0.1:8080",
+                                    onClick = {
+                                        customUrlText = "http://127.0.0.1:8080"
+                                        viewModel.updateCloudConfig(customBaseUrl = "http://127.0.0.1:8080")
+                                    },
+                                    label = { Text("127.0.0.1:8080") }
+                                )
+                                FilterChip(
+                                    selected = customUrlText == "http://10.0.2.2:8080",
+                                    onClick = {
+                                        customUrlText = "http://10.0.2.2:8080"
+                                        viewModel.updateCloudConfig(customBaseUrl = "http://10.0.2.2:8080")
+                                    },
+                                    label = { Text("Emulator (10.0.2.2)") }
+                                )
+                                FilterChip(
+                                    selected = customUrlText.startsWith("http://192.168."),
+                                    onClick = {
+                                        if (!customUrlText.startsWith("http://192.168.")) {
+                                            customUrlText = "http://192.168.1.100:8080"
+                                            viewModel.updateCloudConfig(customBaseUrl = "http://192.168.1.100:8080")
+                                        }
+                                    },
+                                    label = { Text("LAN Subnet") }
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
@@ -356,7 +401,8 @@ fun SettingsScreen(
                                     apiKeyText = it
                                     viewModel.updateCloudConfig(apiKey = it)
                                 },
-                                label = { Text("Client API Key") },
+                                label = { Text("Client API Key (Optional)") },
+                                placeholder = { Text("agx-live-...") },
                                 trailingIcon = {
                                     IconButton(onClick = { showApiKey = !showApiKey }) {
                                         Icon(
@@ -369,26 +415,164 @@ fun SettingsScreen(
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            // Dynamic Models Selection Chips (if available)
+                            if (state.availableGatewayModels.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    "Models Available on Serve Device:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    state.availableGatewayModels.forEach { model ->
+                                        FilterChip(
+                                            selected = state.cloudConfig.modelName == model,
+                                            onClick = { viewModel.updateCloudConfig(modelName = model) },
+                                            label = { Text(model) }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Connected Server Details Card
+                            state.serverDetails?.let { server ->
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Default.Dns,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    "AgentX Serve Device Online",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                "${server.latencyMs} ms",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            "Active Model: ${server.activeModel.ifEmpty { "AirLLM Layer Stream" }}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                        Text(
+                                            "Mode: ${server.servingMode} • Uptime: ${server.uptimeSeconds}s",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        // Action Buttons: Test Connection & Fetch Models
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(onClick = { viewModel.testCloudConnection() }) {
-                                Text("Test Connection")
+                            Button(
+                                onClick = { viewModel.testCloudConnection() },
+                                enabled = !state.isTestingConnection && !state.isFetchingModels,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (state.isTestingConnection) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Testing...")
+                                } else {
+                                    Text("Test Connection")
+                                }
                             }
 
-                            state.cloudTestResult?.let { result ->
-                                Text(
-                                    result,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (result.startsWith("Verified")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.Medium
-                                )
+                            if (state.cloudConfig.provider == CloudProvider.CUSTOM_GATEWAY) {
+                                OutlinedButton(
+                                    onClick = { viewModel.fetchGatewayModels() },
+                                    enabled = !state.isTestingConnection && !state.isFetchingModels
+                                ) {
+                                    if (state.isFetchingModels) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Models")
+                                    }
+                                }
+                            }
+                        }
+
+                        // Status Result Banner
+                        state.cloudTestResult?.let { result ->
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val isSuccess = result.startsWith("Verified") || result.contains("Fetched")
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSuccess)
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    else
+                                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                                        contentDescription = null,
+                                        tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        result,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isSuccess) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }

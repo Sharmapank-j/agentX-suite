@@ -181,8 +181,8 @@ class CloudInferenceEngine(
         request: InferenceRequest,
         onToken: suspend (String) -> Unit
     ) = withContext(Dispatchers.IO) {
-        val baseUrl = config.customBaseUrl.trimEnd('/')
-        val url = URL("$baseUrl/chat/completions")
+        val endpoints = GatewayUrlNormalizer.normalize(config.customBaseUrl)
+        val url = URL(endpoints.chatCompletionsUrl)
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -207,6 +207,7 @@ class CloudInferenceEngine(
                     {"role": "system", "content": "$escapedSystem"},
                     {"role": "user", "content": "$escapedPrompt"}
                 ],
+                "stream": true,
                 "temperature": ${request.temperature},
                 "max_tokens": ${request.maxTokens}
             }
@@ -220,7 +221,13 @@ class CloudInferenceEngine(
         val responseCode = conn.responseCode
         if (responseCode !in 200..299) {
             val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
-            throw IllegalStateException("Gateway API Error ($responseCode): $errorBody")
+            val friendlyMsg = when (responseCode) {
+                401 -> "401 Unauthorized: Invalid or missing API Key. Check the API Key configured in Settings."
+                403 -> "403 Forbidden: Client IP has been blocked by the AgentX Serve administrator."
+                404 -> "404 Endpoint Not Found: Could not find endpoint at $url. Check your Gateway URL in Settings."
+                else -> "Gateway API Error ($responseCode): $errorBody"
+            }
+            throw IllegalStateException(friendlyMsg)
         }
 
         val contentType = conn.getHeaderField("Content-Type") ?: ""

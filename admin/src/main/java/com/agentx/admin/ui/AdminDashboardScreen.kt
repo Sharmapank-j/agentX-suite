@@ -1,5 +1,6 @@
 package com.agentx.admin.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -770,13 +771,58 @@ private fun LocalModelsTab(
                 ) {
                     Column {
                         Text("Live Model Test Console", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("Verify local model execution before serving LAN clients", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Verify execution performance & throughput before serving LAN clients", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                     }
 
                     if (state.testResponse != null) {
                         IconButton(onClick = onClearTest) {
                             Icon(Icons.Default.Delete, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline)
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Active Target & Footprint Pill
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        if (state.servingMode == ServingMode.LOCAL_MODEL) Color(0xFF00E5FF) else Color(0xFFA855F7),
+                                        CircleShape
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (state.servingMode == ServingMode.LOCAL_MODEL) "Local AirLLM: " else "Cloud Gateway: ",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = if (state.servingMode == ServingMode.LOCAL_MODEL) (state.activeLocalModel?.name ?: "No Local Model") else state.activeModel,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = if (state.servingMode == ServingMode.LOCAL_MODEL) "~${state.activeLocalModel?.memoryFootprintMb ?: 196} MB RAM" else "Cloud (0 MB)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
 
@@ -824,7 +870,9 @@ private fun LocalModelsTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (state.testLatencyMs > 0) {
+                    if (state.testTokensPerSecond > 0) {
+                        Text("Speed: ${String.format("%.1f", state.testTokensPerSecond)} t/s", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                    } else if (state.testLatencyMs > 0) {
                         Text("Latency: ${state.testLatencyMs} ms", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                     } else {
                         Spacer(modifier = Modifier.width(1.dp))
@@ -841,7 +889,86 @@ private fun LocalModelsTab(
                         } else {
                             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Run Local Inference")
+                            Text(if (state.servingMode == ServingMode.LOCAL_MODEL) "Run Local Inference" else "Run Gateway Inference")
+                        }
+                    }
+                }
+
+                // High-Precision Telemetry Metrics Dashboard
+                if (state.isGeneratingTest || state.testResponse != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF181825),
+                        border = BorderStroke(1.dp, Color(0xFF313244)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("TTFT", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
+                                Text(
+                                    if (state.testTtftMs > 0) "${state.testTtftMs}ms" else "--",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF89B4FA),
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("TIME", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
+                                Text(
+                                    if (state.testLatencyMs > 0) "${state.testLatencyMs}ms" else if (state.isGeneratingTest) "..." else "--",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFCBA6F7),
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("SPEED", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
+                                Text(
+                                    if (state.testTokensPerSecond > 0) "${String.format("%.1f", state.testTokensPerSecond)} t/s" else "--",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFA6E3A1),
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("TOKENS", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
+                                Text(
+                                    if (state.testTokenCount > 0) "${state.testTokenCount}" else "--",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFAB387),
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("STATUS", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
+                                Text(
+                                    state.testStatus ?: (if (state.isGeneratingTest) "STREAM" else "IDLE"),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        state.isGeneratingTest -> Color(0xFFF9E2AF)
+                                        state.testStatus?.startsWith("200") == true -> Color(0xFFA6E3A1)
+                                        state.testStatus?.startsWith("FAIL") == true -> Color(0xFFF38BA8)
+                                        else -> Color(0xFFA6ADC8)
+                                    },
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
                 }
@@ -852,6 +979,7 @@ private fun LocalModelsTab(
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = Color(0xFF1E1E2E),
+                        border = BorderStroke(1.dp, Color(0xFF313244)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -860,7 +988,12 @@ private fun LocalModelsTab(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("MODEL OUTPUT", fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF89B4FA))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("OUTPUT STREAM", fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF89B4FA))
+                                    if (state.testModelTested.isNotBlank()) {
+                                        Text(" • ${state.testModelTested}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFFA6ADC8))
+                                    }
+                                }
                                 IconButton(onClick = { onCopy(resp) }, modifier = Modifier.size(24.dp)) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color(0xFFA6ADC8), modifier = Modifier.size(14.dp))
                                 }
@@ -870,7 +1003,7 @@ private fun LocalModelsTab(
                                 resp,
                                 color = Color(0xFFCDD6F4),
                                 style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Default
+                                fontFamily = FontFamily.Monospace
                             )
                         }
                     }
@@ -1194,10 +1327,37 @@ curl -X POST "$serverUrl/v1/chat/completions" \
   }'
     """.trimIndent()
 
+    val jsWebSnippet = """
+// Connect any Website Chatbot or Web App to this Old Phone!
+async function streamChatbot(prompt) {
+  const response = await fetch("$serverUrl/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $activeKey"
+    },
+    body: JSON.stringify({
+      messages: [{ role: "user", content: prompt }],
+      stream: true,
+      temperature: 0.7
+    })
+  });
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value);
+    console.log("Streamed token:", chunk);
+  }
+}
+    """.trimIndent()
+
     val pythonSnippet = """
 from openai import OpenAI
 
-# Connect directly to this phone over local Wi-Fi / LAN
+# Connect directly to this old phone over local Wi-Fi / LAN
 client = OpenAI(
     base_url="$serverUrl/v1",
     api_key="$activeKey"
@@ -1211,13 +1371,24 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
     """.trimIndent()
 
+    val agentXConnectSnippet = """
+1. Open AgentX on your primary device.
+2. Go to Settings -> "Inbuilt Cloud Models & Hybrid Execution".
+3. Select "Admin Server Hub" as provider.
+4. Set Gateway URL: $serverUrl
+5. Set API Key: $activeKey (or leave empty if Auth is disabled)
+6. Tap "Test Ping" & "Fetch Models" to select your model!
+    """.trimIndent()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SnippetCard("cURL Example (LAN & Local)", curlSnippet) { clipboard.setText(AnnotatedString(curlSnippet)) }
+        SnippetCard("Website Chatbot Integration (JavaScript / Fetch)", jsWebSnippet) { clipboard.setText(AnnotatedString(jsWebSnippet)) }
+        SnippetCard("AgentX & Android App Setup Guide", agentXConnectSnippet) { clipboard.setText(AnnotatedString(agentXConnectSnippet)) }
+        SnippetCard("cURL Example (LAN & Terminal)", curlSnippet) { clipboard.setText(AnnotatedString(curlSnippet)) }
         SnippetCard("Python OpenAI SDK Example", pythonSnippet) { clipboard.setText(AnnotatedString(pythonSnippet)) }
     }
 }

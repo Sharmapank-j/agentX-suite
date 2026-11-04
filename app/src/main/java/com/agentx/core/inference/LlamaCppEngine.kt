@@ -49,7 +49,7 @@ class LlamaCppEngine : InferenceEngine {
 
     override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
         if (status.state != ModelLifecycleState.LOADED && status.state != ModelLifecycleState.GENERATING) {
-            emit(GenerationEvent.Error(IllegalStateException("No model loaded"), "No model is currently loaded in memory"))
+            emit(GenerationEvent.Error(IllegalStateException("No model loaded. Please load a GGUF model first."), "No model loaded. Please load a GGUF model first."))
             return@flow
         }
 

@@ -326,7 +326,12 @@ object DrugSafetyChecker {
         setOf("fluoroquinolone", "nsaid") to "MODERATE RISK — Increased seizure risk (fluoroquinolone + NSAID CNS interaction).",
         setOf("methotrexate", "nsaid") to "HIGH RISK — NSAIDs reduce methotrexate renal clearance → toxicity.",
         setOf("lithium", "nsaid") to "HIGH RISK — NSAIDs reduce lithium renal clearance → lithium toxicity.",
-        setOf("ssri", "maoi") to "CONTRAINDICATED — Serotonin syndrome. Minimum 14-day washout required."
+        setOf("ssri", "maoi") to "CONTRAINDICATED — Serotonin syndrome. Minimum 14-day washout required.",
+        setOf("apixaban", "ketoconazole") to "HIGH RISK — Dual CYP3A4 & P-gp inhibition increases apixaban bleeding risk; reduce dose or avoid.",
+        setOf("simvastatin", "clarithromycin") to "CONTRAINDICATED — Potent CYP3A4 inhibition elevates simvastatin levels → high rhabdomyolysis risk.",
+        setOf("ciprofloxacin", "theophylline") to "HIGH RISK — CYP1A2 inhibition elevates theophylline levels to toxic range (seizures, arrhythmias).",
+        setOf("allopurinol", "azathioprine") to "CONTRAINDICATED — Xanthine oxidase inhibition prevents azathioprine breakdown → fatal myelosuppression.",
+        setOf("sildenafil", "nitroglycerin") to "CONTRAINDICATED — Combined cGMP accumulation causes catastrophic refractory hypotension."
     )
 
     private val blackBoxWarnings = mapOf(
@@ -337,7 +342,9 @@ object DrugSafetyChecker {
         "amiodarone" to "⛔ BLACK BOX: Pulmonary toxicity, hepatotoxicity, proarrhythmia. Reserve for life-threatening arrhythmias.",
         "warfarin" to "⛔ BLACK BOX: Bleeding risk including fatal hemorrhage. Regular INR monitoring mandatory.",
         "varenicline" to "⛔ BLACK BOX: Serious neuropsychiatric symptoms; monitor mental health changes.",
-        "tramadol" to "⛔ BLACK BOX: Respiratory depression, addiction, neonatal opioid withdrawal syndrome."
+        "tramadol" to "⛔ BLACK BOX: Respiratory depression, addiction, neonatal opioid withdrawal syndrome.",
+        "sildenafil" to "⛔ CONTRAINDICATION: Concurrent nitrates cause life-threatening refractory hypotension.",
+        "spironolactone" to "⛔ BLACK BOX: Tumorigenic in animal models; monitor for severe hyperkalemia."
     )
 
     fun check(drugs: List<String>): String {
@@ -418,7 +425,18 @@ object LabInterpreter {
         "inr" to LabRange(0.8, 1.2, "ratio", "Supratherapeutic (over-anticoagulated)", "Sub-therapeutic or hypercoagulable"),
         "troponin" to LabRange(0.0, 0.04, "ng/mL", "Normal", "Myocardial injury/ACS — Urgent evaluation"),
         "bnp" to LabRange(0.0, 100.0, "pg/mL", "Normal", "Heart failure likely — Elevated BNP"),
-        "tsh" to LabRange(0.4, 4.0, "mIU/L", "Hyperthyroidism / TSH suppression", "Hypothyroidism")
+        "tsh" to LabRange(0.4, 4.0, "mIU/L", "Hyperthyroidism / TSH suppression", "Hypothyroidism"),
+        "crp" to LabRange(0.0, 5.0, "mg/L", "Normal", "Systemic inflammation / Infection"),
+        "d-dimer" to LabRange(0.0, 0.50, "μg/mL", "Normal", "Elevated D-Dimer — Evaluate for VTE/PE/DIC"),
+        "lactate" to LabRange(0.5, 2.0, "mmol/L", "Normal", "Lactic acidosis / Hypoperfusion / Sepsis alert"),
+        "alt" to LabRange(7.0, 56.0, "U/L", "Normal", "Hepatocellular injury / Transaminitis"),
+        "ast" to LabRange(10.0, 40.0, "U/L", "Normal", "Hepatocellular injury / Hepatic or cardiac damage"),
+        "bilirubin" to LabRange(0.2, 1.2, "mg/dL", "Normal", "Hyperbilirubinemia / Jaundice / Hemolysis or cholestasis"),
+        "albumin" to LabRange(3.5, 5.0, "g/dL", "Hypoalbuminemia (cirrhosis, nephrosis, malnutrition)", "Dehydration / Hemoconcentration"),
+        "calcium" to LabRange(8.5, 10.5, "mg/dL", "Hypocalcemia (tetany, QTc prolongation)", "Hypercalcemia (hyperparathyroid, malignancy)"),
+        "magnesium" to LabRange(1.7, 2.2, "mg/dL", "Hypomagnesemia (arrhythmia, Torsades de Pointes)", "Hypermagnesemia (loss of DTRs, respiratory depression)"),
+        "phosphate" to LabRange(2.5, 4.5, "mg/dL", "Hypophosphatemia (refeeding syndrome)", "Hyperphosphatemia (CKD, tumor lysis)"),
+        "hba1c" to LabRange(4.0, 5.6, "%", "Normal / Hypoglycemia risk", "Elevated HbA1c (Pre-diabetes >=5.7%, Diabetes >=6.5%)")
     )
 
     fun interpret(panel: Map<String, Double>): String {
