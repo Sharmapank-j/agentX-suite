@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,8 +40,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -219,7 +216,7 @@ fun ChatScreen(
                                 )
                             }
                             Text(
-                                text = "Agent: ${state.selectedAgent?.name ?: "AgentX Medical"}",
+                                text = "Clinical Assistant • Online",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -335,29 +332,6 @@ fun ChatScreen(
                     activeModel = state.activeModel,
                     onSwitchModelClick = { showModelSwitcherSheet = true }
                 )
-
-                // Agent Selection Row
-                AgentSelectionRow(
-                    agents = state.availableAgents,
-                    selectedAgent = state.selectedAgent,
-                    onSelect = viewModel::onAgentSelected
-                )
-
-                // Clinical Privacy & Offline Banner
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = "AgentX Multi-Agent Assistant • Dual Local & Cloud Intelligence",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
 
                 if (state.messages.isEmpty()) {
                     // Dynamic Clinical "Did You Know?" Insight (disappears when chat starts)
@@ -584,36 +558,6 @@ fun ActiveModelStatusBanner(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-fun AgentSelectionRow(
-    agents: List<com.agentx.medical.domain.models.Agent>,
-    selectedAgent: com.agentx.medical.domain.models.Agent?,
-    onSelect: (com.agentx.medical.domain.models.Agent) -> Unit
-) {
-    LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(agents) { agent ->
-            val isSelected = agent.id == selectedAgent?.id
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelect(agent) },
-                label = { Text(agent.name, style = MaterialTheme.typography.labelMedium) },
-                leadingIcon = if (isSelected) {
-                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
-                } else null,
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
             )
         }
     }

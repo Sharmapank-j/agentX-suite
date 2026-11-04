@@ -52,8 +52,6 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -311,8 +309,7 @@ fun ChatScreen(
             topBar = {
                 CyberTopAppBar(
                     conversationTitle = state.currentConversation?.title ?: "AgentX Chat",
-                    selectedAgentName = state.selectedAgent?.name ?: "AgentX",
-                    activeModel = state.activeModel,
+                                        activeModel = state.activeModel,
                     onTitleClick = {
                         renameText = state.currentConversation?.title ?: ""
                         showRenameDialog = true
@@ -567,7 +564,6 @@ fun ChatScreen(
 @Composable
 private fun CyberTopAppBar(
     conversationTitle: String,
-    selectedAgentName: String,
     activeModel: GGUFModel?,
     onTitleClick: () -> Unit,
     onMenuClick: () -> Unit,
@@ -714,60 +710,6 @@ private fun CyberTopAppBar(
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Multi-Agent Pipeline Execution Card
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-private fun MultiAgentProgressCard(
-    execState: com.agentx.core.agent.execution.ExecutionState,
-    onInspectClick: () -> Unit
-) {
-    Surface(
-        color = Color(0xFF0E2A47),
-        border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.5f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onInspectClick() }
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = ElectricCyan
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "⚡ Multi-Agent Pipeline Active (Step ${execState.currentStep}/${execState.totalSteps})",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = ElectricCyan
-                )
-                Text(
-                    text = execState.currentActivity,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = TextSecondary
-                )
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Inspect →",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = NeonIndigo
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Live Metrics Streaming HUD
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
