@@ -2,22 +2,41 @@ package com.agentx.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Cyber-Obsidian Void Backgrounds
+val VoidDark = Color(0xFF06080F)
+val SpaceDark = Color(0xFF0B101D)
+val SurfaceGlass = Color(0xFF111827)
+val SurfaceBorder = Color(0xFF1E293B)
+val SurfaceGlassElevated = Color(0xFF182234)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Electric Neural Accents
+val ElectricCyan = Color(0xFF00F2FE)
+val NeonIndigo = Color(0xFF4FACFE)
+val AuroraViolet = Color(0xFF8B5CF6)
+val NeuralBlue = Color(0xFF3B82F6)
+val CyberMint = Color(0xFF10B981)
+val AlertRose = Color(0xFFF43F5E)
+val WarningAmber = Color(0xFFF59E0B)
 
-// AgentX Specific Palette
-val AgentBlue = Color(0xFF2979FF)
-val AgentCyan = Color(0xFF00E5FF)
-val AgentGreen = Color(0xFF00E676)
-val AgentAmber = Color(0xFFFFAB00)
-val AgentPurple = Color(0xFFAA00FF)
-val AgentRed = Color(0xFFFF1744)
+// Typography & Content
+val TextPrimary = Color(0xFFF8FAFC)
+val TextSecondary = Color(0xFF94A3B8)
+val TextMuted = Color(0xFF64748B)
 
-val SurfaceDark = Color(0xFF121212)
-val SurfaceVariantDark = Color(0xFF1E1E1E)
-val CardBackgroundDark = Color(0xFF242424)
+// Legacy Palette Support
+val AgentBlue = NeonIndigo
+val AgentCyan = ElectricCyan
+val AgentGreen = CyberMint
+val AgentAmber = WarningAmber
+val AgentPurple = AuroraViolet
+val AgentRed = AlertRose
+val SurfaceDark = VoidDark
+val SurfaceVariantDark = SurfaceGlass
+val CardBackgroundDark = SurfaceGlassElevated
+
+val Purple80 = ElectricCyan
+val PurpleGrey80 = TextSecondary
+val Pink80 = AuroraViolet
+val Purple40 = NeonIndigo
+val PurpleGrey40 = TextMuted
+val Pink40 = AlertRose

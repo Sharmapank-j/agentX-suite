@@ -81,7 +81,7 @@ class ContextManagerTest {
             budget = ContextBudget(maxContextTokens = 300, maxOutputTokens = 50, reservedTokens = 20)
         )
 
-        assertTrue(prompt.contains("Older clinical history truncated"))
+        assertTrue(prompt.contains("history truncated"))
         // Most recent message should still be included
         assertTrue(prompt.contains("Clinical case history step 20"))
         // Oldest messages should have been truncated

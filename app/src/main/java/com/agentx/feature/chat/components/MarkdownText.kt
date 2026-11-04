@@ -199,7 +199,7 @@ fun MarkdownText(
                     }
                 }
                 is MarkdownBlock.Blockquote -> {
-                    ClinicalBlockquote(quoteText = block.text, textColor = textColor)
+                    AgentXBlockquote(quoteText = block.text, textColor = textColor)
                 }
                 is MarkdownBlock.CodeBlock -> {
                     CodeBlockCard(code = block.code, language = block.language)
@@ -216,7 +216,7 @@ fun MarkdownText(
 }
 
 @Composable
-fun ClinicalBlockquote(
+fun AgentXBlockquote(
     quoteText: String,
     textColor: Color
 ) {

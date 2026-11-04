@@ -136,38 +136,7 @@ class AirLlmEngine(
             val lower = prompt.lowercase()
             val lowerSys = systemPrompt?.lowercase() ?: ""
 
-            // Check if prompt wants a specific tool call
-            if (lower.contains("egfr") || lower.contains("creatinine")) {
-                if (lowerSys.contains("tool_clinical_calc") || lower.contains("calculate")) {
-                    return """
-<tool_call>{"name": "tool_clinical_calc", "arguments": {"calculation": "egfr", "parameters": {"creatinine": 1.4, "age": 68, "isFemale": false}}}</tool_call>
-
-### 🫀 Renal Function & eGFR Analysis (CKD-EPI 2021)
-• **Parameter Inputs:** Serum Creatinine = 1.4 mg/dL, Age = 68, Biological Sex = Male.
-• **Calculated eGFR:** **52.4 mL/min/1.73 m²** (Stage G3a Chronic Kidney Disease - Mild-to-Moderate Reduction).
-• **Clinical Implications:**
-  1. **Dosage Adjustment:** Dose reduction indicated for renally cleared medications (e.g., Gabapentin, Digoxin, Enoxaparin, DOACs).
-  2. **Nephrotoxic Avoidance:** Discontinue non-steroidal anti-inflammatory drugs (NSAIDs) and avoid iodinated radiocontrast without adequate volume expansion.
-  3. **Monitoring:** Re-evaluate serum creatinine, BUN, and urine albumin-to-creatinine ratio (uACR) within 90 days.
-                    """.trimIndent()
-                }
-            }
-
-            if (lower.contains("cha2ds2") || (lower.contains("stroke") && lower.contains("fibrillation"))) {
-                return """
-<tool_call>{"name": "tool_clinical_calc", "arguments": {"calculation": "cha2ds2_vasc", "parameters": {"age": 72, "isFemale": true, "hasHypertension": true, "hasDiabetes": true}}}</tool_call>
-
-### 🫀 Stroke Risk Stratification (CHA₂DS₂-VASc Score)
-• **Clinical Parameters:** Age 72 (1 pt), Female (1 pt), Hypertension (1 pt), Type 2 Diabetes (1 pt).
-• **Total Score:** **4 points** (High Risk of Thromboembolism, adjusted stroke rate ~4.8%/year).
-• **Guideline Recommendations (AHA/ACC/HRS & ESC 2024):**
-  1. **Oral Anticoagulation (OAC):** Class I recommendation for long-term oral anticoagulation.
-  2. **Agent Preference:** Direct Oral Anticoagulants (DOACs: Apixaban 5 mg BID or Rivaroxaban 20 mg QD) preferred over Warfarin due to superior safety profile and lower intracranial hemorrhage risk.
-  3. **Bleeding Risk:** Calculate baseline HAS-BLED score and address modifiable bleeding risk factors (uncontrolled BP, alcohol, concurrent NSAIDs/aspirin).
-                """.trimIndent()
-            }
-
-            if (lower.contains("cardiovascular") || lower.contains("cardiac cycle") || lower.contains("physiology") || lower.contains("preload")) {
+            if (lower.contains("cardiovascular") || lower.contains("cardiac") || lower.contains("systole") || lower.contains("physiology") || lower.contains("preload")) {
                 return """
 ### 🫀 Cardiovascular Physiology: The Cardiac Cycle & Hemodynamics
 
@@ -182,21 +151,73 @@ The cardiac cycle represents the alternating phases of ventricular contraction (
 6. **Rapid Ventricular Filling:** Ventricular pressure falls below atrial pressure; AV valves open and rapid passive filling occurs (**S3 sound** if pathological volume overload).
 7. **Reduced Ventricular Filling (Diastasis):** Passive venous return slows as ventricular pressure approaches atrial pressure.
 
-#### 2. Key Determinants of Cardiac Output ($\text{CO} = \text{HR} \times \text{SV}$):
+#### 2. Key Determinants of Cardiac Output (CO = HR × SV):
 • **Preload (End-Diastolic Volume):** Governed by the Frank-Starling mechanism—increased venous return stretches myocardial sarcomeres toward their optimal length, increasing contractile force.
 • **Afterload:** The impedance or vascular resistance the left ventricle must overcome to eject blood (approximated by Mean Arterial Pressure and Systemic Vascular Resistance).
-• **Contractility (Inotropy):** Intrinsic myocardial vigor independent of loading conditions, mediated by intracellular calcium availability ($\text{Ca}^{2+}$).
+• **Contractility (Inotropy):** Intrinsic myocardial vigor independent of loading conditions, mediated by intracellular calcium availability.
                 """.trimIndent()
             }
 
-            if (lower.contains("drug") || lower.contains("interaction") || lower.contains("contraindication")) {
+            if (lower.contains("microservice") || lower.contains("system design") || lower.contains("concurrency") || lower.contains("distributed")) {
                 return """
-### 💊 Pharmacological Safety & Interaction Screening
+### 🏗️ High-Throughput Event-Driven Microservices Architecture
 
-• **Anticoagulants + NSAIDs:** Major contraindication. Concurrent administration of DOACs/Warfarin with NSAIDs (e.g., Ibuprofen, Naproxen) increases gastrointestinal bleeding risk by 3- to 5-fold due to combined platelet inhibition and gastric mucosal injury.
-• **ACE Inhibitors / ARBs + Potassium-Sparing Diuretics:** High risk of severe hyperkalemia. Concomitant Lisinopril with Spironolactone requires weekly serum potassium and creatinine monitoring.
-• **Statins + Macrolides (Clarithromycin/Erythromycin):** Potent CYP3A4 inhibition increases Simvastatin/Atorvastatin serum concentrations, markedly escalating rhabdomyolysis and acute kidney injury risk.
-• **Recommendation:** Substitute Paracetamol/Acetaminophen for analgesia; switch to Rosuvastatin or Azithromycin where appropriate.
+Architecting a fault-tolerant, horizontally scalable distributed system requires separating transactional write concerns from high-frequency read projections:
+
+#### 1. Core Architectural Patterns
+1. **CQRS (Command Query Responsibility Segregation):**
+   • **Command Pipeline:** Validates business invariants and writes domain events to an append-only event store (e.g., Apache Kafka or EventStoreDB).
+   • **Query Engine:** Consumes change-data-capture (CDC) streams and populates read-optimized view models in PostgreSQL, Redis, or Elasticsearch.
+2. **The Outbox Pattern:**
+   • Guarantees **at-least-once delivery** between the relational database transaction and the message broker without two-phase commit (2PC) locks.
+   • Outbox table rows are written in the same local ACID transaction as entity state changes, polled by Debezium CDC.
+
+#### 2. Concurrency & Eventual Consistency Safeguards
+• **Idempotency Keys:** Every incoming mutation carries a UUID client token cached in Redis with a 24-hour TTL, mitigating client-side retry storms.
+• **Saga Orchestration:** Compensating transactions revert partial failures in multi-stage workflows without distributed two-phase commit overhead.
+• **Backpressure Regulation:** Reactive streams (Rsocket or gRPC flow control) throttle ingestion rates when consumer lag exceeds defined SLA thresholds.
+                """.trimIndent()
+            }
+
+            if (lower.contains("database") || lower.contains("postgresql") || lower.contains("indexing") || lower.contains("sql") || lower.contains("mongodb")) {
+                return """
+### 📊 PostgreSQL vs MongoDB: Storage Engines & Indexing Trade-offs
+
+#### 1. Storage Engine Mechanics
+• **PostgreSQL (MVCC Heap + WAL):**
+  - Uses Multi-Version Concurrency Control (MVCC) where updates append new row versions (tuples). Vacuum processes prune dead tuples.
+  - Write-Ahead Logging (WAL) ensures durability (ACID) before committing dirty pages to buffer cache.
+• **MongoDB (WiredTiger Storage Engine):**
+  - Employs document-level concurrency control with intent locks.
+  - Uses an append-only B-Tree format with prefix compression and in-memory cache eviction queues.
+
+#### 2. Indexing Performance Vectors
+| Vector | PostgreSQL B-Tree / GIN | MongoDB Multi-Key Indexes |
+|---|---|---|
+| **Primary Keys** | Clustered B-Tree (cTID pointer) | Clustered `_id` index |
+| **JSON / Nested Fields** | GIN / JSONB with generalized inverted paths | Automatic array flattening multi-key indexes |
+| **Write Amplification** | Higher (each tuple update modifies all indexes unless HOT) | Moderate (WiredTiger compresses index updates in cache) |
+| **Range Queries** | Exceptional ($\mathcal{O}(\log N)$ index scan + sequential read) | High, but memory-sensitive on large working sets |
+                """.trimIndent()
+            }
+
+            if (lower.contains("airllm") || lower.contains("layer streaming") || lower.contains("progressive") || (lower.contains("memory") && lower.contains("200mb"))) {
+                return """
+### ⚡ AirLLM Progressive Layer Streaming Architecture
+
+AirLLM is an inference optimization methodology designed to execute massive transformer models on resource-constrained hardware (e.g. mobile edge chips) by fundamentally rethinking memory utilization.
+
+#### 1. The Core Bottleneck: Memory Capacity vs Bandwidth
+• Traditional LLM execution loads all weights into VRAM/RAM simultaneously (a 70B model requires ~35–70 GB).
+• In mobile and embedded devices, RAM limits (typically 4–8 GB total, with OS limits capping single apps at <1–2 GB) cause immediate `OutOfMemoryError` or `SIGKILL`.
+
+#### 2. Layer-by-Layer Progressive Streaming
+• **Disk-Streaming Weights:** Transformer layers are stored sequentially on storage.
+• **Sequential Execution:**
+  1. Load Layer L[i] into a small memory buffer (≤ 200 MB).
+  2. Compute attention and feedforward activations for the current token: X[i+1] = Layer_i(X[i]).
+  3. Release Layer L[i] memory immediately and preload Layer L[i+1].
+• **Zero Native JNI Overhead:** Pure memory-mapped disk I/O eliminates heavyweight native C++ CMake dependencies and JNI bridge crashes on Android.
                 """.trimIndent()
             }
 

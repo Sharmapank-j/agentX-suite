@@ -7,7 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.agentx.core.device.DeviceHardwareInspector
 import com.agentx.core.device.DeviceSpecs
 import com.agentx.core.device.RecommendedModel
-import com.agentx.core.inference.CuratedMedicalModel
+import com.agentx.core.inference.CuratedModel
 import com.agentx.core.inference.DownloadProgress
 import com.agentx.core.inference.GgufMetadataParser
 import com.agentx.core.inference.HuggingFaceDownloader
@@ -54,7 +54,7 @@ data class ModelsUiState(
     val storageUsedBytes: Long = 0L,
     val storageAvailableBytes: Long = 0L,
     val notificationMessage: String? = null,
-    val curatedModels: List<CuratedMedicalModel> = HuggingFaceDownloader.CURATED_MODELS,
+    val curatedModels: List<CuratedModel> = HuggingFaceDownloader.CURATED_MODELS,
     val deviceSpecs: DeviceSpecs? = null,
     val recommendedModels: List<RecommendedModel> = emptyList()
 )
@@ -192,7 +192,7 @@ class ModelsViewModel(
                             tensorCount = metadata.tensorCount,
                             format = "GGUF v${metadata.version}",
                             quantization = metadata.quantization,
-                            capabilityProfile = "medical-clinical",
+                            capabilityProfile = "general-assistant",
                             isStaged = true,
                             isActive = uiState.value.models.isEmpty()
                         )
@@ -249,7 +249,7 @@ class ModelsViewModel(
                             tensorCount = metadata.tensorCount,
                             format = "GGUF v${metadata.version}",
                             quantization = metadata.quantization,
-                            capabilityProfile = "medical-clinical",
+                            capabilityProfile = "general-assistant",
                             isStaged = true,
                             isActive = uiState.value.models.isEmpty()
                         )

@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -391,16 +392,48 @@ class AgentXAdminServer(
         clientManager.recordClientActivity(clientIp, tokenCount)
         clientManager.logTraffic(clientIp, "POST", "/v1/chat/completions", 200, System.currentTimeMillis() - startTime, tokenCount)
 
+        val isStream = try {
+            json["stream"]?.jsonPrimitive?.booleanOrNull ?: false
+        } catch (_: Exception) {
+            false
+        }
+
         val id = "chatcmpl-${UUID.randomUUID().toString().take(12)}"
         val created = System.currentTimeMillis() / 1000
+        val modelName = if (servingMode == ServingMode.LOCAL_MODEL) localEngine.activeModel.id else cloudGateway.activeModelName
+
+        if (isStream) {
+            writer.print("HTTP/1.1 200 OK\r\n")
+            writer.print("Content-Type: text/event-stream; charset=utf-8\r\n")
+            writer.print("Cache-Control: no-cache\r\n")
+            writer.print("Connection: keep-alive\r\n")
+            writer.print("Access-Control-Allow-Origin: *\r\n\r\n")
+            writer.flush()
+
+            val words = completionText.split(" ")
+            for ((idx, word) in words.withIndex()) {
+                val tokenPiece = if (idx == 0) word else " $word"
+                val escapedPiece = tokenPiece
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                val chunkJson = """{"id":"$id","object":"chat.completion.chunk","created":$created,"model":"$modelName","choices":[{"index":0,"delta":{"content":"$escapedPiece"},"finish_reason":null}]}"""
+                writer.print("data: $chunkJson\r\n\r\n")
+                writer.flush()
+            }
+            val doneChunk = """{"id":"$id","object":"chat.completion.chunk","created":$created,"model":"$modelName","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"""
+            writer.print("data: $doneChunk\r\n\r\n")
+            writer.print("data: [DONE]\r\n\r\n")
+            writer.flush()
+            return
+        }
 
         val escapedContent = completionText
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
-
-        val modelName = if (servingMode == ServingMode.LOCAL_MODEL) localEngine.activeModel.id else cloudGateway.activeModelName
 
         val responseJson = """
             {

@@ -59,7 +59,7 @@ class ExecutionQueue {
         _state.value = _state.value.copy(
             conversationId = conversationId,
             status = ExecutionStatus.COMPLETED,
-            currentActivity = if (finalSummary.isNotBlank()) finalSummary else "Multi-agent clinical workflow complete."
+            currentActivity = if (finalSummary.isNotBlank()) finalSummary else "Multi-agent workflow complete."
         )
     }
 

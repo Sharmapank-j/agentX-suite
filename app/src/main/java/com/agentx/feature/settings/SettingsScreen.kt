@@ -91,7 +91,7 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Settings & Clinical Controls") })
+            TopAppBar(title = { Text("Settings & Preferences") })
         },
         modifier = modifier
     ) { padding ->
@@ -103,9 +103,9 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ── Clinical Safety Notice ──────────────────────────────────────────
+            // ── Edge AI & Privacy Safeguard Notice ──────────────────────────
             Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -114,29 +114,29 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Default.Warning,
-                        contentDescription = "Warning",
-                        tint = MaterialTheme.colorScheme.onErrorContainer
+                        Icons.Default.Shield,
+                        contentDescription = "Privacy Shield",
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            "Not for Acute Emergency Resuscitation",
+                            "Autonomous Edge AI Architecture",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "In life-threatening situations (cardiac arrest, anaphylaxis, acute stroke), initiate local emergency hospital resuscitation protocols immediately.",
+                            "AgentX operates locally on device using progressive layer streaming (AirLLM/GGUF) or custom endpoints. Private data never leaves your device without consent.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )
                     }
                 }
             }
 
-            // ── HIPAA & Offline Architecture ────────────────────────────────────
-            Text("Privacy & Clinical Compliance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            // ── Privacy & Data Isolation ────────────────────────────────────
+            Text("Privacy & Data Isolation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             Card(
                 modifier = Modifier
@@ -156,13 +156,13 @@ fun SettingsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("HIPAA Offline Certification", fontWeight = FontWeight.Bold)
+                            Text("Zero-Data-Exfiltration Privacy Safeguard", fontWeight = FontWeight.Bold)
                         }
                         Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "100% on-device local execution. Zero telemetry, zero cloud inference, zero external data exfiltration. Fully operational in air-gapped hospital networks.",
+                        "100% on-device local execution. Zero telemetry, zero external tracking, zero forced cloud logging. Fully operational in air-gapped offline environments.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
@@ -226,7 +226,7 @@ fun SettingsScreen(
                 ) {
                     Column {
                         Text("Dark Theme", fontWeight = FontWeight.SemiBold)
-                        Text("Optimized for clinical shift environments", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Cyber-Obsidian dark mode palette", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
                     Switch(
                         checked = state.darkTheme,
@@ -440,7 +440,7 @@ fun SettingsScreen(
                         Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text("Clinical Reasoning Monitor", fontWeight = FontWeight.SemiBold)
+                            Text("Agent Execution Monitor", fontWeight = FontWeight.SemiBold)
                             Text("Audit multi-agent tasks, subtask logs & tools", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                         }
                     }
@@ -450,7 +450,7 @@ fun SettingsScreen(
         }
     }
 
-    // HIPAA Explanation Dialog
+    // Privacy Explanation Dialog
     if (showHipaaDialog) {
         AlertDialog(
             onDismissRequest = { showHipaaDialog = false },
@@ -458,19 +458,19 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("HIPAA Security Safeguards")
+                    Text("Privacy & Isolation Safeguards")
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "AgentX Medical implements rigorous technical safeguards conforming to HIPAA Security Rule 45 CFR Part 164:",
+                        "AgentX provides uncompromising on-device privacy and cryptographic integrity:",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text("• Zero Network Egress: All inference runs on-device via llama.cpp JNI. No medical telemetry or queries leave the device.", style = MaterialTheme.typography.bodySmall)
-                    Text("• Air-Gapped Operation: Works completely without Wi-Fi, mobile data, or external APIs.", style = MaterialTheme.typography.bodySmall)
-                    Text("• Sandboxed Storage: Clinical notes, conversation threads, and GGUF models reside strictly in application-private storage.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Zero Network Egress: Local inference runs entirely on device with zero telemetry or background reporting.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Air-Gapped Operation: Fully operational without cellular data or Wi-Fi connectivity.", style = MaterialTheme.typography.bodySmall)
+                    Text("• Sandboxed Storage: Chat sessions, agent telemetry, and local models reside strictly in private application storage.", style = MaterialTheme.typography.bodySmall)
                     Text("• Audit Controls: Multi-agent executions record cryptographic task IDs, token counts, and tool verification logs in local Room SQLite.", style = MaterialTheme.typography.bodySmall)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     Text("Status: Fully Verified & Certified Offline", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
@@ -567,7 +567,7 @@ fun ExecutionMonitorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Clinical Reasoning Monitor") },
+                title = { Text("Agent Execution Monitor") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -660,7 +660,7 @@ fun ExecutionMonitorScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("No Multi-Agent Workflows Recorded Yet", fontWeight = FontWeight.Bold)
                         Text(
-                            "Consult Chief Clinical Supervisor in Chat to inspect agent tasks",
+                            "Run a multi-agent prompt in Chat to inspect agent tasks",
                             color = MaterialTheme.colorScheme.outline,
                             style = MaterialTheme.typography.bodySmall
                         )

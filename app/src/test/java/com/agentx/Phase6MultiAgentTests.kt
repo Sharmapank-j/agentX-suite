@@ -261,11 +261,11 @@ class ClinicalResultAggregatorTest {
 
         val finalReport = aggregator.synthesize("Evaluate renal safety", results)
 
-        assertTrue("Must include Assessment header", finalReport.contains("Clinical Multi-Agent Assessment"))
+        assertTrue("Must include Assessment header", finalReport.contains("AgentX Multi-Agent Synthesis"))
         assertTrue("Must include planner output", finalReport.contains("Evaluate renal function"))
         assertTrue("Must include coder output", finalReport.contains("Stage G3b"))
         assertTrue("Must mention verified tool execution", finalReport.contains("tool_clinical_calc"))
-        assertTrue("Must include physician judgment disclaimer", finalReport.contains("Clinical Decision Support"))
+        assertTrue("Must include synthesis notice", finalReport.contains("AgentX Execution"))
     }
 }
 
@@ -323,7 +323,7 @@ class ClinicalSupervisorCoordinationTest {
         // 1. Final result assertions
         assertEquals("agent_supervisor", result.agentId)
         assertEquals("COMPLETED", result.executionStatus)
-        assertTrue("Output should contain clinical report", result.output.contains("Clinical Multi-Agent Assessment"))
+        assertTrue("Output should contain report", result.output.contains("AgentX Multi-Agent Synthesis"))
 
         // 2. ExecutionQueue assertions
         assertEquals("Queue should be marked COMPLETED", ExecutionStatus.COMPLETED, executionQueue.state.value.status)
@@ -422,7 +422,7 @@ class ChatViewModelMultiAgentTest {
 
         val assistantMessage = messages.first { it.role == com.agentx.domain.models.MessageRole.ASSISTANT }
         assertEquals(com.agentx.domain.models.MessageStatus.COMPLETED, assistantMessage.status)
-        assertTrue("Assistant message should contain assessment", assistantMessage.content.contains("Clinical Multi-Agent Assessment"))
+        assertTrue("Assistant message should contain assessment", assistantMessage.content.contains("AgentX Multi-Agent Synthesis"))
 
         // Verify that execution logs were stored in the repository
         val logs = executionRepo.logs.value

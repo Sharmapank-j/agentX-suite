@@ -201,12 +201,12 @@ abstract class AgentXDatabase : RoomDatabase() {
                         schemaJson = "{\"text\": \"string\"}"
                     ),
                     ToolEntity(
-                        id = "tool_clinical_calc",
-                        name = "Clinical Risk & Dosage Calculator",
-                        description = "Calculates eGFR (CKD-EPI) and stroke risk metrics for clinical verification workflows",
-                        category = "Clinical Tools",
+                        id = "tool_json_validator",
+                        name = "JSON Schema & Syntax Validator",
+                        description = "Validates JSON structure, syntax correctness, and reports schema errors",
+                        category = "Developer Tools",
                         requiresPermission = false,
-                        schemaJson = "{\"calculation\": \"string\", \"parameters\": \"object\"}"
+                        schemaJson = "{\"json\": \"string\"}"
                     )
                 )
                 toolDao.insertAll(defaultTools)

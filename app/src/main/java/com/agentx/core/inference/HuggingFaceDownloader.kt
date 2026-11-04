@@ -12,7 +12,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class CuratedMedicalModel(
+data class CuratedModel(
     val id: String,
     val name: String,
     val description: String,
@@ -22,8 +22,10 @@ data class CuratedMedicalModel(
     val estimatedSizeBytes: Long,
     val quantization: String,
     val ramRequirement: String,
-    val clinicalDomain: String
+    val domain: String
 )
+
+typealias CuratedMedicalModel = CuratedModel
 
 sealed interface DownloadProgress {
     data class Downloading(
@@ -45,53 +47,53 @@ class HuggingFaceDownloader(
 
     companion object {
         val CURATED_MODELS = listOf(
-            CuratedMedicalModel(
-                id = "curated_biomistral_7b_q4km",
-                name = "BioMistral 7B (Q4_K_M)",
-                description = "Specialized medical foundation model pre-trained on biomedical literature and clinical notes.",
-                repoId = "TheBloke/BioMistral-7B-GGUF",
-                filename = "biomistral-7b.Q4_K_M.gguf",
-                downloadUrl = "https://huggingface.co/TheBloke/BioMistral-7B-GGUF/resolve/main/biomistral-7b.Q4_K_M.gguf",
-                estimatedSizeBytes = 4_368_438_272L,
-                quantization = "Q4_K_M",
-                ramRequirement = "6 GB RAM",
-                clinicalDomain = "General Biomedical & Evidence-Based Medicine"
-            ),
-            CuratedMedicalModel(
-                id = "curated_meditron_7b_q4km",
-                name = "Meditron 7B (Q4_K_M)",
-                description = "Open-source medical LLM tailored for clinical practice guidelines and medical question answering.",
-                repoId = "TheBloke/meditron-7B-GGUF",
-                filename = "meditron-7b.Q4_K_M.gguf",
-                downloadUrl = "https://huggingface.co/TheBloke/meditron-7B-GGUF/resolve/main/meditron-7b.Q4_K_M.gguf",
-                estimatedSizeBytes = 4_368_438_272L,
-                quantization = "Q4_K_M",
-                ramRequirement = "6 GB RAM",
-                clinicalDomain = "Clinical Practice Guidelines (WHO, NICE, CDC)"
-            ),
-            CuratedMedicalModel(
-                id = "curated_qwen2_5_med_q4km",
-                name = "Qwen2.5 Medical 7B (Q4_K_M)",
-                description = "High-accuracy diagnostic, pathophysiology, and clinical reasoning model with structured JSON tool capability.",
-                repoId = "Qwen/Qwen2.5-7B-Instruct-GGUF",
-                filename = "qwen2.5-7b-instruct-q4_k_m.gguf",
-                downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
-                estimatedSizeBytes = 4_680_000_000L,
-                quantization = "Q4_K_M",
-                ramRequirement = "6 GB RAM",
-                clinicalDomain = "Differential Diagnosis & Pathophysiology"
-            ),
-            CuratedMedicalModel(
-                id = "curated_tiny_med_q4km",
-                name = "Llama 3.2 3B Medical Compact (Q4_K_M)",
-                description = "Ultra-compact edge clinical model for rapid mobile inference and low RAM devices.",
+            CuratedModel(
+                id = "curated_llama32_3b_q4km",
+                name = "Llama 3.2 3B Instruct (Q4_K_M)",
+                description = "Ultra-compact high-performance edge assistant model for rapid mobile inference and low RAM footprint.",
                 repoId = "bartowski/Llama-3.2-3B-Instruct-GGUF",
                 filename = "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
                 downloadUrl = "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
                 estimatedSizeBytes = 2_020_000_000L,
                 quantization = "Q4_K_M",
                 ramRequirement = "3.5 GB RAM",
-                clinicalDomain = "Mobile Fast Triage & Study Assistant"
+                domain = "General Assistant & Edge Conversational"
+            ),
+            CuratedModel(
+                id = "curated_qwen25_coder_7b_q4km",
+                name = "Qwen 2.5 Coder 7B (Q4_K_M)",
+                description = "Flagship open-source code generation, systems architecture, and algorithmic debugging LLM.",
+                repoId = "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+                filename = "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+                downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+                estimatedSizeBytes = 4_680_000_000L,
+                quantization = "Q4_K_M",
+                ramRequirement = "6 GB RAM",
+                domain = "Software Engineering & Architecture"
+            ),
+            CuratedModel(
+                id = "curated_deepseek_r1_1_5b_q4km",
+                name = "DeepSeek R1 Distill Qwen 1.5B (Q4_K_M)",
+                description = "Lightweight reasoning and chain-of-thought distillation model with high step-by-step logic accuracy.",
+                repoId = "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+                filename = "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+                downloadUrl = "https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+                estimatedSizeBytes = 1_120_000_000L,
+                quantization = "Q4_K_M",
+                ramRequirement = "2.2 GB RAM",
+                domain = "Deep Reasoning & Mathematics"
+            ),
+            CuratedModel(
+                id = "curated_phi35_mini_q4km",
+                name = "Phi-3.5 Mini 3.8B Instruct (Q4_K_M)",
+                description = "Advanced small language model by Microsoft offering state-of-the-art multilingual and multi-turn reasoning.",
+                repoId = "bartowski/Phi-3.5-mini-instruct-GGUF",
+                filename = "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+                downloadUrl = "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+                estimatedSizeBytes = 2_390_000_000L,
+                quantization = "Q4_K_M",
+                ramRequirement = "4 GB RAM",
+                domain = "Reasoning & Edge Analysis"
             )
         )
 
@@ -133,11 +135,11 @@ class HuggingFaceDownloader(
                 connectTimeout = 15000
                 readTimeout = 30000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "AgentX-Android-Medical/1.0")
+                setRequestProperty("User-Agent", "AgentX-Android/1.0")
             }
 
             var responseCode = connection.responseCode
-            // Follow up to 3 redirects if needed (common with Hugging Face LFS CDN)
+            // Follow up to 5 redirects if needed (common with Hugging Face LFS CDN)
             var redirects = 0
             var currentConnection = connection
             while ((responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
@@ -148,7 +150,7 @@ class HuggingFaceDownloader(
                 currentConnection = (URL(newUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000
                     readTimeout = 30000
-                    setRequestProperty("User-Agent", "AgentX-Android-Medical/1.0")
+                    setRequestProperty("User-Agent", "AgentX-Android/1.0")
                 }
                 responseCode = currentConnection.responseCode
                 redirects++

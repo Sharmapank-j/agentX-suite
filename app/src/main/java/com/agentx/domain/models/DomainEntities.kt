@@ -108,7 +108,7 @@ data class GGUFModel(
     val tensorCount: Long = 0L,
     val format: String = "GGUF",
     val quantization: String = "Q4_K_M",
-    val capabilityProfile: String = "medical-clinical",
+    val capabilityProfile: String = "general-assistant",
     val isStaged: Boolean = false,
     val isActive: Boolean = false,
     val isLoaded: Boolean = false,

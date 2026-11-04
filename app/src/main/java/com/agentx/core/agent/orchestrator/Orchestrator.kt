@@ -351,7 +351,7 @@ class ClinicalTaskPlanner(
 
         return try {
             val planningPrompt = """
-You are the Clinical Task Planner. Decompose this clinical query into an execution plan JSON.
+You are the Task Planner. Decompose this user query into an execution plan JSON.
 Available agent roles: ${availableAgents.joinToString(", ") { it.name }}
 
 Query: "$userGoal"
@@ -407,12 +407,12 @@ class ClinicalResultAggregator(
         val validResults = results.filter { it.output.isNotBlank() && it.output != "[No output generated]" }
 
         return buildString {
-            appendLine("## Clinical Multi-Agent Assessment\n")
-            appendLine("**Clinical Query:** $originalGoal\n")
+            appendLine("## AgentX Multi-Agent Synthesis\n")
+            appendLine("**Goal:** $originalGoal\n")
             appendLine("---\n")
 
             validResults.forEach { result ->
-                appendLine("### Specialist (${result.agentId}) Report\n")
+                appendLine("### Specialist (${result.agentId}) Output\n")
                 appendLine(result.output.trim())
                 if (result.toolCalls.isNotEmpty()) {
                     appendLine("\n**Verified Tool Executions:** ${result.toolCalls.joinToString(", ") { it.toolId }}")
@@ -420,7 +420,7 @@ class ClinicalResultAggregator(
                 appendLine("\n---\n")
             }
 
-            appendLine("> ⚕️ **Clinical Decision Support Notice**: This multi-agent AI assessment is for clinical decision support and educational reference only. All medical decisions require physician review and verification.")
+            appendLine("> ⚡ **AgentX Execution**: Synthesized across specialized autonomous agents with local tool verification.")
         }.trimEnd()
     }
 }
@@ -450,7 +450,7 @@ class ClinicalSupervisor(
             total = 1,
             role = AgentRole.PLANNER,
             agentId = "agent_planner",
-            activity = "Decomposing clinical query and formulating execution plan..."
+            activity = "Decomposing query and formulating multi-agent plan..."
         )
 
         val plan = taskPlanner.createPlan(userGoal, agents.keys.toList())
@@ -528,13 +528,13 @@ class ClinicalSupervisor(
             total = totalSteps,
             role = AgentRole.SYNTHESIZER,
             agentId = "agent_synthesizer",
-            activity = "Medical Synthesizer: Consolidating evidence-based findings..."
+            activity = "Consolidating specialist findings..."
         )
 
         val finalOutput = resultAggregator.synthesize(userGoal, completedResults.values.toList())
 
         val totalDuration = System.currentTimeMillis() - startTime
-        executionQueue?.complete(conversationId, "Clinical consultation complete.")
+        executionQueue?.complete(conversationId, "Multi-agent execution complete.")
 
         // Log final supervisor aggregation
         executionRepository?.logExecution(
@@ -565,3 +565,9 @@ class ClinicalSupervisor(
         )
     }
 }
+
+typealias AutonomousSupervisor = ClinicalSupervisor
+typealias AutonomousAgentExecutor = ClinicalAgentExecutor
+typealias AutonomousTaskPlanner = ClinicalTaskPlanner
+typealias AutonomousResultAggregator = ClinicalResultAggregator
+

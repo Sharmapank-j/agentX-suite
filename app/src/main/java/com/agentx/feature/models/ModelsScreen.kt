@@ -81,7 +81,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agentx.core.device.DeviceSpecs
 import com.agentx.core.device.RecommendedModel
-import com.agentx.core.inference.CuratedMedicalModel
+import com.agentx.core.inference.CuratedModel
 import com.agentx.domain.models.GGUFModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -661,7 +661,7 @@ private fun ModelCard(
 
 @Composable
 private fun CuratedModelCard(
-    model: CuratedMedicalModel,
+    model: CuratedModel,
     isInstalled: Boolean,
     isDownloading: Boolean,
     onDownload: () -> Unit

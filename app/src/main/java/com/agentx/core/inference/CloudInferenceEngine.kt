@@ -198,7 +198,7 @@ class CloudInferenceEngine(
         activeConnection = conn
 
         val escapedPrompt = escapeJson(request.prompt)
-        val escapedSystem = request.systemPrompt?.let { escapeJson(it) } ?: "You are a clinical decision support assistant."
+        val escapedSystem = request.systemPrompt?.let { escapeJson(it) } ?: "You are AgentX, an advanced autonomous AI personal assistant."
 
         val payload = """
             {

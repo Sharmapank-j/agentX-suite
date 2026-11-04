@@ -18,7 +18,7 @@ data class ModelEntity(
     @ColumnInfo(name = "tensor_count") val tensorCount: Long = 0L,
     val format: String = "GGUF",
     val quantization: String = "Q4_K_M",
-    @ColumnInfo(name = "capability_profile") val capabilityProfile: String = "medical-clinical",
+    @ColumnInfo(name = "capability_profile") val capabilityProfile: String = "general-assistant",
     @ColumnInfo(name = "is_staged") val isStaged: Boolean = false,
     @ColumnInfo(name = "is_active") val isActive: Boolean = false,
     val threads: Int = 4,

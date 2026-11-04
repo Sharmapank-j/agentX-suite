@@ -35,16 +35,16 @@ class HuggingFaceDownloaderTest {
     }
 
     @Test
-    fun testCuratedClinicalModelsPresence() {
+    fun testCuratedModelsPresence() {
         val curated = HuggingFaceDownloader.CURATED_MODELS
 
         assertTrue(curated.isNotEmpty())
-        val biomistral = curated.find { it.name.contains("BioMistral") }
-        val meditron = curated.find { it.name.contains("Meditron") }
+        val llama = curated.find { it.name.contains("Llama") }
+        val qwen = curated.find { it.name.contains("Qwen") }
 
-        assertTrue(biomistral != null)
-        assertTrue(meditron != null)
-        assertTrue(biomistral?.downloadUrl?.contains("resolve/main") == true)
-        assertEquals("Q4_K_M", biomistral?.quantization)
+        assertTrue(llama != null)
+        assertTrue(qwen != null)
+        assertTrue(llama?.downloadUrl?.contains("resolve/main") == true)
+        assertEquals("Q4_K_M", llama?.quantization)
     }
 }

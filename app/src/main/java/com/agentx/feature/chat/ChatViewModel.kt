@@ -173,7 +173,7 @@ class ChatViewModel(
         _currentConversationId.value = conversationId
     }
 
-    fun createNewConversation(title: String = "Clinical Consult") {
+    fun createNewConversation(title: String = "New Conversation") {
         viewModelScope.launch {
             val newId = UUID.randomUUID().toString()
             val newConv = Conversation(
@@ -268,7 +268,7 @@ class ChatViewModel(
 
         val state = uiState.value
         val agent = state.selectedAgent
-        val agentName = agent?.name ?: "Chief Clinical Supervisor"
+        val agentName = agent?.name ?: "Chief Orchestrator"
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
@@ -289,7 +289,7 @@ class ChatViewModel(
                 id = UUID.randomUUID().toString(),
                 conversationId = convId,
                 role = MessageRole.USER,
-                senderName = "Clinician",
+                senderName = "User",
                 content = text,
                 status = MessageStatus.COMPLETED
             )
@@ -326,7 +326,7 @@ class ChatViewModel(
 
         val convId = _currentConversationId.value ?: return
         val agent = uiState.value.selectedAgent
-        val agentName = agent?.name ?: "Chief Clinical Supervisor"
+        val agentName = agent?.name ?: "Chief Orchestrator"
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
@@ -362,7 +362,7 @@ class ChatViewModel(
             conversationId = convId,
             role = MessageRole.ASSISTANT,
             senderName = "$agentName (Multi-Agent Team)",
-            content = "⏳ Multi-agent clinical team assembling...\nDecomposing inquiry into specialized subtasks.",
+            content = "⚡ Multi-agent intelligence pipeline active...\nDecomposing inquiry into specialized subtasks.",
             agentId = "agent_supervisor",
             status = MessageStatus.STREAMING
         )
@@ -383,7 +383,7 @@ class ChatViewModel(
             viewModelScope.launch {
                 queue.state.collect { state ->
                     if (state.status == ExecutionStatus.RUNNING) {
-                        val progressHeader = "🔄 **Multi-Agent Clinical Pipeline Active** (Step ${state.currentStep}/${state.totalSteps})\n"
+                        val progressHeader = "⚡ **Multi-Agent Pipeline Active** (Step ${state.currentStep}/${state.totalSteps})\n"
                         val activityText = "• **Current Activity**: ${state.currentActivity}\n"
                         val intermediate = if (state.intermediateOutputs.isNotEmpty()) {
                             "\n**Completed Specialist Findings:**\n" + state.intermediateOutputs.joinToString("\n") { "  - $it" }
@@ -418,7 +418,7 @@ class ChatViewModel(
         } catch (e: Exception) {
             progressJob?.cancel()
             assistantMsg = assistantMsg.copy(
-                content = "Error during multi-agent clinical coordination: ${e.message}",
+                content = "Error during multi-agent coordination: ${e.message}",
                 status = MessageStatus.ERROR
             )
             conversationRepository.updateMessage(assistantMsg)

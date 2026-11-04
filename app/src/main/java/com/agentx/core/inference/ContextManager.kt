@@ -12,7 +12,7 @@ data class ContextBudget(
 object ContextManager {
 
     /**
-     * Fast token estimator. For clinical and English text, 1 token is roughly 4 characters
+     * Fast token estimator. For general code and English text, 1 token is roughly 4 characters
      * or ~0.75 words. We use a conservative character/word blended heuristic.
      */
     fun estimateTokens(text: String): Int {
@@ -73,10 +73,10 @@ object ContextManager {
             builder.append("\n<|end|>\n")
         }
 
-        // 2. Truncation notice for clinical continuity
+        // 2. Truncation notice for conversation continuity
         if (wasTruncated) {
             builder.append("<|system|>\n")
-            builder.append("[Note: Older clinical history truncated to preserve on-device memory limits]\n")
+            builder.append("[Note: Older conversation history truncated to preserve on-device memory limits]\n")
             builder.append("<|end|>\n")
         }
 
