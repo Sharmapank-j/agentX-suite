@@ -1,0 +1,70 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Broadcast Waves at Top -->
+    <path
+        android:pathData="M44,32 A14,14 0 0,1 64,32"
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M38,26 A22,22 0 0,1 70,26"
+        android:strokeColor="#3B82F6"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round" />
+
+    <!-- Server Rack Top Unit -->
+    <path
+        android:pathData="M30,38 L78,38 L78,48 L30,48 Z"
+        android:fillColor="#1E293B" />
+    <!-- Server Rack Middle Unit -->
+    <path
+        android:pathData="M30,52 L78,52 L78,62 L30,62 Z"
+        android:fillColor="#1E293B" />
+    <!-- Server Rack Bottom Unit -->
+    <path
+        android:pathData="M30,66 L78,66 L78,76 L30,76 Z"
+        android:fillColor="#1E293B" />
+
+    <!-- Server Activity LEDs (Green = Online, Amber = Serving) -->
+    <!-- Unit 1 LEDs -->
+    <path
+        android:pathData="M35,43 A2,2 0 1,0 35,41 A2,2 0 1,0 35,43 Z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M42,43 A2,2 0 1,0 42,41 A2,2 0 1,0 42,43 Z"
+        android:fillColor="#F59E0B" />
+    <path
+        android:pathData="M50,42 L72,42"
+        android:strokeColor="#334155"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Unit 2 LEDs -->
+    <path
+        android:pathData="M35,57 A2,2 0 1,0 35,55 A2,2 0 1,0 35,57 Z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M42,57 A2,2 0 1,0 42,55 A2,2 0 1,0 42,57 Z"
+        android:fillColor="#38BDF8" />
+    <path
+        android:pathData="M50,56 L72,56"
+        android:strokeColor="#334155"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+
+    <!-- Unit 3 LEDs -->
+    <path
+        android:pathData="M35,71 A2,2 0 1,0 35,69 A2,2 0 1,0 35,71 Z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M42,71 A2,2 0 1,0 42,69 A2,2 0 1,0 42,71 Z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M50,70 L72,70"
+        android:strokeColor="#334155"
+        android:strokeWidth="2"
+        android:strokeLineCap="round" />
+</vector>

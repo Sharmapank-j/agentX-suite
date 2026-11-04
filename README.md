@@ -36,9 +36,9 @@ The **AgentX Suite** is an advanced on-device AI ecosystem for Android that brid
  └───────────────┘                     └───────────────┘                     └───────────────┘
 ```
 
-1. **🌟 AgentX (`:app`)**: An intuitive, highly customizable personal AI assistant (ChatGPT-style) powered by local GGUF models (`llama.cpp` JNI) and Cloud Gemini streaming, backed by a collaborative multi-agent collective (Supervisor, Coder, Analyst, Researcher, Reviewer, Synthesizer).
-2. **⚕️ AgentX Medical (`:app` Clinical Mode)**: An evidence-based Clinical Decision-Support (CDS) platform designed for healthcare professionals and medical students, equipped with deterministic on-device calculators (eGFR CKD-EPI 2021, $\text{CHA}_2\text{DS}_2\text{-VASc}$), pharmacological contraindication screeners, and safety guardrails.
-3. **⚡ AgentX Serve (`:admin`)**: An Android edge-server application that transforms any smartphone into a 24/7 high-performance AI inference host over local Wi-Fi / LAN, exposing standard OpenAI-compatible `/v1/chat/completions` endpoints with background foreground services and partial wake locks.
+1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by local GGUF models (`llama.cpp` JNI) and Cloud Gemini streaming, backed by a collaborative multi-agent collective. Features custom adaptive neural vector icon.
+2. **⚕️ AgentX Medical (`:medical`)**: Dedicated standalone Clinical Decision-Support (CDS) application (`com.agentx.medical`) designed for healthcare professionals and medical students. Features verified on-device calculators (eGFR CKD-EPI 2021, $\text{CHA}_2\text{DS}_2\text{-VASc}$), clinical teams, and custom adaptive medical pulse/caduceus icon.
+3. **⚡ AgentX Serve (`:admin`)**: Dedicated Android edge-server application (`com.agentx.admin`) that transforms any smartphone into a 24/7 high-performance AI inference host over local Wi-Fi / LAN, exposing standard OpenAI-compatible `/v1/chat/completions` endpoints. Features custom adaptive edge server stack icon.
 
 ---
 
@@ -154,16 +154,17 @@ cd agentX-suite
 # Run the complete test suite (97 unit tests)
 ./gradlew :app:testDebugUnitTest
 
-# Build Debug APKs for both AgentX and AgentX Serve
-./gradlew :app:assembleDebug :admin:assembleDebug
+# Build Debug APKs for all 3 applications
+./gradlew :app:assembleDebug :medical:assembleDebug :admin:assembleDebug
 
-# Build Production Release APKs
-./gradlew :app:assembleRelease :admin:assembleRelease
+# Build Production Release APKs for all 3 applications
+./gradlew :app:assembleRelease :medical:assembleRelease :admin:assembleRelease
 ```
 
 ### Generated Artifacts
-- **AgentX Client App**: `app/build/outputs/apk/debug/app-debug.apk`
-- **AgentX Serve Host App**: `admin/build/outputs/apk/debug/admin-debug.apk`
+- **AgentX Client App**: `app/build/outputs/apk/debug/app-debug.apk` (`com.agentx`)
+- **AgentX Medical App**: `medical/build/outputs/apk/debug/medical-debug.apk` (`com.agentx.medical`)
+- **AgentX Serve Host App**: `admin/build/outputs/apk/debug/admin-debug.apk` (`com.agentx.admin`)
 
 ---
 

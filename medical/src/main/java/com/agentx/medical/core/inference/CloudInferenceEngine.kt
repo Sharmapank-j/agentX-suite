@@ -1,0 +1,301 @@
+package com.agentx.medical.core.inference
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+
+class CloudInferenceEngine(
+    var config: CloudModelConfig = CloudModelConfig()
+) : InferenceEngine {
+
+    @Volatile
+    private var activeConnection: HttpURLConnection? = null
+
+    @Volatile
+    private var isStopRequested: Boolean = false
+
+    @Volatile
+    private var currentStatus: ModelStatus = ModelStatus(
+        state = ModelLifecycleState.NOT_LOADED,
+        activeModelId = "cloud_${config.modelName}",
+        activeModelName = config.modelName
+    )
+
+    override suspend fun loadModel(config: ModelConfig) {
+        // Cloud models are hosted remotely and ready on-demand
+        currentStatus = ModelStatus(
+            state = ModelLifecycleState.LOADED,
+            activeModelId = "cloud_${this.config.modelName}",
+            activeModelName = "${this.config.provider.displayName} (${this.config.modelName})"
+        )
+    }
+
+    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
+        isStopRequested = false
+        currentStatus = currentStatus.copy(state = ModelLifecycleState.GENERATING)
+        val startTime = System.currentTimeMillis()
+        var totalTokens = 0
+
+        try {
+            when (config.provider) {
+                CloudProvider.GEMINI -> {
+                    generateGeminiSse(request, onToken = { token ->
+                        totalTokens++
+                        emit(GenerationEvent.Token(token))
+                    })
+                }
+                CloudProvider.CUSTOM_GATEWAY -> {
+                    generateOpenAiCompatible(request, onToken = { token ->
+                        totalTokens++
+                        emit(GenerationEvent.Token(token))
+                    })
+                }
+            }
+
+            val duration = System.currentTimeMillis() - startTime
+            val promptEstTokens = (request.prompt.length / 4) + ((request.systemPrompt?.length ?: 0) / 4)
+            emit(
+                GenerationEvent.Finished(
+                    totalTokens = promptEstTokens + totalTokens,
+                    promptTokens = promptEstTokens,
+                    completionTokens = totalTokens,
+                    durationMs = duration
+                )
+            )
+            currentStatus = currentStatus.copy(state = ModelLifecycleState.LOADED)
+        } catch (e: Exception) {
+            currentStatus = currentStatus.copy(state = ModelLifecycleState.ERROR, errorMessage = e.message)
+            emit(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
+        } finally {
+            activeConnection?.disconnect()
+            activeConnection = null
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun generateGeminiSse(
+        request: InferenceRequest,
+        onToken: suspend (String) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val apiKey = config.apiKey.trim()
+        if (apiKey.isBlank()) {
+            throw IllegalStateException("Google Gemini API Key is missing. Please configure your API key in Settings -> Cloud Models.")
+        }
+
+        val urlString = "https://generativelanguage.googleapis.com/v1beta/models/${config.modelName}:streamGenerateContent?alt=sse&key=$apiKey"
+        val url = URL(urlString)
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "text/event-stream")
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            doOutput = true
+        }
+        activeConnection = conn
+
+        // Build Gemini JSON Request payload
+        val escapedPrompt = escapeJson(request.prompt)
+        val escapedSystem = request.systemPrompt?.let { escapeJson(it) }
+
+        val systemBlock = if (!escapedSystem.isNullOrBlank()) {
+            """
+            "systemInstruction": {
+                "parts": [{"text": "$escapedSystem"}]
+            },
+            """.trimIndent()
+        } else ""
+
+        val payload = """
+            {
+                $systemBlock
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "$escapedPrompt"}]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": ${request.temperature},
+                    "maxOutputTokens": ${request.maxTokens}
+                }
+            }
+        """.trimIndent()
+
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+            writer.write(payload)
+            writer.flush()
+        }
+
+        val responseCode = conn.responseCode
+        if (responseCode !in 200..299) {
+            val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+            throw IllegalStateException("Gemini API Error ($responseCode): $errorBody")
+        }
+
+        BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                currentCoroutineContext().ensureActive()
+                if (isStopRequested) break
+
+                val trimmed = line!!.trim()
+                if (trimmed.startsWith("data:")) {
+                    val jsonStr = trimmed.removePrefix("data:").trim()
+                    if (jsonStr.isNotBlank() && jsonStr != "[DONE]") {
+                        try {
+                            val parsed = Json.parseToJsonElement(jsonStr).jsonObject
+                            val candidates = parsed["candidates"]?.jsonArray
+                            val parts = candidates?.firstOrNull()?.jsonObject
+                                ?.get("content")?.jsonObject
+                                ?.get("parts")?.jsonArray
+
+                            val text = parts?.firstOrNull()?.jsonObject
+                                ?.get("text")?.jsonPrimitive?.content
+
+                            if (!text.isNullOrEmpty()) {
+                                onToken(text)
+                            }
+                        } catch (_: Exception) {
+                            // Non-fatal chunk parsing error
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun generateOpenAiCompatible(
+        request: InferenceRequest,
+        onToken: suspend (String) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        val baseUrl = config.customBaseUrl.trimEnd('/')
+        val url = URL("$baseUrl/chat/completions")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json, text/event-stream")
+            if (config.apiKey.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
+                setRequestProperty("X-API-Key", config.apiKey.trim())
+            }
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            doOutput = true
+        }
+        activeConnection = conn
+
+        val escapedPrompt = escapeJson(request.prompt)
+        val escapedSystem = request.systemPrompt?.let { escapeJson(it) } ?: "You are a clinical decision support assistant."
+
+        val payload = """
+            {
+                "model": "${config.modelName}",
+                "messages": [
+                    {"role": "system", "content": "$escapedSystem"},
+                    {"role": "user", "content": "$escapedPrompt"}
+                ],
+                "temperature": ${request.temperature},
+                "max_tokens": ${request.maxTokens}
+            }
+        """.trimIndent()
+
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+            writer.write(payload)
+            writer.flush()
+        }
+
+        val responseCode = conn.responseCode
+        if (responseCode !in 200..299) {
+            val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+            throw IllegalStateException("Gateway API Error ($responseCode): $errorBody")
+        }
+
+        val contentType = conn.getHeaderField("Content-Type") ?: ""
+        if (contentType.contains("text/event-stream")) {
+            // Streaming SSE
+            BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    currentCoroutineContext().ensureActive()
+                    if (isStopRequested) break
+                    val trimmed = line!!.trim()
+                    if (trimmed.startsWith("data:")) {
+                        val jsonStr = trimmed.removePrefix("data:").trim()
+                        if (jsonStr == "[DONE]") break
+                        if (jsonStr.isNotBlank()) {
+                            try {
+                                val parsed = Json.parseToJsonElement(jsonStr).jsonObject
+                                val delta = parsed["choices"]?.jsonArray?.firstOrNull()?.jsonObject
+                                    ?.get("delta")?.jsonObject
+                                val content = delta?.get("content")?.jsonPrimitive?.content
+                                if (!content.isNullOrEmpty()) {
+                                    onToken(content)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+        } else {
+            // Standard JSON response
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            try {
+                val parsed = Json.parseToJsonElement(responseText).jsonObject
+                val messageContent = parsed["choices"]?.jsonArray?.firstOrNull()?.jsonObject
+                    ?.get("message")?.jsonObject
+                    ?.get("content")?.jsonPrimitive?.content
+
+                if (!messageContent.isNullOrEmpty()) {
+                    onToken(messageContent)
+                } else {
+                    val rawOutput = parsed["output"]?.jsonPrimitive?.content
+                    if (!rawOutput.isNullOrEmpty()) {
+                        onToken(rawOutput)
+                    }
+                }
+            } catch (e: Exception) {
+                onToken(responseText)
+            }
+        }
+    }
+
+    override suspend fun stopGeneration() {
+        isStopRequested = true
+        withContext(Dispatchers.IO) {
+            try {
+                activeConnection?.disconnect()
+            } catch (_: Exception) {}
+            activeConnection = null
+        }
+        currentStatus = currentStatus.copy(state = ModelLifecycleState.LOADED)
+    }
+
+    override suspend fun unloadModel() {
+        stopGeneration()
+        currentStatus = ModelStatus(state = ModelLifecycleState.NOT_LOADED)
+    }
+
+    override fun getModelStatus(): ModelStatus = currentStatus
+
+    private fun escapeJson(input: String): String {
+        return input
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+    }
+}

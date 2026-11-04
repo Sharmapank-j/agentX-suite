@@ -184,6 +184,21 @@ fun ChatScreen(
                             }
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "X",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = state.currentConversation?.title ?: "AgentX Chat",
                                     fontWeight = FontWeight.Bold,

@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Diagonal Primary Beam (Indigo) -->
+    <path
+        android:pathData="M35,32 L46,32 L73,76 L62,76 Z"
+        android:fillColor="#6366F1" />
+    <!-- Diagonal Secondary Beam (Electric Cyan) -->
+    <path
+        android:pathData="M73,32 L62,32 L35,76 L46,76 Z"
+        android:fillColor="#06B6D4" />
+    <!-- Center Core Diamond -->
+    <path
+        android:pathData="M54,48 L60,54 L54,60 L48,54 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- Neural Nodes -->
+    <path
+        android:pathData="M40.5,32 A4,4 0 1,0 40.5,24 A4,4 0 1,0 40.5,32 Z"
+        android:fillColor="#38BDF8" />
+    <path
+        android:pathData="M67.5,32 A4,4 0 1,0 67.5,24 A4,4 0 1,0 67.5,32 Z"
+        android:fillColor="#A78BFA" />
+    <path
+        android:pathData="M67.5,76 A4,4 0 1,0 67.5,84 A4,4 0 1,0 67.5,76 Z"
+        android:fillColor="#38BDF8" />
+    <path
+        android:pathData="M40.5,76 A4,4 0 1,0 40.5,84 A4,4 0 1,0 40.5,76 Z"
+        android:fillColor="#A78BFA" />
+</vector>

@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">AgentX Medical</string>
+    <string name="app_subtitle">Clinical Decision Support &amp; Multi-Agent CDS</string>
+    <string name="nav_chat">Clinical Chat</string>
+    <string name="nav_agents">Specialists</string>
+    <string name="nav_models">Models &amp; Specs</string>
+    <string name="nav_settings">Safety &amp; Settings</string>
+    <string name="medical_disclaimer">⚕️ Clinical Decision Support Notice: AgentX Medical is for educational, clinical research, and decision-support assistance only. Not for diagnostic use. All outputs require independent licensed clinician review.</string>
+</resources>
