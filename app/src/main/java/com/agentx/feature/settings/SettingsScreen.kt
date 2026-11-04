@@ -361,6 +361,37 @@ fun SettingsScreen(
 
                             Spacer(modifier = Modifier.height(6.dp))
 
+                            // Auto-Discovered Wi-Fi Instances (Zero-Configuration mDNS)
+                            if (state.discoveredHubs.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    "✨ Discovered on Local Wi-Fi (Tap to Connect):",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    state.discoveredHubs.forEach { hub ->
+                                        FilterChip(
+                                            selected = customUrlText == hub.url,
+                                            onClick = {
+                                                customUrlText = hub.url
+                                                viewModel.updateCloudConfig(customBaseUrl = hub.url)
+                                                viewModel.testCloudConnection()
+                                            },
+                                            label = { Text("📡 ${hub.name} (${hub.host})") }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
                             // Quick Preset Chips
                             Row(
                                 modifier = Modifier

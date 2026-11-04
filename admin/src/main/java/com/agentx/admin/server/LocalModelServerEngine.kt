@@ -24,7 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Supports both pre-configured curated edge models and user-chosen models stored in phone storage (.gguf).
  */
-class LocalModelServerEngine {
+class LocalModelServerEngine(
+    val thermalManager: ThermalBatteryManager? = null
+) {
 
     private val mutex = Mutex()
     private val isCancelled = AtomicBoolean(false)
@@ -233,7 +235,8 @@ class LocalModelServerEngine {
 
                 emit(token)
                 emitted++
-                delay(12) // Realistic layer-streaming cadence (approx 80 tokens/sec)
+                val throttleDelay = thermalManager?.getThrottleDelayMs() ?: 0L
+                delay(12L + throttleDelay) // Adaptive layer-streaming cadence
             }
         } finally {
             _status = LocalModelStatus.LOADED

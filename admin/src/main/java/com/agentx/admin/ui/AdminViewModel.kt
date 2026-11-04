@@ -67,7 +67,10 @@ data class AdminUiState(
     val activeModel: String = "gemini-2.5-flash",
     val cloudConnectionStatus: String? = null,
     val isTestingCloud: Boolean = false,
-    val notificationMessage: String? = null
+    val notificationMessage: String? = null,
+    val thermalSnapshot: com.agentx.admin.server.ThermalSnapshot = com.agentx.admin.server.ThermalSnapshot(),
+    val isTlsEnabled: Boolean = false,
+    val tlsFingerprint: String = ""
 )
 
 class AdminViewModel(
@@ -78,6 +81,8 @@ class AdminViewModel(
     private val clientManager = app.clientManager
     private val cloudGateway = app.cloudGateway
     private val localEngine = app.localEngine
+    val thermalManager = app.thermalManager
+    val tlsManager = app.tlsManager
 
     private val _selectedPort = MutableStateFlow(8080)
     private val _selectedTab = MutableStateFlow(0)
@@ -178,7 +183,10 @@ class AdminViewModel(
             activeModel = subState.cloudPrefs.model,
             cloudConnectionStatus = subState.cloudPrefs.status,
             isTestingCloud = subState.cloudPrefs.testing,
-            notificationMessage = subState.cloudPrefs.notification
+            notificationMessage = subState.cloudPrefs.notification,
+            thermalSnapshot = thermalManager.snapshot.value,
+            isTlsEnabled = tlsManager.config.value.enabled,
+            tlsFingerprint = tlsManager.config.value.fingerprint
         )
     }.stateIn(
         scope = viewModelScope,
@@ -198,6 +206,15 @@ class AdminViewModel(
         val cloudPrefs: CloudPreferences,
         val localPrefs: LocalEnginePrefs
     )
+
+
+    fun refreshThermal() {
+        thermalManager.refresh()
+    }
+
+    fun toggleTls() {
+        tlsManager.toggleTls()
+    }
 
     fun selectTab(tabIndex: Int) {
         _selectedTab.value = tabIndex

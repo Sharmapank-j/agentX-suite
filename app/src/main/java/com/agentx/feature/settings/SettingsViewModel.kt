@@ -2,6 +2,8 @@ package com.agentx.feature.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agentx.core.discovery.DiscoveredGatewayHub
+import com.agentx.core.discovery.GatewayNsdDiscovery
 import com.agentx.core.agent.execution.ExecutionQueue
 import com.agentx.core.agent.execution.ExecutionState
 import com.agentx.core.inference.CloudModelConfig
@@ -53,14 +55,16 @@ data class SettingsUiState(
     val isTestingConnection: Boolean = false,
     val isFetchingModels: Boolean = false,
     val availableGatewayModels: List<String> = emptyList(),
-    val serverDetails: GatewayServerInfo? = null
+    val serverDetails: GatewayServerInfo? = null,
+    val discoveredHubs: List<DiscoveredGatewayHub> = emptyList()
 )
 
 class SettingsViewModel(
     private val toolRepository: ToolRepository,
     private val executionRepository: ExecutionRepository,
     private val executionQueue: ExecutionQueue? = null,
-    private val hybridInferenceEngine: HybridInferenceEngine? = null
+    private val hybridInferenceEngine: HybridInferenceEngine? = null,
+    private val nsdDiscovery: GatewayNsdDiscovery? = null
 ) : ViewModel() {
 
     private val _darkTheme = MutableStateFlow(true)
@@ -79,16 +83,21 @@ class SettingsViewModel(
         val isTesting: Boolean,
         val isFetching: Boolean,
         val models: List<String>,
-        val serverInfo: GatewayServerInfo?
+        val serverInfo: GatewayServerInfo?,
+        val discoveredHubs: List<DiscoveredGatewayHub>
     )
+
+    val discoveredHubsFlow: StateFlow<List<DiscoveredGatewayHub>> =
+        nsdDiscovery?.discoveredHubs ?: MutableStateFlow(emptyList())
 
     private val gatewayFlow = combine(
         _isTestingConnection,
         _isFetchingModels,
         _availableGatewayModels,
-        _serverDetails
-    ) { testing, fetching, models, info ->
-        CloudGatewayState(testing, fetching, models, info)
+        _serverDetails,
+        discoveredHubsFlow
+    ) { testing, fetching, models, info, hubs ->
+        CloudGatewayState(testing, fetching, models, info, hubs)
     }
 
     private val preferencesFlow = combine(
@@ -132,13 +141,32 @@ class SettingsViewModel(
             isTestingConnection = gw.isTesting,
             isFetchingModels = gw.isFetching,
             availableGatewayModels = gw.models,
-            serverDetails = gw.serverInfo
+            serverDetails = gw.serverInfo,
+            discoveredHubs = gw.discoveredHubs
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = SettingsUiState()
     )
+
+
+    init {
+        nsdDiscovery?.startDiscovery()
+    }
+
+    fun startLanDiscovery() {
+        nsdDiscovery?.startDiscovery()
+    }
+
+    fun stopLanDiscovery() {
+        nsdDiscovery?.stopDiscovery()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        nsdDiscovery?.stopDiscovery()
+    }
 
     fun setInferenceMode(mode: InferenceMode) {
         val updated = _cloudConfig.value.copy(inferenceMode = mode)

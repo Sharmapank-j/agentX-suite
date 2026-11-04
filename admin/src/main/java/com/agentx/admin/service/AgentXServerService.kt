@@ -59,6 +59,7 @@ class AgentXServerService : Service() {
                     if (started) {
                         val status = app.server.telemetry.value
                         updateNotification("Running on http://${status.ipAddress}:${status.port}")
+                        app.nsdHelper.registerService(status.port)
                     } else {
                         updateNotification("Failed to bind port $port")
                     }
@@ -66,6 +67,7 @@ class AgentXServerService : Service() {
             }
             ACTION_STOP -> {
                 serviceScope.launch {
+                    app.nsdHelper.unregisterService()
                     app.server.stop()
                     releaseLocks()
                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -148,6 +150,9 @@ class AgentXServerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        try {
+            (application as? AgentXAdminApplication)?.nsdHelper?.unregisterService()
+        } catch (_: Exception) {}
         releaseLocks()
         super.onDestroy()
     }

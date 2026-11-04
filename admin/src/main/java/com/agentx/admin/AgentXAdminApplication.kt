@@ -2,8 +2,12 @@ package com.agentx.admin
 
 import android.app.Application
 import com.agentx.admin.server.AgentXAdminServer
+import com.agentx.admin.server.AgentXNsdHelper
 import com.agentx.admin.server.ClientManager
 import com.agentx.admin.server.CloudGeminiGateway
+import com.agentx.admin.server.LocalModelServerEngine
+import com.agentx.admin.server.LocalTlsManager
+import com.agentx.admin.server.ThermalBatteryManager
 
 class AgentXAdminApplication : Application() {
 
@@ -13,7 +17,16 @@ class AgentXAdminApplication : Application() {
     lateinit var cloudGateway: CloudGeminiGateway
         private set
 
-    lateinit var localEngine: com.agentx.admin.server.LocalModelServerEngine
+    lateinit var localEngine: LocalModelServerEngine
+        private set
+
+    lateinit var thermalManager: ThermalBatteryManager
+        private set
+
+    lateinit var tlsManager: LocalTlsManager
+        private set
+
+    lateinit var nsdHelper: AgentXNsdHelper
         private set
 
     lateinit var server: AgentXAdminServer
@@ -21,9 +34,12 @@ class AgentXAdminApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        thermalManager = ThermalBatteryManager(this)
+        tlsManager = LocalTlsManager(this)
+        nsdHelper = AgentXNsdHelper(this)
         clientManager = ClientManager()
         cloudGateway = CloudGeminiGateway()
-        localEngine = com.agentx.admin.server.LocalModelServerEngine()
-        server = AgentXAdminServer(clientManager, cloudGateway, localEngine)
+        localEngine = LocalModelServerEngine(thermalManager)
+        server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager)
     }
 }

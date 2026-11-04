@@ -205,11 +205,11 @@ abstract class AgentXMedicalDatabase : RoomDatabase() {
             }
 
             private suspend fun populateDefaultTeams(teamDao: TeamDao) {
-                // Team 0: AgentX General Collective (General Assistant, Coder, Researcher, Analyst, Reviewer, Synthesizer)
+                // Team 0: Clinical Multidisciplinary Team (General Assistant, Coder, Researcher, Analyst, Reviewer, Synthesizer)
                 val generalTeam = AgentTeamEntity(
-                    id = "team_agentx_core",
-                    name = "AgentX General Collective",
-                    description = "All-purpose personal AI assistant team for everyday chat, coding, research, data analysis, and synthesis.",
+                    id = "team_clinical_core",
+                    name = "Clinical Multidisciplinary Team",
+                    description = "Comprehensive hospital and clinical care team integrating clinical guidance, pharmacological safety, biomedical calculations, and diagnostic review.",
                     supervisorAgentId = "agent_supervisor"
                 )
                 teamDao.insertTeam(generalTeam)

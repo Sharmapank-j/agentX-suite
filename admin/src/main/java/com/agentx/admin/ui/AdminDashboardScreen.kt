@@ -248,6 +248,64 @@ fun AdminDashboardScreen(
                                 Text("Copy Endpoint", fontSize = 11.sp)
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Web Chat Client Access Button
+                        OutlinedButton(
+                            onClick = { clipboard.setText(AnnotatedString(serverUrl)) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🌐 Open Web Chat Client ($serverUrl/) on any Laptop/TV", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Adaptive Thermal & Hardware Status HUD
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.15f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    "🌡️ ${state.thermalSnapshot.temperatureCelsius}°C • ${state.thermalSnapshot.status.label}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(state.thermalSnapshot.status.badgeColorHex),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    "🔋 ${state.thermalSnapshot.batteryPct}% ${if (state.thermalSnapshot.isCharging) "⚡" else ""}",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF10B981).copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    "📡 mDNS Ready",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF10B981),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

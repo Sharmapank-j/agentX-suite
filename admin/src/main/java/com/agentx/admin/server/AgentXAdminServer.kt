@@ -31,6 +31,8 @@ class AgentXAdminServer(
     val clientManager: ClientManager,
     val cloudGateway: CloudGeminiGateway,
     val localEngine: LocalModelServerEngine,
+    val thermalManager: ThermalBatteryManager? = null,
+    val tlsManager: LocalTlsManager? = null,
     private val serverScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
     private var serverSocket: ServerSocket? = null
@@ -208,14 +210,30 @@ class AgentXAdminServer(
                 return@withContext
             }
 
+            // Route: GET / or /index.html (Embedded Standalone Web Client)
+            if (method == "GET" && (path == "/" || path == "/index.html" || path == "/chat")) {
+                sendHtml(writer, 200, "OK", EmbeddedWebChatClient.HTML)
+                clientManager.logTraffic(clientIp, method, path, 200, System.currentTimeMillis() - startTime, 0)
+                return@withContext
+            }
+
             // Public Health Check
             if (path == "/health" || path == "/api/v1/health") {
                 val uptimeSec = _telemetry.value.startedAtMs?.let { (System.currentTimeMillis() - it) / 1000 } ?: 0L
+                val thermal = thermalManager?.refresh()
+                val tempC = thermal?.temperatureCelsius ?: 34.0f
+                val thermalStatus = thermal?.status?.name ?: "OPTIMAL"
+                val throttleDelay = thermal?.status?.extraDelayMs ?: 0L
+                val isCharging = thermal?.isCharging ?: false
+                val batteryPct = thermal?.batteryPct ?: 100
+                val tlsConfig = tlsManager?.config?.value
+                val isTls = tlsConfig?.enabled ?: false
+
                 val json = """
                     {
                       "status": "online",
                       "server": "AgentX Serve Edge Gateway Hub",
-                      "version": "1.0.0",
+                      "version": "1.1.0",
                       "uptimeSeconds": $uptimeSec,
                       "servingMode": "${servingMode.name}",
                       "activeLocalModel": "${localEngine.activeModel.name}",
@@ -225,7 +243,18 @@ class AgentXAdminServer(
                       "isCloudConnected": ${cloudGateway.isConfigured},
                       "requestsServed": ${_telemetry.value.requestsServed},
                       "tokensEmitted": ${_telemetry.value.tokensEmitted},
-                      "connectedClients": ${clientManager.clients.value.size}
+                      "connectedClients": ${clientManager.clients.value.size},
+                      "tls": {
+                        "enabled": $isTls,
+                        "fingerprint": "${tlsConfig?.fingerprint ?: "none"}"
+                      },
+                      "thermal": {
+                        "temperatureC": $tempC,
+                        "status": "$thermalStatus",
+                        "throttleDelayMs": $throttleDelay,
+                        "isCharging": $isCharging,
+                        "batteryPct": $batteryPct
+                      }
                     }
                 """.trimIndent()
                 sendJson(writer, 200, "OK", json)
@@ -630,6 +659,18 @@ class AgentXAdminServer(
         writer.print("Connection: close\r\n")
         writer.print("\r\n")
         writer.print(json)
+        writer.flush()
+    }
+
+    private fun sendHtml(writer: PrintWriter, status: Int, statusText: String, html: String) {
+        val bytes = html.toByteArray(Charsets.UTF_8)
+        writer.print("HTTP/1.1 $status $statusText\r\n")
+        writer.print("Content-Type: text/html; charset=utf-8\r\n")
+        writer.print("Content-Length: ${bytes.size}\r\n")
+        writer.print("Access-Control-Allow-Origin: *\r\n")
+        writer.print("Connection: close\r\n")
+        writer.print("\r\n")
+        writer.print(html)
         writer.flush()
     }
 
