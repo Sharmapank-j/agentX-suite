@@ -1,11 +1,12 @@
 # 🚀 AgentX Suite
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.0.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
-  <img src="https://img.shields.io/badge/Tests-97%2F97%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
+  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.1.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
+  <img src="https://img.shields.io/badge/AirLLM-Layer--Streaming-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
+  <img src="https://img.shields.io/badge/Tests-107%2F107%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
   <img src="https://img.shields.io/badge/Kotlin-2.0-purple?style=for-the-badge&logo=kotlin" alt="Kotlin"/>
   <img src="https://img.shields.io/badge/Android%20SDK-35%20(Android%2015)-3DDC84?style=for-the-badge&logo=android" alt="Android"/>
-  <img src="https://img.shields.io/badge/Native-C%2B%2B17%20%7C%20llama.cpp-00599C?style=for-the-badge&logo=c%2B%2B" alt="C++"/>
+  <img src="https://img.shields.io/badge/Native-C%2B%2B17%20%7C%20AirLLM%20%2B%20llama.cpp-00599C?style=for-the-badge&logo=c%2B%2B" alt="C++"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-orange?style=for-the-badge" alt="License"/>
 </p>
 
