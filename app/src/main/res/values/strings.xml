@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">AgentX</string>
+    <string name="app_subtitle">Personal Multi-Agent AI Assistant</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_agents">Specialists</string>
+    <string name="nav_models">Models &amp; Specs</string>
+    <string name="nav_settings">Settings</string>
+    <string name="general_disclaimer">AgentX runs locally on-device and connects to cloud models. All reasoning is augmented by multi-agent collaboration.</string>
+</resources>

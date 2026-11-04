@@ -1,0 +1,36 @@
+AgentX Suite
+Copyright 2026 Pankaj Sharma and contributors.
+
+This product includes software developed by Pankaj Sharma and the AgentX Suite Open Source Project.
+
+========================================================================
+Third-Party Software and Component Attributions
+========================================================================
+
+1. llama.cpp / ggml
+   Copyright (c) 2023-2026 Georgi Gerganov and contributors.
+   Licensed under the MIT License.
+   Source: https://github.com/ggerganov/llama.cpp
+
+2. Android Jetpack & Jetpack Compose
+   Copyright (c) The Android Open Source Project.
+   Licensed under the Apache License, Version 2.0.
+   Source: https://source.android.com
+
+3. Kotlin Coroutines & KotlinX Serialization
+   Copyright (c) 2010-2026 JetBrains s.r.o. and Kotlin Programming Language contributors.
+   Licensed under the Apache License, Version 2.0.
+   Source: https://github.com/Kotlin/kotlinx.coroutines
+
+4. Room Persistence Library
+   Copyright (c) The Android Open Source Project.
+   Licensed under the Apache License, Version 2.0.
+
+5. CKD-EPI 2021 Creatinine Equation
+   Based on the validated 2021 CKD-EPI Creatinine equation published by
+   the National Kidney Foundation (NKF) and the American Society of Nephrology (ASN)
+   Task Force (Inker LA, et al. N Engl J Med 2021; 385:1737-1749).
+
+6. CHA2DS2-VASc Stroke Risk Stratification Model
+   Based on the clinical score published by Lip GY, et al.
+   (Chest 2010; 137(2):263-272) and incorporated into AHA/ACC/HRS guidelines.
