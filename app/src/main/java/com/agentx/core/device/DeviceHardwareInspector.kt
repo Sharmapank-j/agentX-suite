@@ -60,7 +60,15 @@ object DeviceHardwareInspector {
         val os = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
         val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
 
-        val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val batteryIntent = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            }
+        } catch (_: Throwable) {
+            null
+        }
         val batteryLevel = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val batteryScale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         val batteryPct = if (batteryLevel >= 0 && batteryScale > 0) {

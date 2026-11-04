@@ -17,6 +17,8 @@ class CloudGeminiGateway {
     var geminiApiKey: String = ""
     var activeModelName: String = "gemini-2.5-flash"
 
+    val isConfigured: Boolean get() = geminiApiKey.isNotBlank()
+
     suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
         if (geminiApiKey.isBlank()) return@withContext false
         try {

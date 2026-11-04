@@ -38,7 +38,21 @@ class AgentXServerService : Service() {
             ACTION_START -> {
                 val port = intent?.getIntExtra(EXTRA_PORT, 8080) ?: 8080
                 acquireLocks()
-                startForeground(NOTIFICATION_ID, buildNotification("Starting server on port $port..."))
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            buildNotification("Starting server on port $port..."),
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_ID, buildNotification("Starting server on port $port..."))
+                    }
+                } catch (_: Throwable) {
+                    try {
+                        startForeground(NOTIFICATION_ID, buildNotification("Starting server on port $port..."))
+                    } catch (_: Throwable) {}
+                }
 
                 serviceScope.launch {
                     val started = app.server.start(port)

@@ -5,8 +5,8 @@
 **Target SDK:** 35 (Android 15) | Min SDK: 26 (Android 8.0)  
 
 ## Included Assets
-- **`app-debug.apk`** (~18.3 MB): Standalone production debug APK for AgentX.
-  - [Download `app-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/app-debug.apk)
+- **`AgentX-v1.0.0-debug.apk`** (~18.4 MB): Standalone production debug APK for AgentX.
+  - [Download `AgentX-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-v1.0.0-debug.apk)
   - Pure Kotlin Zero-Crash Engine & AirLLM progressive layer-streaming.
   - Multi-agent collective (Supervisor, Planner, Coder, Analyst, Researcher, Reviewer, Synthesizer).
   - General utility tools (Math evaluator, device telemetry inspector, datetime, text analyzer).

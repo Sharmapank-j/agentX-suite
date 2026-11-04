@@ -85,6 +85,17 @@ abstract class AgentXDatabase : RoomDatabase() {
                 }
             }
 
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                super.onOpen(db)
+                CoroutineScope(Dispatchers.IO).launch {
+                    INSTANCE?.let { database ->
+                        populateDefaultAgents(database.agentDao())
+                        populateDefaultTools(database.toolDao())
+                        populateDefaultTeams(database.teamDao())
+                    }
+                }
+            }
+
             private suspend fun populateDefaultAgents(agentDao: AgentDao) {
                 val defaultAgents = listOf(
                     AgentEntity(

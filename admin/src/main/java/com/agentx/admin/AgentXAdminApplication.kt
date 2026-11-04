@@ -13,6 +13,9 @@ class AgentXAdminApplication : Application() {
     lateinit var cloudGateway: CloudGeminiGateway
         private set
 
+    lateinit var localEngine: com.agentx.admin.server.LocalModelServerEngine
+        private set
+
     lateinit var server: AgentXAdminServer
         private set
 
@@ -20,6 +23,7 @@ class AgentXAdminApplication : Application() {
         super.onCreate()
         clientManager = ClientManager()
         cloudGateway = CloudGeminiGateway()
-        server = AgentXAdminServer(clientManager, cloudGateway)
+        localEngine = com.agentx.admin.server.LocalModelServerEngine()
+        server = AgentXAdminServer(clientManager, cloudGateway, localEngine)
     }
 }

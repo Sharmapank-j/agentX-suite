@@ -7,7 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.agentx.admin.AgentXAdminApplication
 import com.agentx.admin.models.ApiKeyRecord
 import com.agentx.admin.models.ClientSession
+import com.agentx.admin.models.LocalModelStatus
+import com.agentx.admin.models.LocalServerModel
 import com.agentx.admin.models.ServerTelemetry
+import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
 import com.agentx.admin.service.AgentXServerService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,14 @@ data class AdminUiState(
     val trafficLogs: List<TrafficLog> = emptyList(),
     val selectedPort: Int = 8080,
     val selectedTab: Int = 0,
+    val servingMode: ServingMode = ServingMode.LOCAL_MODEL,
+    val curatedLocalModels: List<LocalServerModel> = emptyList(),
+    val activeLocalModel: LocalServerModel? = null,
+    val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
+    val testPrompt: String = "Explain the differential diagnosis of acute chest pain.",
+    val testResponse: String? = null,
+    val isGeneratingTest: Boolean = false,
+    val testLatencyMs: Long = 0L,
     val geminiApiKey: String = "",
     val activeModel: String = "gemini-2.5-flash",
     val cloudConnectionStatus: String? = null,
@@ -38,14 +49,57 @@ class AdminViewModel(
     private val server = app.server
     private val clientManager = app.clientManager
     private val cloudGateway = app.cloudGateway
+    private val localEngine = app.localEngine
 
     private val _selectedPort = MutableStateFlow(8080)
     private val _selectedTab = MutableStateFlow(0)
+    private val _servingMode = MutableStateFlow(server.getServingMode())
+    private val _curatedLocalModels = MutableStateFlow(localEngine.curatedCatalog)
+    private val _activeLocalModel = MutableStateFlow(localEngine.activeModel)
+    private val _localModelStatus = MutableStateFlow(localEngine.status)
+    private val _testPrompt = MutableStateFlow("Explain the differential diagnosis of acute chest pain.")
+    private val _testResponse = MutableStateFlow<String?>(null)
+    private val _isGeneratingTest = MutableStateFlow(false)
+    private val _testLatencyMs = MutableStateFlow(0L)
+
     private val _geminiApiKey = MutableStateFlow(cloudGateway.geminiApiKey)
     private val _activeModel = MutableStateFlow(cloudGateway.activeModelName)
     private val _cloudStatus = MutableStateFlow<String?>(null)
     private val _isTestingCloud = MutableStateFlow(false)
     private val _notification = MutableStateFlow<String?>(null)
+
+    private data class LocalEnginePrefs(
+        val servingMode: ServingMode,
+        val curatedCatalog: List<LocalServerModel>,
+        val activeModel: LocalServerModel,
+        val status: LocalModelStatus,
+        val testPrompt: String,
+        val testResponse: String?,
+        val isGeneratingTest: Boolean,
+        val testLatencyMs: Long
+    )
+
+    private val localEnginePrefsFlow = combine(
+        combine(_servingMode, _curatedLocalModels, _activeLocalModel, _localModelStatus) { mode, catalog, active, status ->
+            Quad(mode, catalog, active, status)
+        },
+        combine(_testPrompt, _testResponse, _isGeneratingTest, _testLatencyMs) { prompt, response, generating, latency ->
+            Quad(prompt, response, generating, latency)
+        }
+    ) { q1, q2 ->
+        LocalEnginePrefs(
+            servingMode = q1.first,
+            curatedCatalog = q1.second,
+            activeModel = q1.third,
+            status = q1.fourth,
+            testPrompt = q2.first,
+            testResponse = q2.second,
+            isGeneratingTest = q2.third,
+            testLatencyMs = q2.fourth
+        )
+    }
+
+    private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     private val serverSettingsFlow = combine(_selectedPort, _selectedTab, _geminiApiKey) { port, tab, key ->
         Triple(port, tab, key)
@@ -66,17 +120,26 @@ class AdminViewModel(
         server.telemetry,
         clientManager.clients,
         clientManager.apiKeys,
-        combine(clientManager.trafficLogs, serverSettingsFlow, cloudSettingsFlow) { logs, (port, tab, key), cloudPrefs ->
-            SubAdminState(logs, port, tab, key, cloudPrefs)
+        clientManager.trafficLogs,
+        combine(serverSettingsFlow, cloudSettingsFlow, localEnginePrefsFlow) { (port, tab, key), cloudPrefs, localPrefs ->
+            SubAdminState(port, tab, key, cloudPrefs, localPrefs)
         }
-    ) { telemetry, clients, apiKeys, subState ->
+    ) { telemetry, clients, apiKeys, logs, subState ->
         AdminUiState(
             telemetry = telemetry,
             clients = clients,
             apiKeys = apiKeys,
-            trafficLogs = subState.logs,
+            trafficLogs = logs,
             selectedPort = subState.port,
             selectedTab = subState.tab,
+            servingMode = subState.localPrefs.servingMode,
+            curatedLocalModels = subState.localPrefs.curatedCatalog,
+            activeLocalModel = subState.localPrefs.activeModel,
+            localModelStatus = subState.localPrefs.status,
+            testPrompt = subState.localPrefs.testPrompt,
+            testResponse = subState.localPrefs.testResponse,
+            isGeneratingTest = subState.localPrefs.isGeneratingTest,
+            testLatencyMs = subState.localPrefs.testLatencyMs,
             geminiApiKey = subState.key,
             activeModel = subState.cloudPrefs.model,
             cloudConnectionStatus = subState.cloudPrefs.status,
@@ -86,15 +149,19 @@ class AdminViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = AdminUiState()
+        initialValue = AdminUiState(
+            curatedLocalModels = localEngine.curatedCatalog,
+            activeLocalModel = localEngine.activeModel,
+            localModelStatus = localEngine.status
+        )
     )
 
     private data class SubAdminState(
-        val logs: List<TrafficLog>,
         val port: Int,
         val tab: Int,
         val key: String,
-        val cloudPrefs: CloudPreferences
+        val cloudPrefs: CloudPreferences,
+        val localPrefs: LocalEnginePrefs
     )
 
     fun selectTab(tabIndex: Int) {
@@ -104,6 +171,73 @@ class AdminViewModel(
     fun setPort(port: Int) {
         if (port in 1024..65535) {
             _selectedPort.value = port
+        }
+    }
+
+    fun setServingMode(mode: ServingMode) {
+        _servingMode.value = mode
+        server.setServingMode(mode)
+        _notification.value = "Serving mode set to: ${mode.label}"
+    }
+
+    fun loadLocalModel(modelId: String) {
+        viewModelScope.launch {
+            _localModelStatus.value = LocalModelStatus.LOADING
+            _notification.value = "Loading model $modelId into AirLLM runtime..."
+            val ok = server.switchLocalModel(modelId)
+            if (ok) {
+                _activeLocalModel.value = localEngine.activeModel
+                _localModelStatus.value = localEngine.status
+                _curatedLocalModels.value = localEngine.curatedCatalog.map {
+                    if (it.id == modelId) it.copy(isLoaded = true, isServing = true)
+                    else it.copy(isLoaded = false, isServing = false)
+                }
+                _notification.value = "Active model switched to ${localEngine.activeModel.name}"
+            } else {
+                _localModelStatus.value = localEngine.status
+                _notification.value = "Failed to load model $modelId"
+            }
+        }
+    }
+
+    fun unloadLocalModel() {
+        viewModelScope.launch {
+            server.unloadLocalModel()
+            _activeLocalModel.value = localEngine.activeModel
+            _localModelStatus.value = localEngine.status
+            _curatedLocalModels.value = localEngine.curatedCatalog.map {
+                it.copy(isLoaded = false, isServing = false)
+            }
+            _notification.value = "Unloaded local model from memory."
+        }
+    }
+
+    fun setTestPrompt(prompt: String) {
+        _testPrompt.value = prompt
+    }
+
+    fun clearTestResponse() {
+        _testResponse.value = null
+        _testLatencyMs.value = 0L
+    }
+
+    fun runLocalModelTest() {
+        viewModelScope.launch {
+            _isGeneratingTest.value = true
+            _testResponse.value = ""
+            val start = System.currentTimeMillis()
+            val prompt = _testPrompt.value.ifBlank { "Explain the differential diagnosis of acute chest pain." }
+
+            try {
+                localEngine.generateCompletionStream(prompt = prompt).collect { token ->
+                    _testResponse.value = (_testResponse.value ?: "") + token
+                }
+                _testLatencyMs.value = System.currentTimeMillis() - start
+            } catch (e: Exception) {
+                _testResponse.value = "Error generating inference: ${e.message}"
+            } finally {
+                _isGeneratingTest.value = false
+            }
         }
     }
 

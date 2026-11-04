@@ -1,6 +1,9 @@
 package com.agentx.admin.server
 
+import com.agentx.admin.models.LocalModelStatus
+import com.agentx.admin.models.LocalServerModel
 import com.agentx.admin.models.ServerTelemetry
+import com.agentx.admin.models.ServingMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,17 +29,60 @@ import java.util.UUID
 class AgentXAdminServer(
     val clientManager: ClientManager,
     val cloudGateway: CloudGeminiGateway,
+    val localEngine: LocalModelServerEngine,
     private val serverScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
 
+    private var servingMode: ServingMode = ServingMode.LOCAL_MODEL
+
     private val _telemetry = MutableStateFlow(
         ServerTelemetry(
-            ipAddress = getLocalIpAddress()
+            ipAddress = getLocalIpAddress(),
+            servingMode = ServingMode.LOCAL_MODEL,
+            activeLocalModel = localEngine.activeModel.name,
+            localModelStatus = localEngine.status,
+            localMemoryUsageMb = localEngine.activeModel.memoryFootprintMb,
+            activeCloudModel = cloudGateway.activeModelName,
+            isCloudConnected = cloudGateway.isConfigured
         )
     )
     val telemetry: StateFlow<ServerTelemetry> = _telemetry.asStateFlow()
+
+    fun getServingMode(): ServingMode = servingMode
+
+    fun setServingMode(mode: ServingMode) {
+        servingMode = mode
+        _telemetry.value = _telemetry.value.copy(
+            servingMode = mode,
+            activeLocalModel = localEngine.activeModel.name,
+            localModelStatus = localEngine.status,
+            localMemoryUsageMb = if (localEngine.status == LocalModelStatus.LOADED) localEngine.activeModel.memoryFootprintMb else 0L,
+            activeCloudModel = cloudGateway.activeModelName,
+            isCloudConnected = cloudGateway.isConfigured
+        )
+    }
+
+    suspend fun switchLocalModel(modelId: String): Boolean {
+        val ok = localEngine.loadModel(modelId)
+        if (ok) {
+            _telemetry.value = _telemetry.value.copy(
+                activeLocalModel = localEngine.activeModel.name,
+                localModelStatus = localEngine.status,
+                localMemoryUsageMb = localEngine.activeModel.memoryFootprintMb
+            )
+        }
+        return ok
+    }
+
+    suspend fun unloadLocalModel() {
+        localEngine.unloadModel()
+        _telemetry.value = _telemetry.value.copy(
+            localModelStatus = localEngine.status,
+            localMemoryUsageMb = 0L
+        )
+    }
 
     suspend fun start(port: Int = 8080): Boolean = withContext(Dispatchers.IO) {
         if (_telemetry.value.isRunning) return@withContext true
@@ -51,6 +97,12 @@ class AgentXAdminServer(
                 port = actualPort,
                 ipAddress = ip,
                 startedAtMs = System.currentTimeMillis(),
+                servingMode = servingMode,
+                activeLocalModel = localEngine.activeModel.name,
+                localModelStatus = localEngine.status,
+                localMemoryUsageMb = if (localEngine.status == LocalModelStatus.LOADED) localEngine.activeModel.memoryFootprintMb else 0L,
+                activeCloudModel = cloudGateway.activeModelName,
+                isCloudConnected = cloudGateway.isConfigured,
                 lastError = null
             )
 
@@ -156,7 +208,12 @@ class AgentXAdminServer(
                       "server": "AgentX Serve Edge Gateway Hub",
                       "version": "1.0.0",
                       "uptimeSeconds": $uptimeSec,
+                      "servingMode": "${servingMode.name}",
+                      "activeLocalModel": "${localEngine.activeModel.name}",
+                      "localModelStatus": "${localEngine.status.name}",
+                      "localMemoryUsageMb": ${if (localEngine.status == LocalModelStatus.LOADED) localEngine.activeModel.memoryFootprintMb else 0},
                       "activeCloudModel": "${cloudGateway.activeModelName}",
+                      "isCloudConnected": ${cloudGateway.isConfigured},
                       "requestsServed": ${_telemetry.value.requestsServed},
                       "tokensEmitted": ${_telemetry.value.tokensEmitted},
                       "connectedClients": ${clientManager.clients.value.size}
@@ -164,6 +221,12 @@ class AgentXAdminServer(
                 """.trimIndent()
                 sendJson(writer, 200, "OK", json)
                 clientManager.logTraffic(clientIp, method, path, 200, System.currentTimeMillis() - startTime, 0)
+                return@withContext
+            }
+
+            // Route: GET /v1/models (OpenAI Specification Compliant)
+            if (method == "GET" && (path == "/v1/models" || path == "/models")) {
+                handleGetModels(clientIp, startTime, writer)
                 return@withContext
             }
 
@@ -216,6 +279,38 @@ class AgentXAdminServer(
         }
     }
 
+    private fun handleGetModels(clientIp: String, startTime: Long, writer: PrintWriter) {
+        val modelsJson = localEngine.curatedCatalog.joinToString(",") { model ->
+            """
+            {
+              "id": "${model.id}",
+              "object": "model",
+              "created": 1700000000,
+              "owned_by": "agentx-serve",
+              "permission": [],
+              "root": "${model.id}",
+              "parent": null
+            }
+            """.trimIndent()
+        }
+        val cloudModelJson = if (cloudGateway.isConfigured) {
+            """,{"id": "${cloudGateway.activeModelName}", "object": "model", "created": 1700000000, "owned_by": "google", "permission": [], "root": "${cloudGateway.activeModelName}", "parent": null}"""
+        } else ""
+
+        val responseJson = """
+            {
+              "object": "list",
+              "data": [
+                $modelsJson
+                $cloudModelJson
+              ]
+            }
+        """.trimIndent()
+
+        sendJson(writer, 200, "OK", responseJson)
+        clientManager.logTraffic(clientIp, "GET", "/v1/models", 200, System.currentTimeMillis() - startTime, 0)
+    }
+
     private suspend fun handleChatCompletions(
         body: String,
         clientIp: String,
@@ -232,21 +327,59 @@ class AgentXAdminServer(
         val messages = json["messages"]?.jsonArray
         val userPrompt = messages?.reversed()?.firstOrNull {
             it.jsonObject["role"]?.jsonPrimitive?.content == "user"
-        }?.jsonObject?.get("content")?.jsonPrimitive?.content ?: "Clinical inquiry"
+        }?.jsonObject?.get("content")?.jsonPrimitive?.content ?: "Inquiry"
 
         val systemPrompt = messages?.firstOrNull {
             it.jsonObject["role"]?.jsonPrimitive?.content == "system"
-        }?.jsonObject?.get("content")?.jsonPrimitive?.content ?: "You are an expert clinical AI assistant."
+        }?.jsonObject?.get("content")?.jsonPrimitive?.content ?: "You are an expert AI assistant."
 
         val temperature = json["temperature"]?.jsonPrimitive?.content?.toFloatOrNull() ?: 0.7f
         val maxTokens = json["max_tokens"]?.jsonPrimitive?.content?.toIntOrNull() ?: 1024
 
-        val completionText = cloudGateway.generateChatCompletion(
-            prompt = userPrompt,
-            systemPrompt = systemPrompt,
-            temperature = temperature,
-            maxTokens = maxTokens
-        )
+        val completionText = when (servingMode) {
+            ServingMode.LOCAL_MODEL -> {
+                localEngine.generateCompletionSync(
+                    prompt = userPrompt,
+                    systemPrompt = systemPrompt,
+                    temperature = temperature,
+                    maxTokens = maxTokens
+                )
+            }
+            ServingMode.CLOUD_GATEWAY -> {
+                cloudGateway.generateChatCompletion(
+                    prompt = userPrompt,
+                    systemPrompt = systemPrompt,
+                    temperature = temperature,
+                    maxTokens = maxTokens
+                )
+            }
+            ServingMode.HYBRID -> {
+                if (cloudGateway.isConfigured) {
+                    try {
+                        cloudGateway.generateChatCompletion(
+                            prompt = userPrompt,
+                            systemPrompt = systemPrompt,
+                            temperature = temperature,
+                            maxTokens = maxTokens
+                        )
+                    } catch (_: Exception) {
+                        localEngine.generateCompletionSync(
+                            prompt = userPrompt,
+                            systemPrompt = systemPrompt,
+                            temperature = temperature,
+                            maxTokens = maxTokens
+                        )
+                    }
+                } else {
+                    localEngine.generateCompletionSync(
+                        prompt = userPrompt,
+                        systemPrompt = systemPrompt,
+                        temperature = temperature,
+                        maxTokens = maxTokens
+                    )
+                }
+            }
+        }
 
         val tokenCount = (completionText.length / 4).coerceAtLeast(1)
 
@@ -267,12 +400,14 @@ class AgentXAdminServer(
             .replace("\n", "\\n")
             .replace("\r", "\\r")
 
+        val modelName = if (servingMode == ServingMode.LOCAL_MODEL) localEngine.activeModel.id else cloudGateway.activeModelName
+
         val responseJson = """
             {
               "id": "$id",
               "object": "chat.completion",
               "created": $created,
-              "model": "${cloudGateway.activeModelName}",
+              "model": "$modelName",
               "choices": [
                 {
                   "index": 0,
@@ -313,12 +448,50 @@ class AgentXAdminServer(
             Provide an evidence-based clinical differential, recommended diagnostic workup, and pharmacotherapeutic plan.
         """.trimIndent()
 
-        val output = cloudGateway.generateChatCompletion(
-            prompt = query,
-            systemPrompt = systemPrompt,
-            temperature = 0.5f,
-            maxTokens = 1536
-        )
+        val output = when (servingMode) {
+            ServingMode.LOCAL_MODEL -> {
+                localEngine.generateCompletionSync(
+                    prompt = query,
+                    systemPrompt = systemPrompt,
+                    temperature = 0.5f,
+                    maxTokens = 1536
+                )
+            }
+            ServingMode.CLOUD_GATEWAY -> {
+                cloudGateway.generateChatCompletion(
+                    prompt = query,
+                    systemPrompt = systemPrompt,
+                    temperature = 0.5f,
+                    maxTokens = 1536
+                )
+            }
+            ServingMode.HYBRID -> {
+                if (cloudGateway.isConfigured) {
+                    try {
+                        cloudGateway.generateChatCompletion(
+                            prompt = query,
+                            systemPrompt = systemPrompt,
+                            temperature = 0.5f,
+                            maxTokens = 1536
+                        )
+                    } catch (_: Exception) {
+                        localEngine.generateCompletionSync(
+                            prompt = query,
+                            systemPrompt = systemPrompt,
+                            temperature = 0.5f,
+                            maxTokens = 1536
+                        )
+                    }
+                } else {
+                    localEngine.generateCompletionSync(
+                        prompt = query,
+                        systemPrompt = systemPrompt,
+                        temperature = 0.5f,
+                        maxTokens = 1536
+                    )
+                }
+            }
+        }
 
         val tokens = output.length / 4
         _telemetry.value = _telemetry.value.copy(
@@ -334,10 +507,12 @@ class AgentXAdminServer(
             .replace("\n", "\\n")
             .replace("\r", "\\r")
 
+        val modelName = if (servingMode == ServingMode.LOCAL_MODEL) localEngine.activeModel.name else cloudGateway.activeModelName
+
         val responseJson = """
             {
               "status": "COMPLETED",
-              "model": "${cloudGateway.activeModelName}",
+              "model": "$modelName",
               "output": "$escaped",
               "tokenUsage": $tokens,
               "latencyMs": ${System.currentTimeMillis() - startTime}
@@ -353,7 +528,6 @@ class AgentXAdminServer(
         startTime: Long,
         writer: PrintWriter
     ) {
-        // Simple built-in calculator calculation
         val output = "Clinical calculation executed successfully on Admin Edge Server"
         _telemetry.value = _telemetry.value.copy(requestsServed = _telemetry.value.requestsServed + 1)
         clientManager.recordClientActivity(clientIp, 10)

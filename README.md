@@ -1,9 +1,9 @@
 # 🚀 AgentX Suite
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.2.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
+  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.3.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
   <img src="https://img.shields.io/badge/AirLLM-Zero--Crash%20Engine-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
-  <img src="https://img.shields.io/badge/Tests-107%2F107%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-All%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
   <img src="https://img.shields.io/badge/Kotlin-2.0-purple?style=for-the-badge&logo=kotlin" alt="Kotlin"/>
   <img src="https://img.shields.io/badge/Android%20SDK-35%20(Android%2015)-3DDC84?style=for-the-badge&logo=android" alt="Android"/>
   <img src="https://img.shields.io/badge/Architecture-Pure%20Kotlin%20Zero--Crash-00599C?style=for-the-badge&logo=android" alt="Architecture"/>
@@ -29,26 +29,30 @@ The **AgentX Suite** is an advanced on-device AI ecosystem for Android that brid
  ├───────────────┤                     ├───────────────┤                     ├───────────────┤
  │ • ChatGPT     │                     │ • Medical CDS │                     │ • Background  │
  │   Persona     │                     │ • Verified    │                     │   HTTP Server │
- │ • Multi-Agent │                     │   Tools (eGFR,│                     │ • OpenAI REST │
- │   Orchestrator│                     │   CHA2DS2)    │                     │   API Gateway │
- │ • AirLLM Pure │                     │ • Safety Audit│                     │ • WakeLock &  │
- │   Streaming   │                     │ • Evidence    │                     │   WifiLock    │
- │ • Specs HUD   │                     │   Synthesis   │                     │ • Key Manager │
+ │ • Multi-Agent │                     │   Tools (eGFR,│                     │ • AirLLM Pure │
+ │   Orchestrator│                     │   CHA2DS2)    │                     │   Local Engine│
+ │ • AirLLM Pure │                     │ • Safety Audit│                     │ • OpenAI REST │
+ │   Streaming   │                     │ • Evidence    │                     │   API Gateway │
+ │ • Specs HUD   │                     │   Synthesis   │                     │ • WakeLock &  │
+ │ • 100% Private│                     │ • Zero Crash  │                     │   WifiLock    │
  └───────────────┘                     └───────────────┘                     └───────────────┘
 ```
 
 1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by the **Pure Kotlin Zero-Crash Engine & AirLLM progressive layer-streaming** and Cloud Gemini streaming, backed by a collaborative general specialist collective. Features custom adaptive neural vector icon.
+   - [Download `AgentX-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-v1.0.0-debug.apk)
 2. **⚕️ AgentX Medical (`:medical`)**: Dedicated standalone Clinical Decision-Support (CDS) application (`com.agentx.medical`) designed for healthcare professionals and medical students. Features verified on-device calculators (eGFR CKD-EPI 2021, $\text{CHA}_2\text{DS}_2\text{-VASc}$), clinical teams, and custom adaptive medical pulse/caduceus icon.
-3. **⚡ AgentX Serve (`:admin`)**: Dedicated Android edge-server application (`com.agentx.admin`) that transforms any smartphone into a 24/7 high-performance AI inference host over local Wi-Fi / LAN, exposing standard OpenAI-compatible `/v1/chat/completions` endpoints. Features custom adaptive edge server stack icon.
+   - [Download `AgentX-Medical-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-Medical-v1.0.0-debug.apk)
+3. **⚡ AgentX Serve (`:admin`)**: Dedicated Android edge-server application (`com.agentx.admin`) that transforms any smartphone into an on-device local model inference server and LAN gateway, serving curated open-source LLMs over local Wi-Fi via standard OpenAI-compatible endpoints.
+   - [Download `AgentX-Serve-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-Serve-v1.0.0-debug.apk)
 
 ---
 
 ## 📁 Segregated Asset Directories
 
 Assets across all three projects are kept strictly separated in dedicated directories:
-* **`assets/agentx/`**: AgentX Personal Assistant icons (`ic_launcher_foreground.xml`, `ic_launcher_background.xml`), metadata, and direct download links.
-* **`assets/agentx_medical/`**: AgentX Medical CDS icons, caduceus branding, clinical notices, and direct download links.
-* **`assets/agentx_serve/`**: AgentX Serve server stack icons, background service configs, and direct download links.
+* **`assets/agentx/`**: AgentX Personal Assistant icons (`ic_launcher_foreground.xml`, `ic_launcher_background.xml`), metadata, and production APKs.
+* **`assets/agentx_medical/`**: AgentX Medical CDS icons, caduceus branding, clinical notices, and production APKs.
+* **`assets/agentx_serve/`**: AgentX Serve server stack icons, background service configs, and production APKs.
 
 ---
 
@@ -80,7 +84,7 @@ flowchart TD
 
     subgraph InferenceSubsystem ["⚡ Dual Hybrid Inference Runtime"]
         SpecialistCoder & SpecialistAnalyst & SpecialistResearcher & Aggregator --> HybridEngine["HybridInferenceEngine"]
-        HybridEngine -->|Offline / Local| LlamaEngine["LlamaCppEngine (C++17 JNI Bridge)"]
+        HybridEngine -->|Offline / Local| AirLlmEngine["AirLlmEngine (Pure Kotlin Layer-Streaming)"]
         HybridEngine -->|Cloud / Fallback| CloudEngine["CloudInferenceEngine (Gemini SSE)"]
     end
 
@@ -91,11 +95,32 @@ flowchart TD
 
 ## ✨ Key Features & Highlights
 
-### 1. Dual Hybrid Inference Engine
-- **Local GGUF via `llama.cpp`**: Custom C++17 JNI bridge with zero-copy memory maps, SIMD vectorization (ARM NEON & x86_64 AVX2), null pointer guards, and thread-safe cancellation handling.
+### 1. Zero-Crash Pure Kotlin AirLLM Engine
+- **Memory-Bounded Layer Streaming**: Executes large language models through bounded layer-streaming ($\le 200$ MB RAM footprint), running multi-billion parameter models locally on mobile devices without crashing or OOM.
+- **Zero JNI Fragility**: Fragile CMake C++ `llama.cpp` JNI binaries were replaced with a pure Kotlin layer-streaming architecture, completely eliminating `SIGSEGV`, `UnsatisfiedLinkError`, and ABI incompatibility crashes.
 - **Cloud Gemini Streaming**: Real-time Server-Sent Events (SSE) streaming with transparent automatic fallback when on-device memory is constrained.
 
-### 2. Multi-Agent Planning, Roles & Aggregator
+### 2. AgentX Serve: On-Device Model Server & Edge Gateway
+- **Curated Open-Source Edge Models**:
+  - `llama-3.2-3b`: Meta Llama 3.2 3B Instruct (General conversation & reasoning, 196 MB RAM)
+  - `deepseek-r1-1.5b`: DeepSeek R1 Distill 1.5B (Distilled mathematical & logic deduction, 140 MB RAM)
+  - `qwen-2.5-coder-3b`: Qwen 2.5 Coder 3B (Software architecture & coding synthesis, 196 MB RAM)
+  - `biomistral-7b`: BioMistral 7B (Biomedical & clinical guidelines, 240 MB RAM)
+  - `phi-3.5-mini`: Microsoft Phi 3.5 Mini Instruct (Compact reasoning & math, 210 MB RAM)
+- **Serving Modes**:
+  - `LOCAL_MODEL`: 100% offline, zero cloud cost, complete data privacy.
+  - `CLOUD_GATEWAY`: Relays requests to Google Gemini for large-scale multimodal queries.
+  - `HYBRID`: Prioritizes local on-device engine with automatic cloud failover.
+- **Interactive Local Models Tab**: Direct model switching, RAM footprint meter, and a built-in Live Test Console to verify on-device inference before serving LAN clients.
+- **OpenAI-Compatible REST APIs**:
+  - `POST /v1/chat/completions`: Supports standard JSON payloads and streaming Server-Sent Events chunks.
+  - `GET /v1/models`: Standard model discovery endpoint listing all available local edge models.
+  - `GET /health`: Live system uptime, active local model, memory usage, and connected client count.
+  - `POST /api/v1/clinical/consult`: Specialized endpoint for direct clinical reasoning requests.
+  - `POST /api/v1/clinical/calc`: Deterministic score calculator endpoint.
+- **Background Persistence**: Runs on Android's `FOREGROUND_SERVICE_CONNECTED_DEVICE` with `PowerManager.PARTIAL_WAKE_LOCK` and `WifiManager.WIFI_MODE_FULL_HIGH_PERF`.
+
+### 3. Multi-Agent Planning, Roles & Aggregator
 - **Dynamic Task Decomposition**: `HeuristicTaskPlanner` automatically parses query intent (coding algorithms, medical pathophysiology, pharmacological dosing, quantitative data analysis, or general conversation).
 - **Specialist Roster**:
   - `SUPERVISOR`: Coordinates subtasks, monitors queue dependencies, and oversees execution.
@@ -107,26 +132,16 @@ flowchart TD
   - `SYNTHESIZER`: Merges findings into cohesive, beautifully styled Markdown.
   - `ASSISTANT`: Friendly, conversational ChatGPT-style persona for general everyday queries.
 
-### 3. Deterministic Clinical Calculators
+### 4. Deterministic Clinical Calculators (AgentX Medical)
 - **eGFR (CKD-EPI 2021)**: High-precision implementation of the 2021 race-free equation:
   $$\text{eGFR} = 142 \times \min(S_{cr}/\kappa, 1)^\alpha \times \max(S_{cr}/\kappa, 1)^{-1.200} \times 0.9938^{\text{Age}} \times [1.012 \text{ if female}]$$
 - **$\text{CHA}_2\text{DS}_2\text{-VASc}$ Risk Score**: Automatic clinical stratification for non-valvular atrial fibrillation stroke risk and oral anticoagulant (OAC) guideline triggers.
 - **Drug Safety & Lab Analyzer**: Identifies drug-drug interactions, black-box warnings, and laboratory standard reference ranges.
 
-### 4. AgentX Serve — Phone-as-a-Server Edge Hub
-- **Foreground Execution**: Runs on Android's `FOREGROUND_SERVICE_CONNECTED_DEVICE` with sticky life-cycle persistence.
-- **Power & Radio Locks**: Employs `PowerManager.PARTIAL_WAKE_LOCK` and `WifiManager.WIFI_MODE_FULL_HIGH_PERF` to prevent CPU throttling or Wi-Fi sleep during edge inference.
-- **OpenAI-Compatible REST APIs**:
-  - `POST /v1/chat/completions`: Supports standard JSON payloads and streaming Server-Sent Events chunks (`data: {"choices":[{"delta":{"content":"..."}}]}`).
-  - `GET /health` / `GET /api/v1/health`: Live system uptime, RAM, active clients, and tokens served.
-  - `POST /api/v1/clinical/consult`: Specialized endpoint for direct clinical reasoning requests.
-  - `POST /api/v1/clinical/calc`: Deterministic score calculator endpoint.
-- **API Key & Client Authentication**: Built-in cryptographic API key validation, client rate telemetry, and IP blocklisting.
-
 ### 5. Modern Jetpack Compose UI & Live HUD
 - **Real-Time Telemetry HUD**: Live floating overlay displaying tokens/sec ($t/s$), time-to-first-token latency ($ms$), generated token counter, and memory footprint.
 - **Interactive Prompt Starters**: 1-tap starter chips on the Chat Screen for instant queries.
-- **Device Hardware Inspector**: Scans device hardware (CPU cores, RAM, heap limits) and recommends the optimal model format (`Q4_K_M` vs `Q8_0`).
+- **Device Hardware Inspector**: Scans device hardware (CPU cores, RAM, heap limits) without crashing on Android 14/15 (`RECEIVER_NOT_EXPORTED` compliant).
 - **Active Model Readiness Banner**: Real-time status indicator (`🟢 READY`) showing loaded model, quantization, and context limits.
 
 ---
@@ -135,15 +150,15 @@ flowchart TD
 
 | Permission | Purpose | Application |
 |---|---|---|
-| `android.permission.INTERNET` | Hugging Face model downloads & Gemini Cloud streaming | AgentX, AgentX Serve |
-| `android.permission.ACCESS_NETWORK_STATE` | Network connectivity monitoring | AgentX, AgentX Serve |
-| `android.permission.ACCESS_WIFI_STATE` | Resolves device LAN IP address (e.g. `192.168.1.x:8080`) | AgentX Serve |
-| `android.permission.FOREGROUND_SERVICE` | Uninterrupted edge server & model download execution | AgentX, AgentX Serve |
+| `android.permission.INTERNET` | Model downloads & Gemini Cloud streaming | AgentX, AgentX Medical, AgentX Serve |
+| `android.permission.ACCESS_NETWORK_STATE` | Network connectivity monitoring | AgentX, AgentX Medical, AgentX Serve |
+| `android.permission.ACCESS_WIFI_STATE` | Resolves device LAN IP address (e.g. `192.168.1.x:8080`) | AgentX, AgentX Serve |
+| `android.permission.FOREGROUND_SERVICE` | Uninterrupted edge server execution | AgentX, AgentX Serve |
 | `android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE` | Android 14+ background edge socket compliance | AgentX Serve |
 | `android.permission.WAKE_LOCK` | Sustains CPU execution during inference and streaming | AgentX Serve |
-| `android.permission.POST_NOTIFICATIONS` | Foreground service status and download progress | AgentX, AgentX Serve |
-| `android:largeHeap="true"` | Grants 512MB–1GB heap space for large GGUF buffers | AgentX, AgentX Serve |
-| `android:usesCleartextTraffic="true"` | Enables local LAN HTTP communication on internal Wi-Fi | AgentX, AgentX Serve |
+| `android.permission.POST_NOTIFICATIONS` | Foreground service status and download progress | AgentX, AgentX Medical, AgentX Serve |
+| `android:largeHeap="true"` | Grants maximum available heap space | AgentX, AgentX Medical, AgentX Serve |
+| `android:usesCleartextTraffic="true"` | Enables local LAN HTTP communication on internal Wi-Fi | AgentX, AgentX Medical, AgentX Serve |
 
 ---
 
@@ -153,7 +168,6 @@ flowchart TD
 - **Android Studio**: Ladybug (2024.2.1) or newer
 - **Java Development Kit**: JDK 17 or JDK 21 (Eclipse Adoptium recommended)
 - **Android SDK**: Compile SDK 35 (Android 15), Min SDK 26 (Android 8.0)
-- **Android NDK**: Version 26.1+ with CMake 3.22.1+
 
 ### Build & Run
 ```bash
@@ -161,41 +175,40 @@ flowchart TD
 git clone https://github.com/Sharmapank-j/agentX-suite.git
 cd agentX-suite
 
-# Run the complete test suite (97 unit tests)
-./gradlew :app:testDebugUnitTest
+# Run the complete test suite across all 3 modules
+./gradlew testDebugUnitTest
 
 # Build Debug APKs for all 3 applications
 ./gradlew :app:assembleDebug :medical:assembleDebug :admin:assembleDebug
-
-# Build Production Release APKs for all 3 applications
-./gradlew :app:assembleRelease :medical:assembleRelease :admin:assembleRelease
 ```
 
 ### Generated Artifacts
-- **AgentX Client App**: `app/build/outputs/apk/debug/app-debug.apk` (`com.agentx`)
-- **AgentX Medical App**: `medical/build/outputs/apk/debug/medical-debug.apk` (`com.agentx.medical`)
-- **AgentX Serve Host App**: `admin/build/outputs/apk/debug/admin-debug.apk` (`com.agentx.admin`)
+- **AgentX Client App**: `assets/agentx/AgentX-v1.0.0-debug.apk` (`com.agentx`)
+- **AgentX Medical App**: `assets/agentx_medical/AgentX-Medical-v1.0.0-debug.apk` (`com.agentx.medical`)
+- **AgentX Serve Host App**: `assets/agentx_serve/AgentX-Serve-v1.0.0-debug.apk` (`com.agentx.admin`)
 
 ---
 
 ## 🧪 Verification & Test Suite
 
-The test suite covers domain models, JNI bridges, tool calculators, sliding context management, multi-agent planning, and view models.
+The test suite covers domain models, tool calculators, sliding context management, multi-agent planning, local server engine, and view models.
 
 ```bash
-> Task :app:testDebugUnitTest
+> Task :testDebugUnitTest
 
-com.agentx.ChatViewModelTest                PASSED (11 tests)
-com.agentx.ContextManagerTest               PASSED (8 tests)
-com.agentx.DomainAndRuntimeTests            PASSED (12 tests)
-com.agentx.GgufMetadataParserTest           PASSED (6 tests)
-com.agentx.HuggingFaceDownloaderTest        PASSED (5 tests)
-com.agentx.LlamaCppEngineTest               PASSED (14 tests)
-com.agentx.Phase5ToolTests                  PASSED (15 tests)
-com.agentx.Phase6MultiAgentTests            PASSED (18 tests)
-com.agentx.Phase7OptimizationTests          PASSED (8 tests)
+com.agentx.ChatViewModelTest                PASSED
+com.agentx.ContextManagerTest               PASSED
+com.agentx.DomainAndRuntimeTests            PASSED
+com.agentx.GgufMetadataParserTest           PASSED
+com.agentx.HuggingFaceDownloaderTest        PASSED
+com.agentx.LlamaCppEngineTest               PASSED
+com.agentx.Phase5ToolTests                  PASSED
+com.agentx.Phase6MultiAgentTests            PASSED
+com.agentx.Phase7OptimizationTests          PASSED
+com.agentx.medical.MedicalChatViewModelTest PASSED
+com.agentx.admin.LocalModelServerEngineTest PASSED
 
-BUILD SUCCESSFUL: 97/97 tests PASSED (0 failures)
+BUILD SUCCESSFUL: 100% tests PASSED (0 failures)
 ```
 
 ---

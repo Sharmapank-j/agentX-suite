@@ -26,12 +26,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Key
@@ -88,6 +90,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agentx.admin.models.ApiKeyRecord
 import com.agentx.admin.models.ClientSession
+import com.agentx.admin.models.LocalModelStatus
+import com.agentx.admin.models.LocalServerModel
+import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,9 +181,9 @@ fun AdminDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                if (state.telemetry.isRunning) "SERVER ONLINE" else "SERVER STOPPED",
+                                if (state.telemetry.isRunning) "SERVER ONLINE • ${state.servingMode.label}" else "SERVER STOPPED",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (state.telemetry.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
@@ -235,7 +240,7 @@ fun AdminDashboardScreen(
             }
 
             // Tabs Header
-            val tabs = listOf("Telemetry", "Cloud Gateway", "Clients", "API Keys", "Logs", "Quickstart")
+            val tabs = listOf("Local Models", "Telemetry", "Cloud Gateway", "Clients", "API Keys", "Logs", "Quickstart")
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 edgePadding = 16.dp,
@@ -257,28 +262,38 @@ fun AdminDashboardScreen(
                     .padding(16.dp)
             ) {
                 when (state.selectedTab) {
-                    0 -> TelemetryTab(state = state, portInput = portInput, onPortChange = {
+                    0 -> LocalModelsTab(
+                        state = state,
+                        onServingModeChange = { viewModel.setServingMode(it) },
+                        onLoadModel = { viewModel.loadLocalModel(it) },
+                        onUnloadModel = { viewModel.unloadLocalModel() },
+                        onTestPromptChange = { viewModel.setTestPrompt(it) },
+                        onRunTest = { viewModel.runLocalModelTest() },
+                        onClearTest = { viewModel.clearTestResponse() },
+                        onCopy = { clipboard.setText(AnnotatedString(it)) }
+                    )
+                    1 -> TelemetryTab(state = state, portInput = portInput, onPortChange = {
                         portInput = it
                         it.toIntOrNull()?.let { p -> viewModel.setPort(p) }
                     })
-                    1 -> CloudGatewayTab(
+                    2 -> CloudGatewayTab(
                         state = state,
                         onKeyChange = { viewModel.setGeminiApiKey(it) },
                         onModelChange = { viewModel.setActiveModel(it) },
                         onTest = { viewModel.testCloudConnection() }
                     )
-                    2 -> ClientsTab(
+                    3 -> ClientsTab(
                         clients = state.clients,
                         onToggleBlock = { viewModel.toggleBlockClient(it) }
                     )
-                    3 -> ApiKeysTab(
+                    4 -> ApiKeysTab(
                         apiKeys = state.apiKeys,
                         onCreateClick = { showCreateKeyDialog = true },
                         onRevoke = { viewModel.revokeApiKey(it) },
                         onCopy = { clipboard.setText(AnnotatedString(it)) }
                     )
-                    4 -> TrafficLogsTab(logs = state.trafficLogs)
-                    5 -> QuickstartTab(serverUrl = serverUrl, apiKeys = state.apiKeys)
+                    5 -> TrafficLogsTab(logs = state.trafficLogs)
+                    6 -> QuickstartTab(serverUrl = serverUrl, apiKeys = state.apiKeys)
                 }
             }
         }
@@ -318,6 +333,375 @@ fun AdminDashboardScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun LocalModelsTab(
+    state: AdminUiState,
+    onServingModeChange: (ServingMode) -> Unit,
+    onLoadModel: (String) -> Unit,
+    onUnloadModel: () -> Unit,
+    onTestPromptChange: (String) -> Unit,
+    onRunTest: () -> Unit,
+    onClearTest: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Section 1: Serving Mode Selector Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Serving Engine Architecture", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = when (state.servingMode) {
+                            ServingMode.LOCAL_MODEL -> Color(0xFF10B981)
+                            ServingMode.CLOUD_GATEWAY -> Color(0xFF3B82F6)
+                            ServingMode.HYBRID -> Color(0xFF8B5CF6)
+                        }
+                    ) {
+                        Text(
+                            when (state.servingMode) {
+                                ServingMode.LOCAL_MODEL -> "100% OFFLINE"
+                                ServingMode.CLOUD_GATEWAY -> "CLOUD BACKED"
+                                ServingMode.HYBRID -> "HYBRID AUTO"
+                            },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    state.servingMode.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ServingMode.values().forEach { mode ->
+                        FilterChip(
+                            selected = state.servingMode == mode,
+                            onClick = { onServingModeChange(mode) },
+                            label = {
+                                Text(
+                                    when (mode) {
+                                        ServingMode.LOCAL_MODEL -> "Local AirLLM"
+                                        ServingMode.CLOUD_GATEWAY -> "Cloud Gemini"
+                                        ServingMode.HYBRID -> "Hybrid"
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = if (state.servingMode == mode) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 2: Active Local Model Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("ACTIVE SERVING MODEL", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            state.activeLocalModel?.name ?: "No Local Model Loaded",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = when (state.localModelStatus) {
+                            LocalModelStatus.LOADED -> Color(0xFF10B981)
+                            LocalModelStatus.GENERATING -> Color(0xFF3B82F6)
+                            LocalModelStatus.LOADING -> Color(0xFFF59E0B)
+                            LocalModelStatus.NOT_LOADED -> Color(0xFF6B7280)
+                        }
+                    ) {
+                        Text(
+                            state.localModelStatus.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                state.activeLocalModel?.let { model ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("RAM Footprint", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                                Text("${model.memoryFootprintMb} MB", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Architecture", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                                Text("${model.architecture} ${model.parameterCount}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Quantization", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                                Text(model.quantization, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        if (state.localModelStatus == LocalModelStatus.LOADED) {
+                            OutlinedButton(onClick = onUnloadModel) {
+                                Text("Unload From RAM", fontSize = 11.sp)
+                            }
+                        } else {
+                            Button(onClick = { onLoadModel(model.id) }) {
+                                Text("Reload Model", fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 3: Curated Models Catalog
+        Text("Curated Open-Source Edge Models", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+
+        state.curatedLocalModels.forEach { model ->
+            val isActive = state.activeLocalModel?.id == model.id && state.localModelStatus == LocalModelStatus.LOADED
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "${model.architecture} • ${model.parameterCount} • ${model.quantization} • ${model.memoryFootprintMb} MB RAM",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        if (isActive) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF10B981)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Serving", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                }
+                            }
+                        } else {
+                            Button(
+                                onClick = { onLoadModel(model.id) },
+                                enabled = state.localModelStatus != LocalModelStatus.LOADING
+                            ) {
+                                Text("Load & Serve", fontSize = 11.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
+            }
+        }
+
+        // Section 4: Built-in Interactive Live Test Console
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Live Model Test Console", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text("Verify local model execution before serving LAN clients", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    }
+
+                    if (state.testResponse != null) {
+                        IconButton(onClick = onClearTest) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Quick Prompt Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { onTestPromptChange("Patient 58yo male with acute retrosternal chest pain radiating to left arm. Detail clinical differential and workup.") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Clinical Test", fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onTestPromptChange("Explain how layer-streaming AirLLM allows running multi-billion parameter models in low RAM.") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("AirLLM Test", fontSize = 11.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = state.testPrompt,
+                    onValueChange = onTestPromptChange,
+                    label = { Text("Test Prompt") },
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (state.testLatencyMs > 0) {
+                        Text("Latency: ${state.testLatencyMs} ms", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    Button(
+                        onClick = onRunTest,
+                        enabled = !state.isGeneratingTest
+                    ) {
+                        if (state.isGeneratingTest) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generating...")
+                        } else {
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Run Local Inference")
+                        }
+                    }
+                }
+
+                // Response Console
+                state.testResponse?.let { resp ->
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF1E1E2E),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("MODEL OUTPUT", fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF89B4FA))
+                                IconButton(onClick = { onCopy(resp) }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color(0xFFA6ADC8), modifier = Modifier.size(14.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                resp,
+                                color = Color(0xFFCDD6F4),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Default
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -628,13 +1012,15 @@ curl -X POST "$serverUrl/v1/chat/completions" \
     val pythonSnippet = """
 from openai import OpenAI
 
+# Connect directly to this phone over local Wi-Fi / LAN
 client = OpenAI(
     base_url="$serverUrl/v1",
     api_key="$activeKey"
 )
 
+# Works directly with the on-device AirLLM layer-streaming engine
 response = client.chat.completions.create(
-    model="gemini-2.5-flash",
+    model="llama-3.2-3b",
     messages=[{"role": "user", "content": "Clinical evaluation plan"}]
 )
 print(response.choices[0].message.content)
@@ -646,7 +1032,7 @@ print(response.choices[0].message.content)
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SnippetCard("cURL Example", curlSnippet) { clipboard.setText(AnnotatedString(curlSnippet)) }
+        SnippetCard("cURL Example (LAN & Local)", curlSnippet) { clipboard.setText(AnnotatedString(curlSnippet)) }
         SnippetCard("Python OpenAI SDK Example", pythonSnippet) { clipboard.setText(AnnotatedString(pythonSnippet)) }
     }
 }
