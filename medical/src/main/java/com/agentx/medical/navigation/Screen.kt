@@ -34,6 +34,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     }
 
     companion object {
-        val bottomNavItems = listOf(Chat, Agents, Models, Settings)
+        val bottomNavItems = listOf(Chat, Models, Settings)
     }
 }

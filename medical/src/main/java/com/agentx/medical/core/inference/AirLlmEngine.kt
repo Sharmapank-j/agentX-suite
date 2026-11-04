@@ -37,11 +37,11 @@ class AirLlmEngine(
                 state = ModelLifecycleState.LOADING,
                 activeModelId = config.modelId,
                 activeModelName = File(config.modelPath).name.ifBlank { config.modelId },
-                memoryUsageBytes = 128L * 1024L * 1024L
+                memoryUsageBytes = 512L * 1024L * 1024L
             )
 
             delay(150)
-            val layerStreamingMemory = 1536L * 1024L * 1024L // 1.5 GB working buffer for medical 7B-14B models
+            val layerStreamingMemory = 2048L * 1024L * 1024L // 1.5 GB working buffer for medical 7B-14B models
 
             currentConfig = config
             status = ModelStatus(

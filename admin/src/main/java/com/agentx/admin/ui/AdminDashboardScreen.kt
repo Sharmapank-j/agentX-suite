@@ -876,7 +876,7 @@ private fun LocalModelsTab(
                             )
                         }
                         Text(
-                            text = if (state.servingMode == ServingMode.LOCAL_MODEL) "~${state.activeLocalModel?.memoryFootprintMb ?: 196} MB RAM" else "Cloud (0 MB)",
+                            text = if (state.servingMode == ServingMode.LOCAL_MODEL) "~${state.activeLocalModel?.memoryFootprintMb ?: 2048} MB RAM" else "Cloud (0 MB)",
                             style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.primary

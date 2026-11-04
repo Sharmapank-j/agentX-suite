@@ -103,7 +103,7 @@ abstract class AgentXMedicalDatabase : RoomDatabase() {
                         name = "Chief Clinical Supervisor",
                         role = "SUPERVISOR",
                         systemPrompt = "You are the Chief Clinical Supervisor. You govern clinical consultations, medical curriculum inquiries, and multi-agent workflows. Decompose clinical questions, coordinate specialized medical agents, and synthesize verifiable, physician-grade reports adhering to evidence-based medicine.",
-                        isDefault = true,
+                        isDefault = false,
                         icon = "medical_services"
                     ),
                     AgentEntity(

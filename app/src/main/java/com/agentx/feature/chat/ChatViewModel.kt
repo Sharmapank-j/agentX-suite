@@ -69,7 +69,7 @@ class ChatViewModel(
 ) : ViewModel() {
 
     private val _currentConversationId = MutableStateFlow<String?>(null)
-    private val _selectedAgentId = MutableStateFlow<String?>("agent_supervisor")
+    private val _selectedAgentId = MutableStateFlow<String?>("agent_assistant")
     private val _inputText = MutableStateFlow("")
     private val _isStreaming = MutableStateFlow(false)
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
@@ -87,7 +87,7 @@ class ChatViewModel(
         _selectedAgentId
     ) { conversations, currentId, agents, selectedAgentId ->
         val activeConv = conversations.find { it.id == currentId } ?: conversations.firstOrNull()
-        val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.firstOrNull()
+        val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.find { it.id == "agent_assistant" } ?: agents.firstOrNull()
         Triple(conversations, activeConv, Pair(agents, activeAgent))
     }
 
@@ -124,7 +124,7 @@ class ChatViewModel(
             selectedAgent = agentPair.second,
             inputText = inputState.inputText,
             isStreaming = inputState.isStreaming,
-            streamingAgentName = if (inputState.isStreaming) agentPair.second?.name else null,
+            streamingAgentName = if (inputState.isStreaming) "AgentX" else null,
             activeModel = activeModel,
             allModels = allModels,
             modelStatus = modelStatus,
@@ -298,7 +298,10 @@ class ChatViewModel(
 
             val isExplicitSupervisorTask = (agent != null && (agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
                     text.startsWith("/orchestrate", ignoreCase = true) ||
-                    text.startsWith("/plan", ignoreCase = true)
+                    text.startsWith("/plan", ignoreCase = true) ||
+                    text.startsWith("/agent", ignoreCase = true) ||
+                    text.contains("multi-agent", ignoreCase = true) ||
+                    text.contains("decompose and plan", ignoreCase = true)
             if (isExplicitSupervisorTask && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
@@ -310,7 +313,7 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = text,
                     agent = agent,
-                    agentName = agentName
+                    agentName = "AgentX"
                 )
             }
         }
@@ -337,7 +340,10 @@ class ChatViewModel(
 
             val isExplicitSupervisorTask = (agent != null && (agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
                     userQuery.startsWith("/orchestrate", ignoreCase = true) ||
-                    userQuery.startsWith("/plan", ignoreCase = true)
+                    userQuery.startsWith("/plan", ignoreCase = true) ||
+                    userQuery.startsWith("/agent", ignoreCase = true) ||
+                    userQuery.contains("multi-agent", ignoreCase = true) ||
+                    userQuery.contains("decompose and plan", ignoreCase = true)
             if (isExplicitSupervisorTask && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
@@ -349,7 +355,7 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = userQuery,
                     agent = agent,
-                    agentName = agentName
+                    agentName = "AgentX"
                 )
             }
         }

@@ -78,7 +78,7 @@ data class ServerTelemetry(
     val servingMode: ServingMode = ServingMode.LOCAL_MODEL,
     val activeLocalModel: String? = "Llama-3.2-3B-Instruct (AirLLM)",
     val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
-    val localMemoryUsageMb: Long = 196L,
+    val localMemoryUsageMb: Long = 2048L,
     val activeCloudModel: String = "gemini-2.5-flash",
     val isCloudConnected: Boolean = false,
     val lastConnectedIp: String? = null,

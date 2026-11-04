@@ -664,10 +664,6 @@ private fun CyberTopAppBar(
                 }
             }
 
-            IconButton(onClick = onNavigateToMonitor) {
-                Icon(Icons.Default.Psychology, contentDescription = "Execution Monitor", tint = ElectricCyan)
-            }
-
             Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = TextPrimary)
@@ -677,6 +673,14 @@ private fun CyberTopAppBar(
                     onDismissRequest = { showMenu = false },
                     modifier = Modifier.background(SpaceDark)
                 ) {
+                    DropdownMenuItem(
+                        text = { Text("Execution Monitor", color = TextPrimary) },
+                        leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null, tint = ElectricCyan) },
+                        onClick = {
+                            showMenu = false
+                            onNavigateToMonitor()
+                        }
+                    )
                     DropdownMenuItem(
                         text = { Text("Rename Conversation", color = TextPrimary) },
                         leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = ElectricCyan) },
@@ -841,7 +845,7 @@ private fun DidYouKnowWelcomeCard(
 
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            "AgentX Autonomous AI",
+            "AgentX",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
@@ -958,7 +962,7 @@ private fun DidYouKnowWelcomeCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Discuss with AgentX: \"${insight.suggestedPrompt.take(45)}...\"",
+                            text = "Ask: \"${insight.suggestedPrompt.take(45)}...\"",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = ElectricCyan,

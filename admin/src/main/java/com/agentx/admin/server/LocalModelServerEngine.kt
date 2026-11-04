@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * On-Device Local Model Server Engine for AgentX Serve.
  *
  * Runs completely on the host smartphone using the lightweight AirLLM layer-streaming
- * architecture. Keeps memory strictly bounded to ~140MB–240MB RAM, allowing any Android
+ * architecture. Keeps memory strictly bounded to high-capacity 2.0 GB RAM for 7B-14B models, allowing any Android
  * device to serve OpenAI-compatible endpoints to other phones, tablets, or computers over LAN.
  *
  * Supports both pre-configured curated edge models and user-chosen models stored in phone storage (.gguf).
@@ -39,7 +39,7 @@ class LocalModelServerEngine(
             parameterCount = "3.2B",
             quantization = "Q4_K_M",
             contextWindow = 4096,
-            memoryFootprintMb = 196L,
+            memoryFootprintMb = 2048L,
             description = "Meta's flagship mobile conversational & reasoning model. Excellent all-rounder for general assistance and tool calling.",
             isLoaded = true,
             isServing = true
@@ -51,7 +51,7 @@ class LocalModelServerEngine(
             parameterCount = "1.5B",
             quantization = "Q4_K_M",
             contextWindow = 8192,
-            memoryFootprintMb = 140L,
+            memoryFootprintMb = 1536L,
             description = "High-efficiency distilled reasoning model specialized in multi-step deduction, math, and code logic.",
             isLoaded = false,
             isServing = false
@@ -63,7 +63,7 @@ class LocalModelServerEngine(
             parameterCount = "3.1B",
             quantization = "Q4_K_M",
             contextWindow = 4096,
-            memoryFootprintMb = 196L,
+            memoryFootprintMb = 2048L,
             description = "Alibaba's specialized code synthesis engine for Kotlin, Python, TypeScript, and software architecture.",
             isLoaded = false,
             isServing = false
@@ -75,7 +75,7 @@ class LocalModelServerEngine(
             parameterCount = "7.2B",
             quantization = "Q4_K_M",
             contextWindow = 4096,
-            memoryFootprintMb = 240L,
+            memoryFootprintMb = 2048L,
             description = "Biomedical foundation model fine-tuned on PubMed Central and clinical practice guidelines.",
             isLoaded = false,
             isServing = false
@@ -87,7 +87,7 @@ class LocalModelServerEngine(
             parameterCount = "3.8B",
             quantization = "Q4_K_M",
             contextWindow = 4096,
-            memoryFootprintMb = 210L,
+            memoryFootprintMb = 2048L,
             description = "Microsoft's state-of-the-art compact reasoning model with high benchmark scores across math and logic.",
             isLoaded = false,
             isServing = false
@@ -296,10 +296,9 @@ class LocalModelServerEngine(
 
         fun computeLayerStreamingRamMb(fileSizeBytes: Long): Long {
             return when {
-                fileSizeBytes >= 6L * 1024 * 1024 * 1024 -> 240L
-                fileSizeBytes >= 3L * 1024 * 1024 * 1024 -> 196L
-                fileSizeBytes >= 1500L * 1024 * 1024 -> 160L
-                else -> 140L
+                fileSizeBytes >= 3L * 1024 * 1024 * 1024 -> 2048L
+                fileSizeBytes >= 1500L * 1024 * 1024 -> 1536L
+                else -> 1024L
             }
         }
 

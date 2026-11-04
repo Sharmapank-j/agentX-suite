@@ -228,9 +228,6 @@ fun ChatScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = onNavigateToMonitor) {
-                            Icon(Icons.Default.Psychology, contentDescription = "Execution Monitor")
-                        }
                         Box {
                             IconButton(onClick = { showTopMenu = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "Options")
@@ -239,6 +236,14 @@ fun ChatScreen(
                                 expanded = showTopMenu,
                                 onDismissRequest = { showTopMenu = false }
                             ) {
+                                DropdownMenuItem(
+                                    text = { Text("Reasoning Monitor") },
+                                    leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
+                                    onClick = {
+                                        showTopMenu = false
+                                        onNavigateToMonitor()
+                                    }
+                                )
                                 DropdownMenuItem(
                                     text = { Text("Rename Consult") },
                                     leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
@@ -813,7 +818,7 @@ private fun MedicalDidYouKnowCard(
 
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            "AgentX Medical Consult",
+            "AgentX Medical",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
@@ -942,7 +947,7 @@ private fun MedicalDidYouKnowCard(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Consult: \"${insight.suggestedPrompt.take(45)}...\"",
+                            text = "Ask: \"${insight.suggestedPrompt.take(45)}...\"",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,

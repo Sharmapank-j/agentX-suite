@@ -42,7 +42,7 @@ class LlamaCppEngine : InferenceEngine {
                 state = ModelLifecycleState.LOADED,
                 activeModelId = config.modelId,
                 activeModelName = fileName,
-                memoryUsageBytes = 256L * 1024L * 1024L
+                memoryUsageBytes = 2048L * 1024L * 1024L
             )
         }
     }

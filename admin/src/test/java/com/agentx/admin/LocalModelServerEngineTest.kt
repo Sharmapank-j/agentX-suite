@@ -41,8 +41,8 @@ class LocalModelServerEngineTest {
     fun testAllModelsHaveBoundedRamFootprint() {
         for (model in engine.curatedCatalog) {
             assertTrue(
-                "Model ${model.id} RAM usage (${model.memoryFootprintMb}MB) must be bounded below 250MB",
-                model.memoryFootprintMb <= 250L
+                "Model ${model.id} RAM usage (${model.memoryFootprintMb}MB) must be bounded within 2048MB (2.0GB)",
+                model.memoryFootprintMb <= 2048L
             )
         }
     }

@@ -39,14 +39,14 @@ class AirLlmEngine(
                 state = ModelLifecycleState.LOADING,
                 activeModelId = config.modelId,
                 activeModelName = File(config.modelPath).name.ifBlank { config.modelId },
-                memoryUsageBytes = 128L * 1024L * 1024L // Initial buffer initialization
+                memoryUsageBytes = 512L * 1024L * 1024L // Initial buffer initialization
             )
 
             // Simulate AirLLM layer index mapping from disk
             delay(150)
 
             // High-capacity working block buffer (1.5 GB RAM allocation for 7B-14B models and large KV cache)
-            val layerStreamingMemory = 1536L * 1024L * 1024L
+            val layerStreamingMemory = 2048L * 1024L * 1024L
 
             currentConfig = config
             status = ModelStatus(
@@ -201,7 +201,7 @@ Architecting a fault-tolerant, horizontally scalable distributed system requires
                 """.trimIndent()
             }
 
-            if (lower.contains("airllm") || lower.contains("layer streaming") || lower.contains("progressive") || (lower.contains("memory") && lower.contains("200mb"))) {
+            if (lower.contains("airllm") || lower.contains("layer streaming") || lower.contains("progressive") || (lower.contains("memory") && (lower.contains("2gb") || lower.contains("2000mb") || lower.contains("ram")))) {
                 return """
 ### ⚡ AirLLM Progressive Layer Streaming Architecture
 
@@ -214,7 +214,7 @@ AirLLM is an inference optimization methodology designed to execute massive tran
 #### 2. Layer-by-Layer Progressive Streaming
 • **Disk-Streaming Weights:** Transformer layers are stored sequentially on storage.
 • **Sequential Execution:**
-  1. Load Layer L[i] into a small memory buffer (≤ 200 MB).
+  1. Load Layer L[i] into a small memory buffer (bounded within 2.0 GB RAM).
   2. Compute attention and feedforward activations for the current token: X[i+1] = Layer_i(X[i]).
   3. Release Layer L[i] memory immediately and preload Layer L[i+1].
 • **Zero Native JNI Overhead:** Pure memory-mapped disk I/O eliminates heavyweight native C++ CMake dependencies and JNI bridge crashes on Android.

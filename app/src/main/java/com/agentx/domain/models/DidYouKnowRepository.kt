@@ -19,9 +19,9 @@ object DidYouKnowRepository {
             id = "airllm_streaming",
             category = "Edge AI & Architecture",
             emoji = "⚡",
-            headline = "Running 70B Models in 200MB RAM",
+            headline = "Running 70B Models in 2.0 GB RAM",
             fact = "While full 16-bit 70B LLMs require ~140 GB of VRAM, progressive layer-streaming (AirLLM) partitions weights into quantized block buffers on flash storage, streaming active transformer layers into memory one-by-one so even modest mobile hardware never crashes with Out-Of-Memory errors.",
-            suggestedPrompt = "Explain how AirLLM layer-streaming executes multi-billion parameter inference in 200MB RAM without native crashes.",
+            suggestedPrompt = "Explain how AirLLM layer-streaming executes multi-billion parameter inference in 2.0 GB RAM without native crashes.",
             relatedChips = listOf("AirLLM Mechanics", "Quantization Q4_K_M", "RAM Optimization")
         ),
         DidYouKnowInsight(

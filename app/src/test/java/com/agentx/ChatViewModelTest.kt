@@ -282,7 +282,7 @@ class FakeInferenceEngine : InferenceEngine {
         status = ModelStatus(
             state = ModelLifecycleState.LOADED,
             activeModelId = config.modelId,
-            memoryUsageBytes = 256L * 1024L * 1024L
+            memoryUsageBytes = 2048L * 1024L * 1024L
         )
     }
 
