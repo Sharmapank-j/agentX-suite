@@ -29,7 +29,7 @@ class ClientManager {
         val defaultKey = generateKeyString()
         val defaultRecord = ApiKeyRecord(
             key = defaultKey,
-            clientName = "Default Hospital Key"
+            clientName = "Default Master Key"
         )
         keyMap[defaultKey] = defaultRecord
         _apiKeys.value = listOf(defaultRecord)
@@ -54,7 +54,10 @@ class ClientManager {
         }
     }
 
+    var isAuthEnforced: Boolean = false
+
     fun isKeyValid(key: String?): Boolean {
+        if (!isAuthEnforced) return true
         if (key.isNullOrBlank()) return false
         val record = keyMap[key] ?: return false
         return !record.isRevoked

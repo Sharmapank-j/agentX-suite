@@ -37,7 +37,7 @@ data class AdminUiState(
     val isScanningStorage: Boolean = false,
     val activeLocalModel: LocalServerModel? = null,
     val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
-    val testPrompt: String = "Explain the differential diagnosis of acute chest pain.",
+    val testPrompt: String = "Explain how on-device AI models stream layers efficiently on mobile hardware.",
     val testResponse: String? = null,
     val isGeneratingTest: Boolean = false,
     val testLatencyMs: Long = 0L,
@@ -65,7 +65,7 @@ class AdminViewModel(
     private val _isScanningStorage = MutableStateFlow(false)
     private val _activeLocalModel = MutableStateFlow(localEngine.activeModel)
     private val _localModelStatus = MutableStateFlow(localEngine.status)
-    private val _testPrompt = MutableStateFlow("Explain the differential diagnosis of acute chest pain.")
+    private val _testPrompt = MutableStateFlow("Explain how on-device AI models stream layers efficiently on mobile hardware.")
     private val _testResponse = MutableStateFlow<String?>(null)
     private val _isGeneratingTest = MutableStateFlow(false)
     private val _testLatencyMs = MutableStateFlow(0L)
@@ -294,7 +294,7 @@ class AdminViewModel(
             _isGeneratingTest.value = true
             _testResponse.value = ""
             val start = System.currentTimeMillis()
-            val prompt = _testPrompt.value.ifBlank { "Explain the differential diagnosis of acute chest pain." }
+            val prompt = _testPrompt.value.ifBlank { "Explain how on-device AI models stream layers efficiently on mobile hardware." }
 
             try {
                 localEngine.generateCompletionStream(prompt = prompt).collect { token ->

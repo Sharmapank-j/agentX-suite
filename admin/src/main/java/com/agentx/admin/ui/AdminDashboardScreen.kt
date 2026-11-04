@@ -788,16 +788,22 @@ private fun LocalModelsTab(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { onTestPromptChange("Patient 58yo male with acute retrosternal chest pain radiating to left arm. Detail clinical differential and workup.") },
+                        onClick = { onTestPromptChange("Write an optimized asynchronous event dispatcher in Kotlin using CoroutineScope and StateFlow.") },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
-                        Text("Clinical Test", fontSize = 11.sp)
+                        Text("Code Test", fontSize = 11.sp)
                     }
                     OutlinedButton(
                         onClick = { onTestPromptChange("Explain how layer-streaming AirLLM allows running multi-billion parameter models in low RAM.") },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text("AirLLM Test", fontSize = 11.sp)
+                    }
+                    OutlinedButton(
+                        onClick = { onTestPromptChange("Explain the pharmacological mechanism and interactions of oral anticoagulants.") },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Bio Test", fontSize = 11.sp)
                     }
                 }
 
@@ -1183,7 +1189,7 @@ curl -X POST "$serverUrl/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $activeKey" \
   -d '{
-    "messages": [{"role": "user", "content": "Patient with acute fever and dyspnea."}],
+    "messages": [{"role": "user", "content": "Explain how edge AI models stream inference."}],
     "temperature": 0.7
   }'
     """.trimIndent()
@@ -1200,7 +1206,7 @@ client = OpenAI(
 # Works directly with the on-device AirLLM layer-streaming engine
 response = client.chat.completions.create(
     model="llama-3.2-3b",
-    messages=[{"role": "user", "content": "Clinical evaluation plan"}]
+    messages=[{"role": "user", "content": "Explain asynchronous programming in Kotlin."}]
 )
 print(response.choices[0].message.content)
     """.trimIndent()
