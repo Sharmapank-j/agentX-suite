@@ -33,6 +33,7 @@ class AgentXAdminServer(
     val localEngine: LocalModelServerEngine,
     val thermalManager: ThermalBatteryManager? = null,
     val tlsManager: LocalTlsManager? = null,
+    val tunnelManager: TunnelManager? = null,
     private val serverScope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) {
     private var serverSocket: ServerSocket? = null
@@ -95,6 +96,9 @@ class AgentXAdminServer(
             val actualPort = serverSocket?.localPort ?: port
             val ip = getLocalIpAddress()
 
+            val isTunnel = tunnelManager?.config?.value?.isEnabled == true
+            val tunUrl = if (isTunnel) tunnelManager?.config?.value?.publicUrl else null
+
             _telemetry.value = _telemetry.value.copy(
                 isRunning = true,
                 port = actualPort,
@@ -106,6 +110,8 @@ class AgentXAdminServer(
                 localMemoryUsageMb = if (localEngine.status == LocalModelStatus.LOADED) localEngine.activeModel.memoryFootprintMb else 0L,
                 activeCloudModel = cloudGateway.activeModelName,
                 isCloudConnected = cloudGateway.isConfigured,
+                isTunnelActive = isTunnel,
+                tunnelUrl = tunUrl,
                 lastError = null
             )
 
@@ -254,10 +260,68 @@ class AgentXAdminServer(
                         "throttleDelayMs": $throttleDelay,
                         "isCharging": $isCharging,
                         "batteryPct": $batteryPct
+                      },
+                      "tunnel": {
+                        "enabled": ${tunnelManager?.config?.value?.isEnabled ?: false},
+                        "url": "${tunnelManager?.config?.value?.publicUrl ?: ""}",
+                        "provider": "${tunnelManager?.config?.value?.provider?.name ?: "NONE"}"
                       }
                     }
                 """.trimIndent()
                 sendJson(writer, 200, "OK", json)
+                clientManager.logTraffic(clientIp, method, path, 200, System.currentTimeMillis() - startTime, 0)
+                return@withContext
+            }
+
+            // Route: GET /api/v1/device/stats (Dedicated Hardware & LLM Usability Metrics)
+            if (path == "/api/v1/device/stats" || path == "/device/stats") {
+                val uptimeSec = _telemetry.value.startedAtMs?.let { (System.currentTimeMillis() - it) / 1000 } ?: 0L
+                val thermal = thermalManager?.refresh()
+                val isTunnelActive = tunnelManager?.config?.value?.isEnabled == true
+                val tunnelUrl = if (isTunnelActive) tunnelManager?.config?.value?.publicUrl else null
+
+                val statsJson = """
+                    {
+                      "status": "UP",
+                      "server": "AgentX Serve Edge Platform",
+                      "uptimeSeconds": $uptimeSec,
+                      "device": {
+                        "device": "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+                        "androidVersion": "${android.os.Build.VERSION.RELEASE}",
+                        "apiLevel": ${android.os.Build.VERSION.SDK_INT},
+                        "cpuCores": ${Runtime.getRuntime().availableProcessors()},
+                        "heapAllocatedMb": ${Runtime.getRuntime().totalMemory() / (1024 * 1024)},
+                        "heapMaxMb": ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}
+                      },
+                      "battery": {
+                        "temperatureC": ${thermal?.temperatureCelsius ?: 32.0f},
+                        "status": "${thermal?.status?.label ?: "NORMAL"}",
+                        "throttleDelayMs": ${thermal?.status?.extraDelayMs ?: 0},
+                        "isCharging": ${thermal?.isCharging ?: false},
+                        "batteryPct": ${thermal?.batteryPct ?: 85}
+                      },
+                      "llm": {
+                        "status": "${localEngine.status.name}",
+                        "model": "${localEngine.activeModel.name}",
+                        "architecture": "${localEngine.activeModel.architecture}",
+                        "parameters": "${localEngine.activeModel.parameterCount}",
+                        "quantization": "${localEngine.activeModel.quantization}",
+                        "ramFootprintMb": ${localEngine.activeModel.memoryFootprintMb},
+                        "ramTargetRange": "1K-2K MB"
+                      },
+                      "tunnel": {
+                        "enabled": $isTunnelActive,
+                        "url": "${tunnelUrl ?: ""}",
+                        "provider": "${tunnelManager?.config?.value?.provider?.name ?: "NONE"}"
+                      },
+                      "telemetry": {
+                        "requestsServed": ${_telemetry.value.requestsServed},
+                        "tokensEmitted": ${_telemetry.value.tokensEmitted},
+                        "activeClients": ${clientManager.clients.value.size}
+                      }
+                    }
+                """.trimIndent()
+                sendJson(writer, 200, "OK", statsJson)
                 clientManager.logTraffic(clientIp, method, path, 200, System.currentTimeMillis() - startTime, 0)
                 return@withContext
             }

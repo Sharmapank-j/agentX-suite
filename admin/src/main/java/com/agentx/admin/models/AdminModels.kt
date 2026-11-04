@@ -1,6 +1,7 @@
 package com.agentx.admin.models
 
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 @Serializable
 enum class ServingMode(val label: String, val description: String) {
@@ -18,6 +19,43 @@ enum class LocalModelStatus {
 }
 
 @Serializable
+enum class TunnelProvider(val displayName: String) {
+    CLOUDFLARE("Cloudflare Tunnel"),
+    NGROK("ngrok"),
+    PINGGY("Pinggy.io"),
+    CUSTOM_RELAY("Custom Reverse Proxy")
+}
+
+@Serializable
+enum class TunnelStatus(val label: String) {
+    STOPPED("Stopped"),
+    STARTING("Connecting..."),
+    CONNECTED("Active (HTTPS)"),
+    ERROR("Connection Failed")
+}
+
+@Serializable
+data class TunnelConfig(
+    val isEnabled: Boolean = false,
+    val provider: TunnelProvider = TunnelProvider.CLOUDFLARE,
+    val publicUrl: String? = null,
+    val authToken: String = "",
+    val customDomain: String = "",
+    val status: TunnelStatus = TunnelStatus.STOPPED,
+    val lastError: String? = null,
+    val latencyMs: Long? = null
+)
+
+@Serializable
+data class CliEntry(
+    val id: String = UUID.randomUUID().toString(),
+    val command: String? = null,
+    val output: String,
+    val isError: Boolean = false,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
 data class LocalServerModel(
     val id: String,
     val name: String,
@@ -25,7 +63,7 @@ data class LocalServerModel(
     val parameterCount: String,
     val quantization: String,
     val contextWindow: Int = 4096,
-    val memoryFootprintMb: Long = 196L,
+    val memoryFootprintMb: Long = 1850L,
     val description: String,
     val isLoaded: Boolean = false,
     val isServing: Boolean = false,
@@ -78,10 +116,12 @@ data class ServerTelemetry(
     val servingMode: ServingMode = ServingMode.LOCAL_MODEL,
     val activeLocalModel: String? = "Llama-3.2-3B-Instruct (AirLLM)",
     val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
-    val localMemoryUsageMb: Long = 2048L,
+    val localMemoryUsageMb: Long = 1850L,
     val activeCloudModel: String = "gemini-2.5-flash",
     val isCloudConnected: Boolean = false,
     val lastConnectedIp: String? = null,
     val activeClientsCount: Int = 0,
-    val lastError: String? = null
+    val lastError: String? = null,
+    val tunnelUrl: String? = null,
+    val isTunnelActive: Boolean = false
 )

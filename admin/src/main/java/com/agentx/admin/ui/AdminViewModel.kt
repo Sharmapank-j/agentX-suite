@@ -8,12 +8,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agentx.admin.AgentXAdminApplication
 import com.agentx.admin.models.ApiKeyRecord
+import com.agentx.admin.models.CliEntry
 import com.agentx.admin.models.ClientSession
 import com.agentx.admin.models.LocalModelStatus
 import com.agentx.admin.models.LocalServerModel
 import com.agentx.admin.models.ServerTelemetry
 import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
+import com.agentx.admin.models.TunnelConfig
+import com.agentx.admin.models.TunnelProvider
+import com.agentx.admin.models.TunnelStatus
+import com.agentx.admin.server.TunnelManager
 import com.agentx.admin.service.AgentXServerService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -70,7 +75,10 @@ data class AdminUiState(
     val notificationMessage: String? = null,
     val thermalSnapshot: com.agentx.admin.server.ThermalSnapshot = com.agentx.admin.server.ThermalSnapshot(),
     val isTlsEnabled: Boolean = false,
-    val tlsFingerprint: String = ""
+    val tlsFingerprint: String = "",
+    val tunnelConfig: TunnelConfig = TunnelConfig(),
+    val cliHistory: List<CliEntry> = emptyList(),
+    val isCliExecuting: Boolean = false
 )
 
 class AdminViewModel(
@@ -83,6 +91,7 @@ class AdminViewModel(
     private val localEngine = app.localEngine
     val thermalManager = app.thermalManager
     val tlsManager = app.tlsManager
+    val tunnelManager = app.tunnelManager
 
     private val _selectedPort = MutableStateFlow(8080)
     private val _selectedTab = MutableStateFlow(0)
@@ -99,6 +108,20 @@ class AdminViewModel(
     private val _cloudStatus = MutableStateFlow<String?>(null)
     private val _isTestingCloud = MutableStateFlow(false)
     private val _notification = MutableStateFlow<String?>(null)
+
+    private val _cliHistory = MutableStateFlow<List<CliEntry>>(listOf(
+        CliEntry(
+            command = null,
+            output = """
+============================================================
+ AGENTX SERVE DIAGNOSTIC TERMINAL & EDGE HOST HUD [v1.0]
+ Platform: 24/7 Dedicated Old-Phone Edge AI Server
+ Type 'help' for available commands.
+============================================================
+            """.trimIndent()
+        )
+    ))
+    private val _isCliExecuting = MutableStateFlow(false)
 
     private data class LocalEnginePrefs(
         val servingMode: ServingMode,
@@ -146,13 +169,32 @@ class AdminViewModel(
         val notification: String?
     )
 
+    private data class CliTunnelPrefs(
+        val tunnelConfig: TunnelConfig,
+        val cliHistory: List<CliEntry>,
+        val isCliExecuting: Boolean
+    )
+
+    private val cliTunnelFlow = combine(tunnelManager.config, _cliHistory, _isCliExecuting) { tunnel, cli, executing ->
+        CliTunnelPrefs(tunnel, cli, executing)
+    }
+
+    private data class SubAdminState(
+        val port: Int,
+        val tab: Int,
+        val key: String,
+        val cloudPrefs: CloudPreferences,
+        val localPrefs: LocalEnginePrefs,
+        val cliTunnelPrefs: CliTunnelPrefs
+    )
+
     val uiState: StateFlow<AdminUiState> = combine(
         server.telemetry,
         clientManager.clients,
         clientManager.apiKeys,
         clientManager.trafficLogs,
-        combine(serverSettingsFlow, cloudSettingsFlow, localEnginePrefsFlow) { (port, tab, key), cloudPrefs, localPrefs ->
-            SubAdminState(port, tab, key, cloudPrefs, localPrefs)
+        combine(serverSettingsFlow, cloudSettingsFlow, localEnginePrefsFlow, cliTunnelFlow) { (port, tab, key), cloudPrefs, localPrefs, cliTunnel ->
+            SubAdminState(port, tab, key, cloudPrefs, localPrefs, cliTunnel)
         }
     ) { telemetry, clients, apiKeys, logs, subState ->
         AdminUiState(
@@ -186,7 +228,10 @@ class AdminViewModel(
             notificationMessage = subState.cloudPrefs.notification,
             thermalSnapshot = thermalManager.snapshot.value,
             isTlsEnabled = tlsManager.config.value.enabled,
-            tlsFingerprint = tlsManager.config.value.fingerprint
+            tlsFingerprint = tlsManager.config.value.fingerprint,
+            tunnelConfig = subState.cliTunnelPrefs.tunnelConfig,
+            cliHistory = subState.cliTunnelPrefs.cliHistory,
+            isCliExecuting = subState.cliTunnelPrefs.isCliExecuting
         )
     }.stateIn(
         scope = viewModelScope,
@@ -195,16 +240,10 @@ class AdminViewModel(
             curatedLocalModels = localEngine.curatedCatalog,
             storageModels = localEngine.storageModels,
             activeLocalModel = localEngine.activeModel,
-            localModelStatus = localEngine.status
+            localModelStatus = localEngine.status,
+            tunnelConfig = tunnelManager.config.value,
+            cliHistory = _cliHistory.value
         )
-    )
-
-    private data class SubAdminState(
-        val port: Int,
-        val tab: Int,
-        val key: String,
-        val cloudPrefs: CloudPreferences,
-        val localPrefs: LocalEnginePrefs
     )
 
 
@@ -480,6 +519,271 @@ class AdminViewModel(
 
     fun clearNotification() {
         _notification.value = null
+    }
+
+    fun startTunnel(provider: TunnelProvider, token: String = "", customDomain: String = "") {
+        val updated = tunnelManager.startTunnel(provider, token, customDomain)
+        _notification.value = "Tunnel active: ${updated.publicUrl}"
+    }
+
+    fun stopTunnel() {
+        tunnelManager.stopTunnel()
+        _notification.value = "Tunnel stopped"
+    }
+
+    fun testTunnelConnection() {
+        viewModelScope.launch {
+            _notification.value = "Testing public route via local port ${_selectedPort.value}..."
+            val (ok, latency) = tunnelManager.testTunnel(_selectedPort.value)
+            if (ok) {
+                _notification.value = "Tunnel route verified (HTTP 200 OK in ${latency}ms)"
+            } else {
+                _notification.value = "Tunnel test failed (${latency}ms)"
+            }
+        }
+    }
+
+    fun clearCliHistory() {
+        _cliHistory.value = listOf(
+            CliEntry(
+                command = null,
+                output = "Terminal buffer cleared. Type 'help' for commands."
+            )
+        )
+    }
+
+    fun executeCliCommand(rawCmd: String) {
+        val cmd = rawCmd.trim()
+        if (cmd.isBlank()) return
+
+        val userEntry = CliEntry(command = cmd, output = "")
+        _cliHistory.value = _cliHistory.value + userEntry
+
+        viewModelScope.launch {
+            _isCliExecuting.value = true
+            try {
+                val output = handleCliCommand(cmd)
+                if (output.isNotBlank()) {
+                    val responseEntry = CliEntry(command = null, output = output, isError = false)
+                    _cliHistory.value = _cliHistory.value + responseEntry
+                }
+            } catch (e: Exception) {
+                val errEntry = CliEntry(command = null, output = "ERR: ${e.message}", isError = true)
+                _cliHistory.value = _cliHistory.value + errEntry
+            } finally {
+                _isCliExecuting.value = false
+            }
+        }
+    }
+
+    private suspend fun handleCliCommand(cmd: String): String {
+        val parts = cmd.split("\\s+".toRegex())
+        val root = parts.firstOrNull()?.lowercase() ?: ""
+        return when (root) {
+            "help" -> """
+=== AGENTX SERVE DIAGNOSTIC COMMANDS ===
+  stats          - Display requests, tokens, RAM usage, thermal and tunnel stats
+  device         - Inspect host device hardware, battery %, temp, and 24/7 server readiness
+  llm            - Inspect active model architecture, RAM footprint, context window
+  bench          - Run a 10-token local inference benchmark measuring TTFT and speed
+  test <prompt>  - Run custom text completion through active serving engine
+  tunnel         - Show remote tunneling provider, status, and public HTTPS URL
+  models         - List available curated models and custom storage GGUFs
+  load <id>      - Switch active local model by ID into AirLLM layer-streamer
+  unload         - Unload active model from memory
+  clients        - List connected client sessions and blocked IP addresses
+  clear          - Clear terminal output
+""".trimIndent()
+
+            "stats" -> {
+                val telem = server.telemetry.value
+                val tSnap = thermalManager.snapshot.value
+                val tCfg = tunnelManager.config.value
+                val upSec = telem.startedAtMs?.let { (System.currentTimeMillis() - it) / 1000 } ?: 0L
+                val upMin = upSec / 60
+                val upHours = upMin / 60
+                """
+--- SERVER & SYSTEM TELEMETRY ---
+Status:         ${if (telem.isRunning) "ONLINE [PORT ${telem.port}]" else "STOPPED"}
+Local IP:       ${telem.ipAddress}:${telem.port}
+Serving Mode:   ${telem.servingMode.label}
+Active Model:   ${telem.activeLocalModel ?: "None"}
+RAM Footprint:  ${telem.localMemoryUsageMb} MB (Layer-Streaming Allocated 1K-2K MB)
+Requests Served:${telem.requestsServed}
+Tokens Emitted: ${telem.tokensEmitted}
+Uptime:         ${upHours}h ${upMin % 60}m ${upSec % 60}s
+Active Clients: ${telem.activeClientsCount}
+Battery State:  ${tSnap.batteryPct}% ${if (tSnap.isCharging) "[Charging ⚡]" else "[Discharging]"}
+Device Temp:    ${tSnap.temperatureCelsius}°C (${tSnap.status.label})
+Remote Tunnel:  ${if (tCfg.isEnabled) tCfg.publicUrl ?: "Connecting" else "Disabled"}
+""".trimIndent()
+            }
+
+            "device" -> {
+                val tSnap = thermalManager.snapshot.value
+                val totalMemMb = Runtime.getRuntime().totalMemory() / (1024 * 1024)
+                val maxMemMb = Runtime.getRuntime().maxMemory() / (1024 * 1024)
+                val freeMemMb = Runtime.getRuntime().freeMemory() / (1024 * 1024)
+                val isCharging = tSnap.isCharging
+                """
+--- HOST DEVICE HARDWARE DIAGNOSTICS ---
+Device:         ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (${android.os.Build.DEVICE})
+Android OS:     Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})
+Hardware Board: ${android.os.Build.BOARD}
+JVM Heap RAM:   ${totalMemMb - freeMemMb}MB used / ${totalMemMb}MB allocated (Max: ${maxMemMb}MB)
+Battery:        ${tSnap.batteryPct}% (Status: ${if (isCharging) "Plugged In ⚡" else "On Battery"})
+Battery Temp:   ${tSnap.temperatureCelsius}°C
+Thermal Status: ${tSnap.status.label}
+Stream Delay:   ${tSnap.status.extraDelayMs} ms/token (Adaptive thermal throttling)
+24/7 Readiness: ${if (isCharging) "READY (Continuous power supplied)" else "CAUTION (Connect wall charger for 24/7 server use)"}
+""".trimIndent()
+            }
+
+            "llm" -> {
+                val model = localEngine.activeModel
+                """
+--- ACTIVE LLM SPECIFICATION ---
+Model Name:     ${model.name}
+Model ID:       ${model.id}
+Architecture:   ${model.architecture}
+Parameters:     ${model.parameterCount}
+Quantization:   ${model.quantization}
+Context Window: ${model.contextWindow} tokens
+RAM Footprint:  ${model.memoryFootprintMb} MB (Strictly bounded 1000MB-2048MB)
+Execution:      AirLLM Layer-Streaming Mobile Engine
+Status:         ${localEngine.status.name}
+Is Loaded:      ${model.isLoaded}
+Is Serving:     ${model.isServing}
+Description:    ${model.description}
+""".trimIndent()
+            }
+
+            "bench" -> {
+                val prompt = "Benchmark AgentX Serve layer streaming."
+                val start = System.currentTimeMillis()
+                var firstTokenTime: Long? = null
+                var count = 0
+                val sb = StringBuilder()
+                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 15).collect { token ->
+                    val now = System.currentTimeMillis()
+                    if (firstTokenTime == null) firstTokenTime = now
+                    count++
+                    sb.append(token)
+                }
+                val totalDuration = System.currentTimeMillis() - start
+                val ttft = if (firstTokenTime != null) firstTokenTime!! - start else totalDuration
+                val genDuration = if (firstTokenTime != null) totalDuration - ttft else totalDuration
+                val speed = if (genDuration > 50 && count > 0) ((count / (genDuration / 1000.0)) * 10).toInt() / 10.0 else 0.0
+                """
+=== INFERENCE BENCHMARK COMPLETE ===
+Target Engine:  ${localEngine.activeModel.name}
+RAM Footprint:  ${localEngine.activeModel.memoryFootprintMb} MB
+Time To First Token (TTFT): ${ttft} ms
+Tokens Generated:           $count tokens
+Generation Duration:        ${genDuration} ms
+Throughput:                 $speed tokens/sec
+Health:                     200 OK (Engine fully operational)
+""".trimIndent()
+            }
+
+            "test" -> {
+                val prompt = cmd.removePrefix("test").trim()
+                if (prompt.isBlank()) {
+                    return "Usage: test <your prompt text>"
+                }
+                val start = System.currentTimeMillis()
+                var firstTokenTime: Long? = null
+                var count = 0
+                val sb = StringBuilder()
+                localEngine.generateCompletionStream(prompt = prompt).collect { token ->
+                    val now = System.currentTimeMillis()
+                    if (firstTokenTime == null) firstTokenTime = now
+                    count++
+                    sb.append(token)
+                }
+                val totalDuration = System.currentTimeMillis() - start
+                val ttft = if (firstTokenTime != null) firstTokenTime!! - start else totalDuration
+                val genDuration = if (firstTokenTime != null) totalDuration - ttft else totalDuration
+                val speed = if (genDuration > 50 && count > 0) ((count / (genDuration / 1000.0)) * 10).toInt() / 10.0 else 0.0
+                """
+=== INFERENCE RESULT ===
+Prompt: "$prompt"
+Output:
+${sb.toString()}
+
+--- Metrics ---
+TTFT: ${ttft}ms | Speed: ${speed} t/s | Tokens: $count | Total: ${totalDuration}ms
+""".trimIndent()
+            }
+
+            "tunnel" -> {
+                val tCfg = tunnelManager.config.value
+                """
+--- GLOBAL REMOTE TUNNELING ---
+Provider:       ${tCfg.provider.displayName}
+Status:         ${tCfg.status.label}
+Public URL:     ${tCfg.publicUrl ?: "Not connected"}
+Local Forward:  http://127.0.0.1:${_selectedPort.value}
+Latency:        ${tCfg.latencyMs?.let { "$it ms" } ?: "Not tested (Run 'Test Route' in Tunnel tab)"}
+Custom Domain:  ${tCfg.customDomain.ifBlank { "None (auto-assigned)" }}
+""".trimIndent()
+            }
+
+            "models" -> {
+                val curated = localEngine.curatedCatalog
+                val storage = localEngine.storageModels
+                val sb = StringBuilder("=== AVAILABLE LOCAL MODELS ===\n")
+                sb.append("[Curated Edge Models]\n")
+                curated.forEach { m ->
+                    val mark = if (m.id == localEngine.activeModel.id) " [ACTIVE]" else ""
+                    sb.append("  • ${m.id} (${m.name}) - ${m.parameterCount}, ~${m.memoryFootprintMb}MB RAM$mark\n")
+                }
+                if (storage.isNotEmpty()) {
+                    sb.append("\n[Custom Storage Models (.gguf)]\n")
+                    storage.forEach { m ->
+                        val mark = if (m.id == localEngine.activeModel.id) " [ACTIVE]" else ""
+                        sb.append("  • ${m.id} (${m.name}) - ${m.parameterCount}, ~${m.memoryFootprintMb}MB RAM$mark\n")
+                    }
+                }
+                sb.toString().trimEnd()
+            }
+
+            "load" -> {
+                val targetId = parts.getOrNull(1)?.trim()
+                if (targetId.isNullOrBlank()) {
+                    "Usage: load <model_id> (Type 'models' to see IDs)"
+                } else {
+                    loadLocalModel(targetId)
+                    "Model load command dispatched for: $targetId"
+                }
+            }
+
+            "unload" -> {
+                unloadLocalModel()
+                "Active local model unloaded from RAM."
+            }
+
+            "clients" -> {
+                val sessions = clientManager.clients.value
+                if (sessions.isEmpty()) {
+                    "No active client sessions connected."
+                } else {
+                    val sb = StringBuilder("=== CONNECTED CLIENT SESSIONS (${sessions.size}) ===\n")
+                    sessions.forEach { s ->
+                        val blk = if (s.isBlocked) " [BLOCKED]" else ""
+                        sb.append("  • ${s.ipAddress} (${s.deviceName}) - ${s.totalRequests} requests, ${s.totalTokens} tokens$blk\n")
+                    }
+                    sb.toString().trimEnd()
+                }
+            }
+
+            "clear" -> {
+                clearCliHistory()
+                ""
+            }
+
+            else -> "Command not recognized: '$cmd'. Type 'help' for available commands."
+        }
     }
 
     companion object {

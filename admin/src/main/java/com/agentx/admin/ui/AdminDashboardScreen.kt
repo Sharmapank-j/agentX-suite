@@ -94,11 +94,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agentx.admin.models.ApiKeyRecord
+import com.agentx.admin.models.CliEntry
 import com.agentx.admin.models.ClientSession
 import com.agentx.admin.models.LocalModelStatus
 import com.agentx.admin.models.LocalServerModel
 import com.agentx.admin.models.ServingMode
 import com.agentx.admin.models.TrafficLog
+import com.agentx.admin.models.TunnelConfig
+import com.agentx.admin.models.TunnelProvider
+import com.agentx.admin.models.TunnelStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -311,7 +315,7 @@ fun AdminDashboardScreen(
             }
 
             // Tabs Header
-            val tabs = listOf("Local Models", "Telemetry", "Cloud Gateway", "Clients", "API Keys", "Logs", "Quickstart")
+            val tabs = listOf("Local Models", "CLI Console", "Tunneling", "Telemetry", "Cloud Gateway", "Clients", "API Keys", "Logs", "Quickstart")
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 edgePadding = 16.dp,
@@ -346,34 +350,45 @@ fun AdminDashboardScreen(
                             }
                         },
                         onScanStorage = { viewModel.scanDeviceStorage(context) },
-                        onRemoveStorageModel = { viewModel.removeStorageModel(it) },
-                        onTestPromptChange = { viewModel.setTestPrompt(it) },
-                        onRunTest = { viewModel.runLocalModelTest() },
-                        onClearTest = { viewModel.clearTestResponse() },
+                        onRemoveStorageModel = { viewModel.removeStorageModel(it) }
+                    )
+                    1 -> CliConsoleTab(
+                        cliHistory = state.cliHistory,
+                        isExecuting = state.isCliExecuting,
+                        onExecuteCommand = { viewModel.executeCliCommand(it) },
+                        onClear = { viewModel.clearCliHistory() },
                         onCopy = { clipboard.setText(AnnotatedString(it)) }
                     )
-                    1 -> TelemetryTab(state = state, portInput = portInput, onPortChange = {
+                    2 -> TunnelingTab(
+                        tunnelConfig = state.tunnelConfig,
+                        serverPort = state.selectedPort,
+                        onStartTunnel = { provider, token, domain -> viewModel.startTunnel(provider, token, domain) },
+                        onStopTunnel = { viewModel.stopTunnel() },
+                        onTestTunnel = { viewModel.testTunnelConnection() },
+                        onCopy = { clipboard.setText(AnnotatedString(it)) }
+                    )
+                    3 -> TelemetryTab(state = state, portInput = portInput, onPortChange = {
                         portInput = it
                         it.toIntOrNull()?.let { p -> viewModel.setPort(p) }
                     })
-                    2 -> CloudGatewayTab(
+                    4 -> CloudGatewayTab(
                         state = state,
                         onKeyChange = { viewModel.setGeminiApiKey(it) },
                         onModelChange = { viewModel.setActiveModel(it) },
                         onTest = { viewModel.testCloudConnection() }
                     )
-                    3 -> ClientsTab(
+                    5 -> ClientsTab(
                         clients = state.clients,
                         onToggleBlock = { viewModel.toggleBlockClient(it) }
                     )
-                    4 -> ApiKeysTab(
+                    6 -> ApiKeysTab(
                         apiKeys = state.apiKeys,
                         onCreateClick = { showCreateKeyDialog = true },
                         onRevoke = { viewModel.revokeApiKey(it) },
                         onCopy = { clipboard.setText(AnnotatedString(it)) }
                     )
-                    5 -> TrafficLogsTab(logs = state.trafficLogs)
-                    6 -> QuickstartTab(serverUrl = serverUrl, apiKeys = state.apiKeys)
+                    7 -> TrafficLogsTab(logs = state.trafficLogs)
+                    8 -> QuickstartTab(serverUrl = serverUrl, tunnelUrl = state.tunnelConfig.publicUrl, apiKeys = state.apiKeys)
                 }
             }
         }
@@ -424,11 +439,7 @@ private fun LocalModelsTab(
     onUnloadModel: () -> Unit,
     onPickModelFromStorage: () -> Unit,
     onScanStorage: () -> Unit,
-    onRemoveStorageModel: (String) -> Unit,
-    onTestPromptChange: (String) -> Unit,
-    onRunTest: () -> Unit,
-    onClearTest: () -> Unit,
-    onCopy: (String) -> Unit
+    onRemoveStorageModel: (String) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -813,13 +824,259 @@ private fun LocalModelsTab(
             }
         }
 
-        // Section 5: Built-in Interactive Live Test Console
+    }
+}
+
+@Composable
+private fun CliConsoleTab(
+    cliHistory: List<CliEntry>,
+    isExecuting: Boolean,
+    onExecuteCommand: (String) -> Unit,
+    onClear: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    var cmdInput by remember { mutableStateOf("") }
+    val listState = rememberScrollState()
+
+    LaunchedEffect(cliHistory.size) {
+        listState.animateScrollTo(listState.maxValue)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Top HUD & Controls
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF10B981).copy(alpha = 0.2f),
+                            modifier = Modifier.size(10.dp)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF10B981), CircleShape))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "CLI TEST & DIAGNOSTIC CONSOLE",
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onClear, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(
+                            onClick = {
+                                val fullLog = cliHistory.joinToString("\n") { (it.command?.let { c -> "> $c\n" } ?: "") + it.output }
+                                onCopy(fullLog)
+                            },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy Console", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick Command Chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val quickCommands = listOf("stats", "device", "llm", "bench", "tunnel", "models", "help")
+                    quickCommands.forEach { qc ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable { onExecuteCommand(qc) }
+                        ) {
+                            Text(
+                                qc,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Terminal Display Area
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF0F141C),
+            border = BorderStroke(1.dp, Color(0xFF1F2937)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+                    .verticalScroll(listState),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                cliHistory.forEach { entry ->
+                    if (!entry.command.isNullOrBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "agentx-serve:~$ ",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF10B981)
+                            )
+                            Text(
+                                entry.command,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF3F4F6)
+                            )
+                        }
+                    }
+
+                    if (entry.output.isNotBlank()) {
+                        Text(
+                            text = entry.output,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = if (entry.isError) Color(0xFFEF4444) else Color(0xFF93C5FD),
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                }
+
+                if (isExecuting) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color(0xFF10B981), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "executing command...",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color(0xFF10B981)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Command Prompt Input
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF131822),
+            border = BorderStroke(1.dp, Color(0xFF374151)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "agentx-serve:~$ ",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF10B981)
+                )
+
+                OutlinedTextField(
+                    value = cmdInput,
+                    onValueChange = { cmdInput = it },
+                    placeholder = {
+                        Text(
+                            "Type 'stats', 'device', 'bench', or 'help'...",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = Color(0xFF6B7280)
+                        )
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFF3F4F6)
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                IconButton(
+                    onClick = {
+                        if (cmdInput.isNotBlank()) {
+                            onExecuteCommand(cmdInput)
+                            cmdInput = ""
+                        }
+                    },
+                    enabled = !isExecuting && cmdInput.isNotBlank()
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send Command",
+                        tint = if (cmdInput.isNotBlank()) Color(0xFF10B981) else Color(0xFF4B5563)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TunnelingTab(
+    tunnelConfig: TunnelConfig,
+    serverPort: Int,
+    onStartTunnel: (TunnelProvider, String, String) -> Unit,
+    onStopTunnel: () -> Unit,
+    onTestTunnel: () -> Unit,
+    onCopy: (String) -> Unit
+) {
+    var selectedProvider by remember { mutableStateOf(tunnelConfig.provider) }
+    var authTokenInput by remember { mutableStateOf(tunnelConfig.authToken) }
+    var customDomainInput by remember { mutableStateOf(tunnelConfig.customDomain) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Section 1: Tunnel Status HUD Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                containerColor = if (tunnelConfig.isEnabled) Color(0xFF064E3B).copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant
             ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, if (tunnelConfig.isEnabled) Color(0xFF10B981) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -827,243 +1084,258 @@ private fun LocalModelsTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text("Live Model Test Console", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("Verify execution performance & throughput before serving LAN clients", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                    }
-
-                    if (state.testResponse != null) {
-                        IconButton(onClick = onClearTest) {
-                            Icon(Icons.Default.Delete, contentDescription = "Clear", tint = MaterialTheme.colorScheme.outline)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Active Target & Footprint Pill
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(
-                                        if (state.servingMode == ServingMode.LOCAL_MODEL) Color(0xFF00E5FF) else Color(0xFFA855F7),
-                                        CircleShape
-                                    )
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (state.servingMode == ServingMode.LOCAL_MODEL) "Local AirLLM: " else "Cloud Gateway: ",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                            Text(
-                                text = if (state.servingMode == ServingMode.LOCAL_MODEL) (state.activeLocalModel?.name ?: "No Local Model") else state.activeModel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (state.servingMode == ServingMode.LOCAL_MODEL) "~${state.activeLocalModel?.memoryFootprintMb ?: 2048} MB RAM" else "Cloud (0 MB)",
-                            style = MaterialTheme.typography.labelSmall,
+                            "GLOBAL TUNNEL ROUTING",
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.primary
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = if (tunnelConfig.isEnabled) Color(0xFF10B981) else MaterialTheme.colorScheme.outline
+                        )
+                        Text(
+                            if (tunnelConfig.isEnabled) "PUBLIC ROUTE ACTIVE" else "TUNNEL INACTIVE",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = when (tunnelConfig.status) {
+                            TunnelStatus.CONNECTED -> Color(0xFF10B981)
+                            TunnelStatus.STARTING -> Color(0xFFF59E0B)
+                            TunnelStatus.ERROR -> Color(0xFFEF4444)
+                            TunnelStatus.STOPPED -> MaterialTheme.colorScheme.outline
+                        }
+                    ) {
+                        Text(
+                            tunnelConfig.status.label,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Quick Prompt Chips
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { onTestPromptChange("Write an optimized asynchronous event dispatcher in Kotlin using CoroutineScope and StateFlow.") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Code Test", fontSize = 11.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { onTestPromptChange("Explain how layer-streaming AirLLM allows running multi-billion parameter models in low RAM.") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("AirLLM Test", fontSize = 11.sp)
-                    }
-                    OutlinedButton(
-                        onClick = { onTestPromptChange("Explain the pharmacological mechanism and interactions of oral anticoagulants.") },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Bio Test", fontSize = 11.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = state.testPrompt,
-                    onValueChange = onTestPromptChange,
-                    label = { Text("Test Prompt") },
-                    maxLines = 4,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (state.testTokensPerSecond > 0) {
-                        Text("Speed: ${String.format("%.1f", state.testTokensPerSecond)} t/s", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                    } else if (state.testLatencyMs > 0) {
-                        Text("Latency: ${state.testLatencyMs} ms", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                    } else {
-                        Spacer(modifier = Modifier.width(1.dp))
-                    }
-
-                    Button(
-                        onClick = onRunTest,
-                        enabled = !state.isGeneratingTest
-                    ) {
-                        if (state.isGeneratingTest) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Generating...")
-                        } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (state.servingMode == ServingMode.LOCAL_MODEL) "Run Local Inference" else "Run Gateway Inference")
-                        }
-                    }
-                }
-
-                // High-Precision Telemetry Metrics Dashboard
-                if (state.isGeneratingTest || state.testResponse != null) {
-                    Spacer(modifier = Modifier.height(10.dp))
+                if (tunnelConfig.isEnabled && tunnelConfig.publicUrl != null) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF181825),
-                        border = BorderStroke(1.dp, Color(0xFF313244)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("TTFT", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
-                                Text(
-                                    if (state.testTtftMs > 0) "${state.testTtftMs}ms" else "--",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF89B4FA),
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("TIME", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
-                                Text(
-                                    if (state.testLatencyMs > 0) "${state.testLatencyMs}ms" else if (state.isGeneratingTest) "..." else "--",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFCBA6F7),
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("SPEED", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
-                                Text(
-                                    if (state.testTokensPerSecond > 0) "${String.format("%.1f", state.testTokensPerSecond)} t/s" else "--",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFA6E3A1),
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("TOKENS", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
-                                Text(
-                                    if (state.testTokenCount > 0) "${state.testTokenCount}" else "--",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFAB387),
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFF313244)))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("STATUS", fontSize = 9.sp, color = Color(0xFFA6ADC8), fontFamily = FontFamily.Monospace)
-                                Text(
-                                    state.testStatus ?: (if (state.isGeneratingTest) "STREAM" else "IDLE"),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        state.isGeneratingTest -> Color(0xFFF9E2AF)
-                                        state.testStatus?.startsWith("200") == true -> Color(0xFFA6E3A1)
-                                        state.testStatus?.startsWith("FAIL") == true -> Color(0xFFF38BA8)
-                                        else -> Color(0xFFA6ADC8)
-                                    },
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Response Console
-                state.testResponse?.let { resp ->
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFF1E1E2E),
-                        border = BorderStroke(1.dp, Color(0xFF313244)),
+                        color = Color(0xFF111827),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("OUTPUT STREAM", fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF89B4FA))
-                                    if (state.testModelTested.isNotBlank()) {
-                                        Text(" • ${state.testModelTested}", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = Color(0xFFA6ADC8))
-                                    }
-                                }
-                                IconButton(onClick = { onCopy(resp) }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color(0xFFA6ADC8), modifier = Modifier.size(14.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Public Endpoint URL:", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9CA3AF))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                resp,
-                                color = Color(0xFFCDD6F4),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace
+                                tunnelConfig.publicUrl,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color(0xFF67E8F9)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Local Target: http://127.0.0.1:$serverPort (Forwarded)",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                color = Color(0xFF9CA3AF)
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { onCopy(tunnelConfig.publicUrl) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copy Base URL", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { onCopy("${tunnelConfig.publicUrl}/v1/chat/completions") },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Copy Endpoint", fontSize = 11.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Button(
+                        onClick = onTestTunnel,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Test Public Route Verification")
+                    }
+
+                    tunnelConfig.latencyMs?.let { lat ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "⚡ Verified Route Latency: ${lat}ms (Local Gateway HTTP 200 OK)",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = Color(0xFF10B981)
+                        )
+                    }
+                } else {
+                    Text(
+                        "Expose this phone's AI models securely across the web. Client apps, websites, and external users can connect from anywhere without opening router ports.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        }
+
+        // Section 2: Tunnel Configuration & Provider
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Tunnel Provider Configuration", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Provider Selectors
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TunnelProvider.values().forEach { provider ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selectedProvider == provider) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (selectedProvider == provider) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedProvider = provider }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .background(
+                                            if (selectedProvider == provider) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                            CircleShape
+                                        )
+                                        .clip(CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(provider.displayName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(
+                                        when (provider) {
+                                            TunnelProvider.CLOUDFLARE -> "Zero-configuration Cloudflare Quick Tunnel (Recommended, No sign-up required)"
+                                            TunnelProvider.NGROK -> "Secure ngrok forwarding with authtoken"
+                                            TunnelProvider.PINGGY -> "Instant SSH-based HTTPS forwarding via Pinggy.io"
+                                            TunnelProvider.CUSTOM_RELAY -> "Self-hosted corporate relay or custom domain reverse proxy"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Inputs
+                OutlinedTextField(
+                    value = authTokenInput,
+                    onValueChange = { authTokenInput = it },
+                    label = { Text("Auth Token (Optional for Cloudflare, required for ngrok)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = customDomainInput,
+                    onValueChange = { customDomainInput = it },
+                    label = { Text("Custom Domain / Subdomain (Optional)") },
+                    placeholder = { Text("e.g. my-old-phone-ai or https://ai.mydomain.com") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (tunnelConfig.isEnabled) {
+                        Button(
+                            onClick = onStopTunnel,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Stop Tunnel")
+                        }
+                    } else {
+                        Button(
+                            onClick = { onStartTunnel(selectedProvider, authTokenInput, customDomainInput) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Start Global HTTPS Tunnel")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 3: Old Phone 24/7 Hosting Guide
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("📱 24/7 Old Phone Hosting Setup Guide", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Turn any spare or retired Android phone into a high-performance, private AI micro-server:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val steps = listOf(
+                    "1. Connect Continuous Power" to "Plug the old phone into a dedicated 5V/2A wall charger to prevent battery depletion during multi-day inference.",
+                    "2. Wi-Fi Power Optimization" to "In Android Wi-Fi settings, set 'Keep Wi-Fi on during sleep' to Always, ensuring network sockets stay open.",
+                    "3. CPU WakeLock Active" to "AgentX Serve automatically holds a PARTIAL_WAKE_LOCK while running so layer streaming continues when screen is off.",
+                    "4. Connect Client Devices" to "Copy the LAN URL (for devices at home) or the Tunnel URL (for devices anywhere in the world) into your client apps."
+                )
+
+                steps.forEach { (title, desc) ->
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1371,7 +1643,7 @@ private fun TrafficLogsTab(logs: List<TrafficLog>) {
 }
 
 @Composable
-private fun QuickstartTab(serverUrl: String, apiKeys: List<ApiKeyRecord>) {
+private fun QuickstartTab(serverUrl: String, tunnelUrl: String? = null, apiKeys: List<ApiKeyRecord>) {
     val activeKey = apiKeys.firstOrNull { !it.isRevoked }?.key ?: "agx_adm_your_key_here"
     val clipboard = LocalClipboardManager.current
 
@@ -1428,6 +1700,24 @@ response = client.chat.completions.create(
 )
 print(response.choices[0].message.content)
     """.trimIndent()
+
+    val pythonWanSnippet = tunnelUrl?.let { tun ->
+        """
+from openai import OpenAI
+
+# Connect to this old phone from ANYWHERE in the world over HTTPS Tunnel!
+client = OpenAI(
+    base_url="$tun/v1",
+    api_key="$activeKey"
+)
+
+response = client.chat.completions.create(
+    model="llama-3.2-3b",
+    messages=[{"role": "user", "content": "Hello from outside my home network!"}]
+)
+print(response.choices[0].message.content)
+        """.trimIndent()
+    }
 
     val agentXConnectSnippet = """
 1. Open AgentX on your primary device.

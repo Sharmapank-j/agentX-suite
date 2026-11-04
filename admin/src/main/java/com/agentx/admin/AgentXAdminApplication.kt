@@ -8,6 +8,7 @@ import com.agentx.admin.server.CloudGeminiGateway
 import com.agentx.admin.server.LocalModelServerEngine
 import com.agentx.admin.server.LocalTlsManager
 import com.agentx.admin.server.ThermalBatteryManager
+import com.agentx.admin.server.TunnelManager
 
 class AgentXAdminApplication : Application() {
 
@@ -26,6 +27,9 @@ class AgentXAdminApplication : Application() {
     lateinit var tlsManager: LocalTlsManager
         private set
 
+    lateinit var tunnelManager: TunnelManager
+        private set
+
     lateinit var nsdHelper: AgentXNsdHelper
         private set
 
@@ -36,10 +40,11 @@ class AgentXAdminApplication : Application() {
         super.onCreate()
         thermalManager = ThermalBatteryManager(this)
         tlsManager = LocalTlsManager(this)
+        tunnelManager = TunnelManager(this)
         nsdHelper = AgentXNsdHelper(this)
         clientManager = ClientManager()
         cloudGateway = CloudGeminiGateway()
         localEngine = LocalModelServerEngine(thermalManager)
-        server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager)
+        server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager)
     }
 }

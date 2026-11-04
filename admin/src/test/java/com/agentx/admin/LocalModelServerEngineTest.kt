@@ -5,7 +5,10 @@ import com.agentx.admin.models.ServingMode
 import com.agentx.admin.server.AgentXAdminServer
 import com.agentx.admin.server.ClientManager
 import com.agentx.admin.server.CloudGeminiGateway
+import com.agentx.admin.models.TunnelProvider
+import com.agentx.admin.models.TunnelStatus
 import com.agentx.admin.server.LocalModelServerEngine
+import com.agentx.admin.server.TunnelManager
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -41,10 +44,63 @@ class LocalModelServerEngineTest {
     fun testAllModelsHaveBoundedRamFootprint() {
         for (model in engine.curatedCatalog) {
             assertTrue(
-                "Model ${model.id} RAM usage (${model.memoryFootprintMb}MB) must be bounded within 2048MB (2.0GB)",
+                "Model ${model.id} RAM usage (${model.memoryFootprintMb}MB) must be >= 1000MB for 1k-2k footprint",
+                model.memoryFootprintMb >= 1000L
+            )
+            assertTrue(
+                "Model ${model.id} RAM usage (${model.memoryFootprintMb}MB) must be <= 2048MB (2.0GB)",
                 model.memoryFootprintMb <= 2048L
             )
         }
+    }
+
+    @Test
+    fun testLayerStreamingRamComputationAcrossDeviceTiers() {
+        val tierHigh: Long = LocalModelServerEngine.computeLayerStreamingRamMb(8L * 1024 * 1024 * 1024)
+        assertEquals(2048L, tierHigh)
+
+        val tierMid: Long = LocalModelServerEngine.computeLayerStreamingRamMb(4L * 1024 * 1024 * 1024)
+        assertEquals(1850L, tierMid)
+
+        val tierBudget: Long = LocalModelServerEngine.computeLayerStreamingRamMb(2L * 1024 * 1024 * 1024)
+        assertEquals(1420L, tierBudget)
+
+        val tierLegacyOldPhone: Long = LocalModelServerEngine.computeLayerStreamingRamMb(1L * 1024 * 1024 * 1024)
+        assertEquals(1024L, tierLegacyOldPhone)
+
+        val tiers = listOf(tierHigh, tierMid, tierBudget, tierLegacyOldPhone)
+        for (ram in tiers) {
+            assertTrue("Calculated RAM $ram must be within 1000MB..2048MB range", ram in 1000L..2048L)
+        }
+    }
+
+    @Test
+    fun testTunnelManagerStartAndStopLifecycle() {
+        val tunnelManager = TunnelManager()
+        assertEquals(TunnelStatus.STOPPED, tunnelManager.config.value.status)
+        assertFalse(tunnelManager.config.value.isEnabled)
+
+        val started = tunnelManager.startTunnel(TunnelProvider.CLOUDFLARE)
+        assertTrue(started.isEnabled)
+        assertEquals(TunnelStatus.CONNECTED, started.status)
+        assertNotNull(started.publicUrl)
+        assertTrue(started.publicUrl!!.contains("trycloudflare.com"))
+
+        val stopped = tunnelManager.stopTunnel()
+        assertFalse(stopped.isEnabled)
+        assertEquals(TunnelStatus.STOPPED, stopped.status)
+    }
+
+    @Test
+    fun testTunnelManagerProviderDomainHandling() {
+        val tunnelManager = TunnelManager()
+
+        val ngrok = tunnelManager.startTunnel(TunnelProvider.NGROK, token = "test_token", customDomain = "my-test-subdomain")
+        assertEquals("https://my-test-subdomain.ngrok-free.app", ngrok.publicUrl)
+        assertEquals("test_token", ngrok.authToken)
+
+        val custom = tunnelManager.startTunnel(TunnelProvider.CUSTOM_RELAY, customDomain = "https://ai.custom-relay.org")
+        assertEquals("https://ai.custom-relay.org", custom.publicUrl)
     }
 
     @Test
