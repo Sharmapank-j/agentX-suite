@@ -47,6 +47,10 @@ class AgentXApplication : Application() {
     lateinit var inferenceEngine: InferenceEngine
         private set
 
+    // ─── Settings Preferences ─────────────────────────────────────────────
+    lateinit var preferencesManager: com.agentx.data.local.SettingsPreferencesManager
+        private set
+
     lateinit var hybridInferenceEngine: HybridInferenceEngine
         private set
 
@@ -88,15 +92,23 @@ class AgentXApplication : Application() {
         database = AgentXDatabase.getInstance(this)
         modelFileManager = ModelFileManager(this)
         huggingFaceDownloader = HuggingFaceDownloader(this, modelFileManager)
+        preferencesManager = com.agentx.data.local.SettingsPreferencesManager(this)
+
+        val savedCloudConfig = preferencesManager.loadCloudConfig()
+        val savedMode = preferencesManager.loadInferenceMode()
+        val savedBackend = preferencesManager.loadLocalBackend()
+
         val localLlama = LlamaCppEngine()
         val airLlm = com.agentx.core.inference.AirLlmEngine()
-        val cloudEngine = CloudInferenceEngine()
+        val cloudEngine = CloudInferenceEngine(config = savedCloudConfig)
         hybridInferenceEngine = HybridInferenceEngine(
             llamaEngine = localLlama,
             airLlmEngine = airLlm,
             cloudEngine = cloudEngine,
-            activeLocalBackend = com.agentx.core.inference.LocalBackendType.AIR_LLM
-        )
+            activeLocalBackend = savedBackend
+        ).apply {
+            inferenceMode = savedMode
+        }
         inferenceEngine = hybridInferenceEngine
 
         // Repositories

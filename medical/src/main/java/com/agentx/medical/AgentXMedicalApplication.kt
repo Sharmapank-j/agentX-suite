@@ -47,6 +47,9 @@ class AgentXMedicalApplication : Application() {
     lateinit var inferenceEngine: InferenceEngine
         private set
 
+    lateinit var preferencesManager: com.agentx.medical.data.local.SettingsPreferencesManager
+        private set
+
     lateinit var hybridInferenceEngine: HybridInferenceEngine
         private set
 
@@ -88,15 +91,21 @@ class AgentXMedicalApplication : Application() {
         database = AgentXMedicalDatabase.getInstance(this)
         modelFileManager = ModelFileManager(this)
         huggingFaceDownloader = HuggingFaceDownloader(this, modelFileManager)
+        preferencesManager = com.agentx.medical.data.local.SettingsPreferencesManager(this)
+
+        val savedCloudConfig = preferencesManager.loadCloudConfig()
+        val savedMode = preferencesManager.loadInferenceMode()
+        val savedBackend = preferencesManager.loadLocalBackend()
         val localLlama = LlamaCppEngine()
         val airLlm = com.agentx.medical.core.inference.AirLlmEngine()
-        val cloudEngine = CloudInferenceEngine()
+        val cloudEngine = CloudInferenceEngine(config = savedCloudConfig)
         hybridInferenceEngine = HybridInferenceEngine(
             llamaEngine = localLlama,
             airLlmEngine = airLlm,
             cloudEngine = cloudEngine,
-            activeLocalBackend = com.agentx.medical.core.inference.LocalBackendType.AIR_LLM
+            activeLocalBackend = savedBackend
         )
+        hybridInferenceEngine.inferenceMode = savedMode
         inferenceEngine = hybridInferenceEngine
 
         // Repositories

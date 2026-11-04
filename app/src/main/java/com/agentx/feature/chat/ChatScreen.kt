@@ -297,7 +297,7 @@ fun ChatScreen(
                             )
                         }
                         Text(
-                            "≤200MB",
+                            "2.0GB Budget",
                             style = MaterialTheme.typography.labelSmall,
                             color = ElectricCyan,
                             fontWeight = FontWeight.Bold
@@ -311,7 +311,7 @@ fun ChatScreen(
             topBar = {
                 CyberTopAppBar(
                     conversationTitle = state.currentConversation?.title ?: "AgentX Chat",
-                    selectedAgentName = state.selectedAgent?.name ?: "Chief Orchestrator",
+                    selectedAgentName = state.selectedAgent?.name ?: "AgentX",
                     activeModel = state.activeModel,
                     onTitleClick = {
                         renameText = state.currentConversation?.title ?: ""
@@ -330,14 +330,6 @@ fun ChatScreen(
             },
             bottomBar = {
                 Column {
-                    // Active Multi-Agent Execution Progress Card
-                    state.activeExecutionState?.let { exec ->
-                        MultiAgentProgressCard(
-                            execState = exec,
-                            onInspectClick = onNavigateToMonitor
-                        )
-                    }
-
                     // Live Inference Streaming Metrics Bar
                     if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
                         LiveMetricsHud(metrics = state.liveMetrics)
@@ -499,7 +491,7 @@ fun ChatScreen(
                     )
                 }
                 Text(
-                    text = "Select which local GGUF/AirLLM model executes on-device inference. Progressive streaming maintains ≤200MB RAM usage.",
+                    text = "Select which local GGUF/AirLLM model executes on-device inference. High-capacity layer streaming supports models up to 2.0GB RAM budget.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -633,7 +625,7 @@ private fun CyberTopAppBar(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Autonomous AI • Multi-Agent Engine",
+                        text = "AgentX Assistant • Online",
                         style = MaterialTheme.typography.labelSmall,
                         color = ElectricCyan,
                         fontSize = 11.sp
@@ -913,7 +905,7 @@ private fun DidYouKnowWelcomeCard(
             color = TextPrimary
         )
         Text(
-            "AirLLM Layer Streaming • Multi-Agent Autonomous Engine",
+            "Personal AI Assistant • Local & Cloud Intelligence",
             style = MaterialTheme.typography.labelSmall,
             color = TextSecondary
         )

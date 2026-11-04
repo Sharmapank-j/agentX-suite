@@ -219,7 +219,7 @@ fun ChatScreen(
                                 )
                             }
                             Text(
-                                text = "Agent: ${state.selectedAgent?.name ?: "Chief Clinical Supervisor"}",
+                                text = "Agent: ${state.selectedAgent?.name ?: "AgentX Medical"}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -277,49 +277,6 @@ fun ChatScreen(
             },
             bottomBar = {
                 Column {
-                    state.activeExecutionState?.let { exec ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onNavigateToMonitor() }
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Multi-Agent Pipeline Active (Step ${exec.currentStep}/${exec.totalSteps})",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        text = exec.currentActivity,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Monitor →",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
                     if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
                         Surface(
                             shape = RoundedCornerShape(20.dp),
@@ -517,7 +474,7 @@ fun ChatScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Select which local GGUF model powers the multi-agent system. Sequential model execution ensures memory safety.",
+                    text = "Select which local model powers clinical consultations. High-capacity layer streaming ensures fast, memory-safe execution.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -917,7 +874,7 @@ private fun MedicalDidYouKnowCard(
             fontWeight = FontWeight.Bold
         )
         Text(
-            "Evidence-Based CDS • Local Clinical Tools • Multi-Agent Collaboration",
+            "Evidence-Based Clinical Decision Support • Fast & Private",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )

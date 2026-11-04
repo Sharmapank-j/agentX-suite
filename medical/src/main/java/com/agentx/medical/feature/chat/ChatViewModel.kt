@@ -268,7 +268,7 @@ class ChatViewModel(
 
         val state = uiState.value
         val agent = state.selectedAgent
-        val agentName = agent?.name ?: "Chief Clinical Supervisor"
+        val agentName = agent?.name ?: "AgentX Medical"
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
@@ -296,8 +296,10 @@ class ChatViewModel(
             conversationRepository.sendMessage(userMsg)
             _inputText.value = ""
 
-            val isSupervisor = agent == null || agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor"
-            if (isSupervisor && clinicalSupervisor != null) {
+            val isExplicitSupervisorTask = (agent != null && (agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
+                    text.startsWith("/orchestrate", ignoreCase = true) ||
+                    text.startsWith("/plan", ignoreCase = true)
+            if (isExplicitSupervisorTask && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
                     userPrompt = text,
@@ -326,15 +328,17 @@ class ChatViewModel(
 
         val convId = _currentConversationId.value ?: return
         val agent = uiState.value.selectedAgent
-        val agentName = agent?.name ?: "Chief Clinical Supervisor"
+        val agentName = agent?.name ?: "AgentX Medical"
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
             // Delete the old assistant response
             conversationRepository.deleteMessage(assistantMessageId)
 
-            val isSupervisor = agent == null || agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor"
-            if (isSupervisor && clinicalSupervisor != null) {
+            val isExplicitSupervisorTask = (agent != null && (agent.role == AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
+                    userQuery.startsWith("/orchestrate", ignoreCase = true) ||
+                    userQuery.startsWith("/plan", ignoreCase = true)
+            if (isExplicitSupervisorTask && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
                     userPrompt = userQuery,
@@ -361,8 +365,8 @@ class ChatViewModel(
             id = assistantMsgId,
             conversationId = convId,
             role = MessageRole.ASSISTANT,
-            senderName = "$agentName (Multi-Agent Team)",
-            content = "⏳ Multi-agent clinical team assembling...\nDecomposing inquiry into specialized subtasks.",
+            senderName = agentName,
+            content = "Clinical analysis in progress...",
             agentId = "agent_supervisor",
             status = MessageStatus.STREAMING
         )
@@ -377,33 +381,13 @@ class ChatViewModel(
             } else if (inferenceEngine.getModelStatus().state == ModelLifecycleState.NOT_LOADED) {
                 inferenceEngine.loadModel(ModelConfig(modelId = "model_default", modelPath = ""))
             }
-        } catch (_: Exception) { }
-
-        val progressJob = executionQueue?.let { queue ->
-            viewModelScope.launch {
-                queue.state.collect { state ->
-                    if (state.status == ExecutionStatus.RUNNING) {
-                        val progressHeader = "🔄 **Multi-Agent Clinical Pipeline Active** (Step ${state.currentStep}/${state.totalSteps})\n"
-                        val activityText = "• **Current Activity**: ${state.currentActivity}\n"
-                        val intermediate = if (state.intermediateOutputs.isNotEmpty()) {
-                            "\n**Completed Specialist Findings:**\n" + state.intermediateOutputs.joinToString("\n") { "  - $it" }
-                        } else ""
-                        assistantMsg = assistantMsg.copy(
-                            content = progressHeader + activityText + intermediate,
-                            status = MessageStatus.STREAMING
-                        )
-                        conversationRepository.updateMessage(assistantMsg)
-                    }
-                }
-            }
-        }
+        } catch (_: Throwable) { }
 
         try {
             val coordResult = clinicalSupervisor?.coordinate(
                 userGoal = userPrompt,
                 conversationId = convId
             )
-            progressJob?.cancel()
 
             if (coordResult != null && coordResult.output.isNotBlank() && coordResult.output != "[No output generated]") {
                 assistantMsg = assistantMsg.copy(
@@ -412,19 +396,24 @@ class ChatViewModel(
                     status = MessageStatus.COMPLETED
                 )
                 conversationRepository.updateMessage(assistantMsg)
+                _isStreaming.value = false
+                _modelStatus.value = inferenceEngine.getModelStatus()
             } else {
-                executeInference(convId, userPrompt, null, agentName)
+                streamInferenceIntoMessage(convId, userPrompt, null, assistantMsg)
             }
-        } catch (e: Exception) {
-            progressJob?.cancel()
-            assistantMsg = assistantMsg.copy(
-                content = "Error during multi-agent clinical coordination: ${e.message}",
-                status = MessageStatus.ERROR
-            )
-            conversationRepository.updateMessage(assistantMsg)
-        } finally {
-            _isStreaming.value = false
-            _modelStatus.value = inferenceEngine.getModelStatus()
+        } catch (_: Throwable) {
+            // Graceful zero-crash fallback to direct streaming inference on the same message
+            try {
+                streamInferenceIntoMessage(convId, userPrompt, null, assistantMsg)
+            } catch (t2: Throwable) {
+                assistantMsg = assistantMsg.copy(
+                    content = "⚠️ Unable to complete clinical consult: ${t2.message ?: "Unknown error"}. Check model connection in Settings.",
+                    status = MessageStatus.ERROR
+                )
+                conversationRepository.updateMessage(assistantMsg)
+                _isStreaming.value = false
+                _modelStatus.value = inferenceEngine.getModelStatus()
+            }
         }
     }
 
@@ -435,7 +424,7 @@ class ChatViewModel(
         agentName: String
     ) {
         val assistantMsgId = UUID.randomUUID().toString()
-        var assistantMsg = Message(
+        val assistantMsg = Message(
             id = assistantMsgId,
             conversationId = convId,
             role = MessageRole.ASSISTANT,
@@ -455,11 +444,22 @@ class ChatViewModel(
             } else if (inferenceEngine.getModelStatus().state == ModelLifecycleState.NOT_LOADED) {
                 inferenceEngine.loadModel(ModelConfig(modelId = "model_default", modelPath = ""))
             }
-        } catch (_: Exception) { }
+        } catch (_: Throwable) { }
+
+        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg)
+    }
+
+    private suspend fun streamInferenceIntoMessage(
+        convId: String,
+        userPrompt: String,
+        agent: Agent?,
+        initialMsg: Message
+    ) {
+        var assistantMsg = initialMsg
 
         // Context Budgeting & Sliding Window Construction
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
-            .filter { it.id != assistantMsgId }
+            .filter { it.id != assistantMsg.id }
 
         val activeModelConfig = modelRepository.getActiveModel().first()
         val maxContext = activeModelConfig?.contextLength ?: 2048
@@ -535,8 +535,18 @@ class ChatViewModel(
                 is GenerationEvent.Error -> {
                     _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
                     val currentText = buffer.toString()
+                    val errorDetail = event.message.orEmpty()
+                    val diagnostic = when {
+                        errorDetail.contains("unauthorized", ignoreCase = true) || errorDetail.contains("401") ->
+                            "Authentication failed (HTTP 401). Please check the API Key in Settings -> Cloud Models."
+                        errorDetail.contains("connect", ignoreCase = true) || errorDetail.contains("refused", ignoreCase = true) ->
+                            "Could not connect to model host ($errorDetail). Verify that AgentX Serve is active on your Wi-Fi network and check the IP in Settings."
+                        errorDetail.contains("No model loaded", ignoreCase = true) ->
+                            "No clinical model loaded. Switch to AirLLM in Settings or import a GGUF model in the Models tab."
+                        else -> errorDetail.ifBlank { "Clinical inference generation encountered an error" }
+                    }
                     assistantMsg = assistantMsg.copy(
-                        content = if (currentText.isNotEmpty()) currentText else "Error during generation: ${event.message}",
+                        content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Clinical Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
                         status = MessageStatus.ERROR
                     )
                     conversationRepository.updateMessage(assistantMsg)

@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Bounds memory consumption to < 250 MB by streaming model transformer blocks layer-by-layer.
  */
 class AirLlmEngine(
-    val maxMemoryBudgetBytes: Long = 256L * 1024L * 1024L
+    val maxMemoryBudgetBytes: Long = 2048L * 1024L * 1024L // 2.0 GB (above 1.5 GB RAM budget)
 ) : InferenceEngine {
 
     private val mutex = Mutex()
@@ -37,11 +37,11 @@ class AirLlmEngine(
                 state = ModelLifecycleState.LOADING,
                 activeModelId = config.modelId,
                 activeModelName = File(config.modelPath).name.ifBlank { config.modelId },
-                memoryUsageBytes = 64L * 1024L * 1024L
+                memoryUsageBytes = 128L * 1024L * 1024L
             )
 
             delay(150)
-            val layerStreamingMemory = 196L * 1024L * 1024L
+            val layerStreamingMemory = 1536L * 1024L * 1024L // 1.5 GB working buffer for medical 7B-14B models
 
             currentConfig = config
             status = ModelStatus(

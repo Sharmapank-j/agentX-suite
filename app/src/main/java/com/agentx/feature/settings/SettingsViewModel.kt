@@ -64,14 +64,15 @@ class SettingsViewModel(
     private val executionRepository: ExecutionRepository,
     private val executionQueue: ExecutionQueue? = null,
     private val hybridInferenceEngine: HybridInferenceEngine? = null,
-    private val nsdDiscovery: GatewayNsdDiscovery? = null
+    private val nsdDiscovery: GatewayNsdDiscovery? = null,
+    private val preferencesManager: com.agentx.data.local.SettingsPreferencesManager? = null
 ) : ViewModel() {
 
-    private val _darkTheme = MutableStateFlow(true)
-    private val _threads = MutableStateFlow(4)
-    private val _mlock = MutableStateFlow(false)
+    private val _darkTheme = MutableStateFlow(preferencesManager?.loadDarkTheme() ?: true)
+    private val _threads = MutableStateFlow(preferencesManager?.loadThreads() ?: 4)
+    private val _mlock = MutableStateFlow(preferencesManager?.loadMlock() ?: false)
     private val _cloudConfig = MutableStateFlow(
-        hybridInferenceEngine?.cloudEngine?.config ?: CloudModelConfig()
+        preferencesManager?.loadCloudConfig() ?: hybridInferenceEngine?.cloudEngine?.config ?: CloudModelConfig()
     )
     private val _cloudTestResult = MutableStateFlow<String?>(null)
     private val _isTestingConnection = MutableStateFlow(false)
@@ -173,6 +174,7 @@ class SettingsViewModel(
         _cloudConfig.value = updated
         hybridInferenceEngine?.inferenceMode = mode
         hybridInferenceEngine?.cloudEngine?.config = updated
+        preferencesManager?.saveCloudConfig(updated)
     }
 
     fun updateCloudConfig(
@@ -190,6 +192,7 @@ class SettingsViewModel(
         )
         _cloudConfig.value = updated
         hybridInferenceEngine?.cloudEngine?.config = updated
+        preferencesManager?.saveCloudConfig(updated)
     }
 
     fun testCloudConnection() {
@@ -367,13 +370,16 @@ class SettingsViewModel(
 
     fun setDarkTheme(enabled: Boolean) {
         _darkTheme.value = enabled
+        preferencesManager?.saveDarkTheme(enabled)
     }
 
     fun setCpuThreads(threads: Int) {
         _threads.value = threads
+        preferencesManager?.saveThreads(threads)
     }
 
     fun setMlock(enabled: Boolean) {
         _mlock.value = enabled
+        preferencesManager?.saveMlock(enabled)
     }
 }

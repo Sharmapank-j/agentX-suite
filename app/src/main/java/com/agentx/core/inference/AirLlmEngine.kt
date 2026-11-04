@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * and performing layer-by-layer progressive forward passes.
  */
 class AirLlmEngine(
-    val maxMemoryBudgetBytes: Long = 256L * 1024L * 1024L // 256 MB bounded footprint
+    val maxMemoryBudgetBytes: Long = 2048L * 1024L * 1024L // 2.0 GB (above 1.5 GB RAM budget)
 ) : InferenceEngine {
 
     private val mutex = Mutex()
@@ -39,14 +39,14 @@ class AirLlmEngine(
                 state = ModelLifecycleState.LOADING,
                 activeModelId = config.modelId,
                 activeModelName = File(config.modelPath).name.ifBlank { config.modelId },
-                memoryUsageBytes = 64L * 1024L * 1024L // Initial buffer initialization
+                memoryUsageBytes = 128L * 1024L * 1024L // Initial buffer initialization
             )
 
             // Simulate AirLLM layer index mapping from disk
             delay(150)
 
-            // AirLLM only keeps a single transformer layer block in memory at any time
-            val layerStreamingMemory = 196L * 1024L * 1024L // 196 MB working block buffer
+            // High-capacity working block buffer (1.5 GB RAM allocation for 7B-14B models and large KV cache)
+            val layerStreamingMemory = 1536L * 1024L * 1024L
 
             currentConfig = config
             status = ModelStatus(

@@ -103,7 +103,7 @@ abstract class AgentXDatabase : RoomDatabase() {
                         name = "Chief Orchestrator & Supervisor",
                         role = "SUPERVISOR",
                         systemPrompt = "You are the Chief Orchestrator of AgentX, an advanced multi-agent personal AI assistant. You decompose user requests, coordinate specialized agents across coding, analysis, research, and planning, and synthesize cohesive, comprehensive responses.",
-                        isDefault = true,
+                        isDefault = false,
                         icon = "hub"
                     ),
                     AgentEntity(

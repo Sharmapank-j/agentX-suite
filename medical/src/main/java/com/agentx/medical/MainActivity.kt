@@ -77,7 +77,8 @@ class MainActivity : ComponentActivity() {
                         app.toolRepository,
                         app.executionRepository,
                         app.executionQueue,
-                        app.hybridInferenceEngine
+                        app.hybridInferenceEngine,
+                        preferencesManager = app.preferencesManager
                     ) as T
                 }
             }

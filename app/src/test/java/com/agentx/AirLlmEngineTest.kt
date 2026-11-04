@@ -41,7 +41,7 @@ class AirLlmEngineTest {
         val status = engine.getModelStatus()
         assertEquals(ModelLifecycleState.LOADED, status.state)
         assertEquals("airllm_deepseek_7b", status.activeModelId)
-        assertTrue("Memory footprint must be bounded under 256MB", status.memoryUsageBytes <= 256L * 1024L * 1024L)
+        assertTrue("Memory footprint must be bounded under memory budget (>1.5GB)", status.memoryUsageBytes <= engine.maxMemoryBudgetBytes)
         assertTrue("Active memory must be > 0", status.memoryUsageBytes > 0)
     }
 
