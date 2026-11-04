@@ -89,57 +89,57 @@ abstract class AgentXDatabase : RoomDatabase() {
                 val defaultAgents = listOf(
                     AgentEntity(
                         id = "agent_supervisor",
-                        name = "Chief Clinical Supervisor",
+                        name = "Chief Orchestrator & Supervisor",
                         role = "SUPERVISOR",
-                        systemPrompt = "You are the Chief Clinical Supervisor. You govern clinical consultations, medical curriculum inquiries, and multi-agent workflows. Decompose clinical questions, coordinate specialized medical agents, and synthesize verifiable, physician-grade reports adhering to evidence-based medicine.",
+                        systemPrompt = "You are the Chief Orchestrator of AgentX, an advanced multi-agent personal AI assistant. You decompose user requests, coordinate specialized agents across coding, analysis, research, and planning, and synthesize cohesive, comprehensive responses.",
                         isDefault = true,
-                        icon = "medical_services"
+                        icon = "hub"
                     ),
                     AgentEntity(
                         id = "agent_planner",
-                        name = "Clinical Task Planner",
+                        name = "Strategy & Task Planner",
                         role = "PLANNER",
-                        systemPrompt = "You are the Clinical Task Planner. Decompose patient presentations, study goals (e.g. cardiovascular physiology), and clinical inquiries into structured, chronological subtasks with clear objectives and dependencies.",
+                        systemPrompt = "You are the Strategy & Task Planner for AgentX. You decompose user requests into structured, actionable execution phases with clear deliverables and dependency chains.",
                         isDefault = true,
                         icon = "checklist"
                     ),
                     AgentEntity(
                         id = "agent_researcher",
-                        name = "Medical Literature Researcher",
+                        name = "Knowledge & Tech Researcher",
                         role = "RESEARCHER",
-                        systemPrompt = "You are the Medical Literature Researcher. Query clinical guidelines (AHA/ACC, ESC, NICE, WHO), pharmacological monographs, and verified biomedical knowledge. Emphasize peer-reviewed evidence and standard-of-care recommendations.",
+                        systemPrompt = "You are the Knowledge & Tech Researcher for AgentX. You retrieve documentation, explain scientific mechanisms, and synthesize authoritative empirical data across computing, science, and engineering.",
                         isDefault = true,
                         icon = "menu_book"
                     ),
                     AgentEntity(
                         id = "agent_coder",
-                        name = "Biomedical & Clinical Coder",
+                        name = "Code & Systems Architect",
                         role = "CODER",
-                        systemPrompt = "You are the Biomedical & Clinical Coder. Calculate clinical scores (eGFR, CHA2DS2-VASc, Wells, MELD, APACHE II, Corrected QT) and execute biomedical algorithms with absolute mathematical precision.",
+                        systemPrompt = "You are the Code & Systems Architect for AgentX. You design modular software, write clean, idiomatic code, solve algorithms, and debug complex runtime issues.",
                         isDefault = true,
-                        icon = "calculate"
+                        icon = "code"
                     ),
                     AgentEntity(
                         id = "agent_analyst",
-                        name = "Diagnostic & Pathophysiology Analyst",
+                        name = "Data & Math Analyst",
                         role = "ANALYST",
-                        systemPrompt = "You are the Diagnostic & Pathophysiology Analyst. Formulate clinical differential diagnoses, correlate lab abnormalities with symptomatology, and perform structured pathophysiological reasoning.",
+                        systemPrompt = "You are the Data & Math Analyst for AgentX. You perform calculations, statistical evaluations, structured data analysis, and comparative trade-off evaluations.",
                         isDefault = true,
                         icon = "analytics"
                     ),
                     AgentEntity(
                         id = "agent_reviewer",
-                        name = "Clinical Safety & Reviewer",
+                        name = "Quality & Logic Auditor",
                         role = "REVIEWER",
-                        systemPrompt = "You are the Clinical Safety Reviewer. Act as the clinical safety barrier: rigorously audit all recommendations for contraindications, drug interactions, black-box warnings, dosage safety, and prevent medical hallucinations.",
+                        systemPrompt = "You are the Quality & Logic Auditor for AgentX. You review specialist outputs for correctness, edge cases, vulnerabilities, and logical soundness.",
                         isDefault = true,
                         icon = "verified_user"
                     ),
                     AgentEntity(
                         id = "agent_synthesizer",
-                        name = "Medical Synthesizer",
+                        name = "Master Synthesizer",
                         role = "SYNTHESIZER",
-                        systemPrompt = "You are the Medical Synthesizer. Merge multi-agent clinical findings into an elegant, structured summary with clinical indications, key takeaways, citations, and standard medical disclaimers.",
+                        systemPrompt = "You are the Master Synthesizer for AgentX. You weave together all specialist contributions into a unified, engaging, and polished final response.",
                         isDefault = true,
                         icon = "auto_awesome"
                     ),
@@ -158,36 +158,44 @@ abstract class AgentXDatabase : RoomDatabase() {
             private suspend fun populateDefaultTools(toolDao: ToolDao) {
                 val defaultTools = listOf(
                     ToolEntity(
+                        id = "tool_calculator",
+                        name = "High-Precision Math & Expression Evaluator",
+                        description = "Evaluates mathematical expressions, arithmetic, percentages, powers, square roots, and unit conversions",
+                        category = "Mathematics",
+                        requiresPermission = false,
+                        schemaJson = "{\"expression\": \"string\"}"
+                    ),
+                    ToolEntity(
+                        id = "tool_device_specs",
+                        name = "Device Telemetry & Performance Inspector",
+                        description = "Inspects available RAM, CPU cores, battery level, and free storage to recommend optimal on-device AI models",
+                        category = "System & Hardware",
+                        requiresPermission = false,
+                        schemaJson = "{}"
+                    ),
+                    ToolEntity(
+                        id = "tool_datetime",
+                        name = "Date, Time & Timezone Utility",
+                        description = "Provides current UTC/local time, ISO-8601 formatting, date differences, and timezone conversions",
+                        category = "Utilities",
+                        requiresPermission = false,
+                        schemaJson = "{\"action\": \"string\", \"timezone\": \"string\"}"
+                    ),
+                    ToolEntity(
+                        id = "tool_text_analyzer",
+                        name = "Text Statistics & Readability Analyzer",
+                        description = "Analyzes word counts, character counts, reading time estimates, and regex search matches",
+                        category = "Text Processing",
+                        requiresPermission = false,
+                        schemaJson = "{\"text\": \"string\"}"
+                    ),
+                    ToolEntity(
                         id = "tool_clinical_calc",
                         name = "Clinical Risk & Dosage Calculator",
-                        description = "Calculates eGFR (CKD-EPI), CHA2DS2-VASc score, Wells score for DVT/PE, Mean Arterial Pressure (MAP), and drug dose adjustments",
+                        description = "Calculates eGFR (CKD-EPI) and stroke risk metrics for clinical verification workflows",
                         category = "Clinical Tools",
                         requiresPermission = false,
                         schemaJson = "{\"calculation\": \"string\", \"parameters\": \"object\"}"
-                    ),
-                    ToolEntity(
-                        id = "tool_drug_safety",
-                        name = "Drug Safety & Contraindication Checker",
-                        description = "Evaluates drug-drug interactions, contraindications, pregnancy categories, and black-box safety warnings",
-                        category = "Pharmacology",
-                        requiresPermission = false,
-                        schemaJson = "{\"medications\": \"array\", \"patientConditions\": \"array\"}"
-                    ),
-                    ToolEntity(
-                        id = "tool_lab_interpreter",
-                        name = "Lab Reference Range Analyzer",
-                        description = "Interprets CBC, CMP, ABG, and cardiac biomarker values against clinical standard reference intervals",
-                        category = "Diagnostics",
-                        requiresPermission = false,
-                        schemaJson = "{\"panelType\": \"string\", \"values\": \"object\"}"
-                    ),
-                    ToolEntity(
-                        id = "tool_patient_record",
-                        name = "Secure Patient Document Reader",
-                        description = "Confidential, offline Storage Access Framework reader for local clinical notes, lab PDFs, and medical summaries",
-                        category = "HIPAA Privacy Storage",
-                        requiresPermission = true,
-                        schemaJson = "{\"documentUri\": \"string\"}"
                     )
                 )
                 toolDao.insertAll(defaultTools)
@@ -213,40 +221,39 @@ abstract class AgentXDatabase : RoomDatabase() {
                 )
                 teamDao.insertTeamMembers(generalMembers)
 
-                // Team 1: Cardiovascular & Physiology Team (from prompt's cardiovascular physiology example)
-                val cardioTeam = AgentTeamEntity(
-                    id = "team_cardio_phys",
-                    name = "Cardiovascular & Physiology Team",
-                    description = "Specialized clinical and study pipeline for cardiovascular medicine, hemodynamics, and electrophysiology (Supervisor -> Planner -> Researcher -> Analyst -> Reviewer -> Synthesizer)",
+                // Team 1: Software Engineering & Architecture Team
+                val devTeam = AgentTeamEntity(
+                    id = "team_software_eng",
+                    name = "Software Engineering & Architecture Squad",
+                    description = "Specialized engineering pipeline for Kotlin/Python/Android coding, algorithms, architecture reviews, and bug auditing",
                     supervisorAgentId = "agent_supervisor"
                 )
-                teamDao.insertTeam(cardioTeam)
-                val cardioMembers = listOf(
-                    TeamMemberEntity("tm_c1", cardioTeam.id, "agent_supervisor", 0, "SUPERVISOR"),
-                    TeamMemberEntity("tm_c2", cardioTeam.id, "agent_planner", 1, "PLANNER"),
-                    TeamMemberEntity("tm_c3", cardioTeam.id, "agent_researcher", 2, "RESEARCHER"),
-                    TeamMemberEntity("tm_c4", cardioTeam.id, "agent_analyst", 3, "ANALYST"),
-                    TeamMemberEntity("tm_c5", cardioTeam.id, "agent_reviewer", 4, "REVIEWER"),
-                    TeamMemberEntity("tm_c6", cardioTeam.id, "agent_synthesizer", 5, "SYNTHESIZER")
+                teamDao.insertTeam(devTeam)
+                val devMembers = listOf(
+                    TeamMemberEntity("tm_e1", devTeam.id, "agent_supervisor", 0, "SUPERVISOR"),
+                    TeamMemberEntity("tm_e2", devTeam.id, "agent_planner", 1, "PLANNER"),
+                    TeamMemberEntity("tm_e3", devTeam.id, "agent_coder", 2, "CODER"),
+                    TeamMemberEntity("tm_e4", devTeam.id, "agent_reviewer", 3, "REVIEWER"),
+                    TeamMemberEntity("tm_e5", devTeam.id, "agent_synthesizer", 4, "SYNTHESIZER")
                 )
-                teamDao.insertTeamMembers(cardioMembers)
+                teamDao.insertTeamMembers(devMembers)
 
-                // Team 2: Diagnostic & Differential Clinical Team
-                val diagTeam = AgentTeamEntity(
-                    id = "team_differential",
-                    name = "Diagnostic & Differential Reasoning Team",
-                    description = "Clinical team focused on symptom correlation, lab panel evaluation, differential diagnosis, and safety review",
+                // Team 2: Deep Research & Data Analysis Collective
+                val researchTeam = AgentTeamEntity(
+                    id = "team_research_analytics",
+                    name = "Research & Data Analytics Collective",
+                    description = "Comprehensive multi-agent pipeline for technical research, empirical calculations, statistics, and structured synthesis",
                     supervisorAgentId = "agent_supervisor"
                 )
-                teamDao.insertTeam(diagTeam)
-                val diagMembers = listOf(
-                    TeamMemberEntity("tm_d1", diagTeam.id, "agent_supervisor", 0, "SUPERVISOR"),
-                    TeamMemberEntity("tm_d2", diagTeam.id, "agent_analyst", 1, "ANALYST"),
-                    TeamMemberEntity("tm_d3", diagTeam.id, "agent_coder", 2, "CODER"),
-                    TeamMemberEntity("tm_d4", diagTeam.id, "agent_reviewer", 3, "REVIEWER"),
-                    TeamMemberEntity("tm_d5", diagTeam.id, "agent_synthesizer", 4, "SYNTHESIZER")
+                teamDao.insertTeam(researchTeam)
+                val researchMembers = listOf(
+                    TeamMemberEntity("tm_r1", researchTeam.id, "agent_supervisor", 0, "SUPERVISOR"),
+                    TeamMemberEntity("tm_r2", researchTeam.id, "agent_researcher", 1, "RESEARCHER"),
+                    TeamMemberEntity("tm_r3", researchTeam.id, "agent_analyst", 2, "ANALYST"),
+                    TeamMemberEntity("tm_r4", researchTeam.id, "agent_reviewer", 3, "REVIEWER"),
+                    TeamMemberEntity("tm_r5", researchTeam.id, "agent_synthesizer", 4, "SYNTHESIZER")
                 )
-                teamDao.insertTeamMembers(diagMembers)
+                teamDao.insertTeamMembers(researchMembers)
             }
         }
     }

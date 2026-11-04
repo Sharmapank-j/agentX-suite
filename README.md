@@ -1,12 +1,12 @@
 # 🚀 AgentX Suite
 
 <p align="center">
-  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.1.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
-  <img src="https://img.shields.io/badge/AirLLM-Layer--Streaming-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
+  <img src="https://img.shields.io/badge/AgentX-Suite%20v1.2.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
+  <img src="https://img.shields.io/badge/AirLLM-Zero--Crash%20Engine-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
   <img src="https://img.shields.io/badge/Tests-107%2F107%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
   <img src="https://img.shields.io/badge/Kotlin-2.0-purple?style=for-the-badge&logo=kotlin" alt="Kotlin"/>
   <img src="https://img.shields.io/badge/Android%20SDK-35%20(Android%2015)-3DDC84?style=for-the-badge&logo=android" alt="Android"/>
-  <img src="https://img.shields.io/badge/Native-C%2B%2B17%20%7C%20AirLLM%20%2B%20llama.cpp-00599C?style=for-the-badge&logo=c%2B%2B" alt="C++"/>
+  <img src="https://img.shields.io/badge/Architecture-Pure%20Kotlin%20Zero--Crash-00599C?style=for-the-badge&logo=android" alt="Architecture"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-orange?style=for-the-badge" alt="License"/>
 </p>
 
@@ -14,7 +14,7 @@
 
 ## 🌟 Overview
 
-The **AgentX Suite** is an advanced on-device AI ecosystem for Android that bridges local offline edge computing with cutting-edge multi-agent orchestration. The suite consists of **3 distinct, interoperable applications**:
+The **AgentX Suite** is an advanced on-device AI ecosystem for Android that bridges local offline edge computing with cutting-edge multi-agent orchestration. The suite consists of **3 distinct, fully decoupled applications**:
 
 ```
                        ┌───────────────────────────────────────────────┐
@@ -31,15 +31,24 @@ The **AgentX Suite** is an advanced on-device AI ecosystem for Android that brid
  │   Persona     │                     │ • Verified    │                     │   HTTP Server │
  │ • Multi-Agent │                     │   Tools (eGFR,│                     │ • OpenAI REST │
  │   Orchestrator│                     │   CHA2DS2)    │                     │   API Gateway │
- │ • Local GGUF  │                     │ • Safety Audit│                     │ • WakeLock &  │
- │   + Cloud SSE │                     │ • Evidence    │                     │   WifiLock    │
+ │ • AirLLM Pure │                     │ • Safety Audit│                     │ • WakeLock &  │
+ │   Streaming   │                     │ • Evidence    │                     │   WifiLock    │
  │ • Specs HUD   │                     │   Synthesis   │                     │ • Key Manager │
  └───────────────┘                     └───────────────┘                     └───────────────┘
 ```
 
-1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by local GGUF models (`llama.cpp` JNI) and Cloud Gemini streaming, backed by a collaborative multi-agent collective. Features custom adaptive neural vector icon.
+1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by the **Pure Kotlin Zero-Crash Engine & AirLLM progressive layer-streaming** and Cloud Gemini streaming, backed by a collaborative general specialist collective. Features custom adaptive neural vector icon.
 2. **⚕️ AgentX Medical (`:medical`)**: Dedicated standalone Clinical Decision-Support (CDS) application (`com.agentx.medical`) designed for healthcare professionals and medical students. Features verified on-device calculators (eGFR CKD-EPI 2021, $\text{CHA}_2\text{DS}_2\text{-VASc}$), clinical teams, and custom adaptive medical pulse/caduceus icon.
 3. **⚡ AgentX Serve (`:admin`)**: Dedicated Android edge-server application (`com.agentx.admin`) that transforms any smartphone into a 24/7 high-performance AI inference host over local Wi-Fi / LAN, exposing standard OpenAI-compatible `/v1/chat/completions` endpoints. Features custom adaptive edge server stack icon.
+
+---
+
+## 📁 Segregated Asset Directories
+
+Assets across all three projects are kept strictly separated in dedicated directories:
+* **`assets/agentx/`**: AgentX Personal Assistant icons (`ic_launcher_foreground.xml`, `ic_launcher_background.xml`), metadata, and direct download links.
+* **`assets/agentx_medical/`**: AgentX Medical CDS icons, caduceus branding, clinical notices, and direct download links.
+* **`assets/agentx_serve/`**: AgentX Serve server stack icons, background service configs, and direct download links.
 
 ---
 

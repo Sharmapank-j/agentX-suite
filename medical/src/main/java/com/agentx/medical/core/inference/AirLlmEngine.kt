@@ -120,6 +120,9 @@ class AirLlmEngine(
     override fun getModelStatus(): ModelStatus = status
 
     companion object {
+        fun resolveSubstantiveKnowledge(prompt: String, systemPrompt: String?): String =
+            resolveClinicalSubstantiveKnowledge(prompt, systemPrompt)
+
         fun resolveClinicalSubstantiveKnowledge(prompt: String, systemPrompt: String?): String {
             val lower = prompt.lowercase()
             val lowerSys = systemPrompt?.lowercase() ?: ""
