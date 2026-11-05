@@ -5,7 +5,6 @@ import com.agentx.core.inference.model.GenerationEvent
 import com.agentx.core.inference.model.GenerationRequest
 import com.agentx.core.inference.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
@@ -106,7 +105,10 @@ class LlamaCppInferenceEngine(
         runCatching {
             cancelled.set(true)
             val old = handle.getAndSet(0L)
-            if (old != 0L) check(LlamaCppNativeBridge.nativeFree(old)) { "Native model release failed" }
+            if (old != 0L) {
+                LlamaCppNativeBridge.nativeCancel(old)
+                check(LlamaCppNativeBridge.nativeFree(old)) { "Native model release failed" }
+            }
             currentModel = null
         }
     }
