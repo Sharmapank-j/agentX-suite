@@ -56,7 +56,7 @@ class LlamaCppEngine : InferenceEngine {
         try {
             count = withContext(Dispatchers.IO) {
                 LlamaCppNativeBridge.nativeGenerate(
-                    nativeHandle, prompt, request.maxTokens.coerceIn(1, 4096),
+                    nativeHandle, request.systemPrompt, request.prompt, request.maxTokens.coerceIn(1, 4096),
                     request.temperature, request.topP,
                     LlamaCppNativeBridge.TokenCallback { token ->
                         if (cancelled.get()) false else trySend(GenerationEvent.Token(token)).isSuccess
