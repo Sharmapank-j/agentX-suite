@@ -1,6 +1,6 @@
 package com.agentx.core.agent.prompts
 
-import com.agentx.core.agent.tools.ToolDefinition
+import com.agentx.agent.tools.ToolDefinition
 import com.agentx.domain.models.AgentRole
 
 /**

@@ -1,0 +1,162 @@
+﻿=== DEVICE BASELINE INFO ===
+Devices:
+List of devices attached
+5eb1d795a3b4           device product:peux_p_in model:2201116PI device:peux transport_id:1
+
+Model:
+2201116PI
+Release:
+13
+SDK:
+33
+Density:
+Physical density: 440
+Override density: 360
+Display Size:
+Physical size: 1080x2400
+
+=== DUMPSYS PACKAGE com.agentx ===
+
+    versionCode=1 minSdk=26 targetSdk=35
+    versionName=1.0.0
+    flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE 
+PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    lastUpdateTime=2026-11-06 02:52:15
+    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    User 0: ceDataInode=556668 installed=true hidden=false suspended=false distractionFlags=0 stopped=true 
+notLaunched=false enabled=0 instant=false virtual=false
+      firstInstallTime=2026-11-06 01:03:54
+        android.permission.POST_NOTIFICATIONS: granted=false, flags=[ 
+USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+    User 0:
+
+
+
+=== EXIT-INFO com.agentx ===
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 2026-11-06 02:30:35.250
+  package: com.agentx
+    Historical Process Exit for uid=10284
+        ApplicationExitInfo #0:
+          timestamp=2026-11-06 02:31:15.269 pid=17852 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=400 pss=86MB rss=54MB description=stop com.agentx due to installPackageLI state=empty trace=null
+        ApplicationExitInfo #1:
+          timestamp=2026-11-06 02:17:15.927 pid=15428 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=120MB rss=128MB description=SwipeUpClean state=empty trace=null
+        ApplicationExitInfo #2:
+          timestamp=2026-11-06 02:11:56.846 pid=13815 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=400 pss=117MB rss=129MB description=stop com.agentx due to from process:15415 state=empty trace=null
+        ApplicationExitInfo #3:
+          timestamp=2026-11-06 01:45:45.472 pid=6997 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=2 (SIGNALED) subreason=0 (UNKNOWN) status=9
+          importance=230 pss=0.00 rss=0.00 description=null state=empty trace=null
+        ApplicationExitInfo #4:
+          timestamp=2026-11-06 01:28:25.026 pid=1050 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=95MB rss=178MB description=SwipeUpClean state=empty trace=null
+        ApplicationExitInfo #5:
+          timestamp=2026-11-06 01:18:09.473 pid=28902 realUid=10284 packageUid=10284 definingUid=10284 user=0
+          process=com.agentx reason=3 (LOW_MEMORY) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=127MB rss=136MB description=null state=empty trace=null
+
+=== DUMPSYS PACKAGE com.agentx.medical.debug ===
+
+    versionCode=1 minSdk=26 targetSdk=35
+    versionName=1.0.0
+    flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE 
+PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    lastUpdateTime=2026-11-06 02:52:29
+    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    User 0: ceDataInode=562495 installed=true hidden=false suspended=false distractionFlags=0 stopped=true 
+notLaunched=false enabled=0 instant=false virtual=false
+      firstInstallTime=2026-11-06 01:04:25
+        android.permission.POST_NOTIFICATIONS: granted=false, flags=[ 
+USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+    User 0:
+
+
+
+=== EXIT-INFO com.agentx.medical.debug ===
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 2026-11-06 02:30:35.250
+  package: com.agentx.medical.debug
+    Historical Process Exit for uid=10289
+        ApplicationExitInfo #0:
+          timestamp=2026-11-06 02:31:23.055 pid=18049 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=142MB rss=135MB description=OneKeyClean state=empty trace=null
+        ApplicationExitInfo #1:
+          timestamp=2026-11-06 02:17:06.776 pid=15774 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=162MB rss=272MB description=SwipeUpClean state=empty trace=null
+        ApplicationExitInfo #2:
+          timestamp=2026-11-06 02:12:33.870 pid=14173 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=400 pss=121MB rss=134MB description=stop com.agentx.medical.debug due to from process:15761 state=empty trace=null
+        ApplicationExitInfo #3:
+          timestamp=2026-11-06 02:00:45.849 pid=12652 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=0.00 rss=0.00 description=SwipeUpClean state=empty trace=null
+        ApplicationExitInfo #4:
+          timestamp=2026-11-06 01:45:43.493 pid=6652 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=2 (SIGNALED) subreason=0 (UNKNOWN) status=9
+          importance=230 pss=0.00 rss=0.00 description=null state=empty trace=null
+        ApplicationExitInfo #5:
+          timestamp=2026-11-06 01:28:07.617 pid=29235 realUid=10289 packageUid=10289 definingUid=10289 user=0
+          process=com.agentx.medical.debug reason=13 (OTHER KILLS BY SYSTEM) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=126MB rss=186MB description=OneKeyClean state=empty trace=null
+
+=== DUMPSYS PACKAGE com.agentx.admin.debug ===
+
+    versionCode=1 minSdk=26 targetSdk=35
+    versionName=1.0.0
+    flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE 
+PARTIALLY_DIRECT_BOOT_AWARE PRIVATE_FLAG_ALLOW_NATIVE_HEAP_POINTER_TAGGING ]
+    lastUpdateTime=2026-11-06 02:52:41
+    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP LARGE_HEAP ]
+    User 0: ceDataInode=559204 installed=true hidden=false suspended=false distractionFlags=0 stopped=false 
+notLaunched=false enabled=0 instant=false virtual=false
+      firstInstallTime=2026-11-06 01:04:45
+        android.permission.POST_NOTIFICATIONS: granted=false, flags=[ 
+USER_SENSITIVE_WHEN_GRANTED|USER_SENSITIVE_WHEN_DENIED]
+    User 0:
+
+
+
+=== EXIT-INFO com.agentx.admin.debug ===
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 2026-11-06 02:30:35.250
+  package: com.agentx.admin.debug
+    Historical Process Exit for uid=10290
+        ApplicationExitInfo #0:
+          timestamp=2026-11-06 02:52:41.962 pid=21456 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=169MB rss=275MB description=stop com.agentx.admin.debug due to installPackageLI state=empty trace=null
+        ApplicationExitInfo #1:
+          timestamp=2026-11-06 02:38:16.229 pid=21338 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=172MB rss=275MB description=stop com.agentx.admin.debug due to from process:21437 state=empty trace=null
+        ApplicationExitInfo #2:
+          timestamp=2026-11-06 02:37:39.824 pid=21006 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=149MB rss=247MB description=stop com.agentx.admin.debug due to installPackageLI state=empty trace=null
+        ApplicationExitInfo #3:
+          timestamp=2026-11-06 02:35:08.306 pid=20810 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=150MB rss=249MB description=stop com.agentx.admin.debug due to from process:20922 state=empty trace=null
+        ApplicationExitInfo #4:
+          timestamp=2026-11-06 02:33:40.007 pid=20553 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=145MB rss=247MB description=stop com.agentx.admin.debug due to from process:20785 state=empty trace=null
+        ApplicationExitInfo #5:
+          timestamp=2026-11-06 02:32:33.824 pid=20106 realUid=10290 packageUid=10290 definingUid=10290 user=0
+          process=com.agentx.admin.debug reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=148MB rss=249MB description=stop com.agentx.admin.debug due to installPackageLI state=empty trace=null
+        ApplicationExitInfo #6:
+          timestamp=2026-11-06 02:31:03.848 pid=18147 realUid=10290 packageUid=10290 definingUid=10290 user=0

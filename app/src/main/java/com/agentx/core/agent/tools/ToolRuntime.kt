@@ -1,4 +1,4 @@
-package com.agentx.core.agent.tools
+package com.agentx.agent.tools
 
 import com.agentx.core.agent.core.ToolCallResult
 import kotlinx.serialization.json.Json

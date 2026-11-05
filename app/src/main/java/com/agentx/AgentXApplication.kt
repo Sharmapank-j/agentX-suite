@@ -4,9 +4,9 @@ import android.app.Application
 import com.agentx.core.agent.orchestrator.ClinicalAgentExecutor
 import com.agentx.core.agent.orchestrator.ClinicalSupervisor
 import com.agentx.core.agent.prompts.PromptManager
-import com.agentx.core.agent.tools.ClinicalToolDefinitions
-import com.agentx.core.agent.tools.ClinicalToolExecutor
-import com.agentx.core.agent.tools.ToolRegistry
+import com.agentx.agent.tools.ClinicalToolDefinitions
+import com.agentx.agent.tools.ClinicalToolExecutor
+import com.agentx.agent.tools.ToolRegistry
 import com.agentx.core.inference.CloudInferenceEngine
 import com.agentx.core.inference.HuggingFaceDownloader
 import com.agentx.core.inference.HybridInferenceEngine

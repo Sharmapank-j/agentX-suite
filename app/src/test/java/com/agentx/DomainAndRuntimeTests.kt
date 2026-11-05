@@ -4,8 +4,8 @@ import com.agentx.core.agent.core.AgentContext
 import com.agentx.core.agent.execution.ExecutionQueue
 import com.agentx.core.agent.execution.ExecutionState
 import com.agentx.core.agent.prompts.PromptManager
-import com.agentx.core.agent.tools.ToolDefinition
-import com.agentx.core.agent.tools.ToolRegistry
+import com.agentx.agent.tools.ToolDefinition
+import com.agentx.agent.tools.ToolRegistry
 import com.agentx.domain.models.Agent
 import com.agentx.domain.models.AgentRole
 import com.agentx.domain.models.Conversation

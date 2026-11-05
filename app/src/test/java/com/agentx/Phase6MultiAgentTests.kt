@@ -12,9 +12,9 @@ import com.agentx.core.agent.orchestrator.ExecutionPlan
 import com.agentx.core.agent.orchestrator.HeuristicTaskPlanner
 import com.agentx.core.agent.orchestrator.PlanParser
 import com.agentx.core.agent.orchestrator.SubTask
-import com.agentx.core.agent.tools.ClinicalToolDefinitions
-import com.agentx.core.agent.tools.ClinicalToolExecutor
-import com.agentx.core.agent.tools.ToolRegistry
+import com.agentx.agent.tools.ClinicalToolDefinitions
+import com.agentx.agent.tools.ClinicalToolExecutor
+import com.agentx.agent.tools.ToolRegistry
 import com.agentx.data.repository.ExecutionRepository
 import com.agentx.domain.models.AgentRole
 import com.agentx.domain.models.ExecutionLog

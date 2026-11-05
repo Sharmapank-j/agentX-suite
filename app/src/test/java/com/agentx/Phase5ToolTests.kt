@@ -2,16 +2,16 @@ package com.agentx
 
 import com.agentx.core.agent.core.AgentContext
 import com.agentx.core.agent.orchestrator.ToolCallParser
-import com.agentx.core.agent.tools.Cha2ds2VascCalculator
-import com.agentx.core.agent.tools.ClinicalToolDefinitions
-import com.agentx.core.agent.tools.ClinicalToolExecutor
-import com.agentx.core.agent.tools.DrugSafetyChecker
-import com.agentx.core.agent.tools.EgfrCalculator
-import com.agentx.core.agent.tools.LabInterpreter
-import com.agentx.core.agent.tools.ToolArgumentValidator
-import com.agentx.core.agent.tools.ToolDefinition
-import com.agentx.core.agent.tools.ToolRegistry
-import com.agentx.core.agent.tools.ValidationResult
+import com.agentx.agent.tools.Cha2ds2VascCalculator
+import com.agentx.agent.tools.ClinicalToolDefinitions
+import com.agentx.agent.tools.ClinicalToolExecutor
+import com.agentx.agent.tools.DrugSafetyChecker
+import com.agentx.agent.tools.EgfrCalculator
+import com.agentx.agent.tools.LabInterpreter
+import com.agentx.agent.tools.ToolArgumentValidator
+import com.agentx.agent.tools.ToolDefinition
+import com.agentx.agent.tools.ToolRegistry
+import com.agentx.agent.tools.ValidationResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

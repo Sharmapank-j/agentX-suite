@@ -5,9 +5,9 @@ import com.agentx.core.agent.core.AgentInstance
 import com.agentx.core.agent.core.AgentResult
 import com.agentx.core.agent.core.ToolCallRequest
 import com.agentx.core.agent.core.ToolCallResult
-import com.agentx.core.agent.tools.ClinicalToolExecutor
-import com.agentx.core.agent.tools.ToolDefinition
-import com.agentx.core.agent.tools.ToolRegistry
+import com.agentx.agent.tools.ClinicalToolExecutor
+import com.agentx.agent.tools.ToolDefinition
+import com.agentx.agent.tools.ToolRegistry
 import com.agentx.core.inference.ContextBudget
 import com.agentx.core.inference.ContextManager
 import com.agentx.core.inference.InferenceEngine

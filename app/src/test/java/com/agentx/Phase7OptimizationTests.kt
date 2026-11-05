@@ -8,9 +8,9 @@ import com.agentx.core.agent.core.ToolCallResult
 import com.agentx.core.agent.execution.ExecutionState
 import com.agentx.core.agent.orchestrator.ExecutionPlan
 import com.agentx.core.agent.orchestrator.SubTask
-import com.agentx.core.agent.tools.ClinicalToolDefinitions
-import com.agentx.core.agent.tools.ClinicalToolExecutor
-import com.agentx.core.agent.tools.ToolDefinition
+import com.agentx.agent.tools.ClinicalToolDefinitions
+import com.agentx.agent.tools.ClinicalToolExecutor
+import com.agentx.agent.tools.ToolDefinition
 import com.agentx.core.inference.GenerationEvent
 import com.agentx.core.inference.LlamaCppEngine
 import com.agentx.core.inference.ModelConfig
