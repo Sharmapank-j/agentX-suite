@@ -38,11 +38,26 @@ class OpenAiCompatibleProvider(
     val baseUrl: String = "http://127.0.0.1:8080",
     val apiKey: String = "",
     val defaultModel: String = "default"
-) : InferenceProvider {
+) : LLMProvider {
 
     override val executionMode: ExecutionMode = ExecutionMode.REMOTE
 
     private val activeConnections = ConcurrentHashMap<String, HttpURLConnection>()
+    private var selectedModelId: String = defaultModel
+
+    override suspend fun getSelectedModel(): ModelInfo? = withContext(Dispatchers.IO) {
+        getModels().find { it.id == selectedModelId } ?: ModelInfo(
+            id = selectedModelId,
+            name = selectedModelId,
+            isLocal = false,
+            providerId = id
+        )
+    }
+
+    override suspend fun selectModel(modelId: String): Result<Unit> {
+        selectedModelId = modelId
+        return Result.success(Unit)
+    }
 
     override suspend fun capabilities(): ProviderCapabilities = ProviderCapabilities(
         supportsStreaming = true,
