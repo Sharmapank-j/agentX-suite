@@ -2,15 +2,17 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/AgentX-Suite%20v1.3.0-blue?style=for-the-badge&logo=android" alt="AgentX Suite"/>
-  <img src="https://img.shields.io/badge/AirLLM-Zero--Crash%20Engine-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
-  <img src="https://img.shields.io/badge/Tests-All%20Passing-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Inference-Fail--Closed%20Repair-teal?style=for-the-badge&logo=fastapi" alt="AirLLM"/>
+  <img src="https://img.shields.io/badge/Tests-Not%20Revalidated-brightgreen?style=for-the-badge&logo=checkmarx" alt="Tests"/>
   <img src="https://img.shields.io/badge/Kotlin-2.0-purple?style=for-the-badge&logo=kotlin" alt="Kotlin"/>
   <img src="https://img.shields.io/badge/Android%20SDK-35%20(Android%2015)-3DDC84?style=for-the-badge&logo=android" alt="Android"/>
-  <img src="https://img.shields.io/badge/Architecture-Pure%20Kotlin%20Zero--Crash-00599C?style=for-the-badge&logo=android" alt="Architecture"/>
+  <img src="https://img.shields.io/badge/Architecture-Native%20Runtime%20Pending-00599C?style=for-the-badge&logo=android" alt="Architecture"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-orange?style=for-the-badge" alt="License"/>
 </p>
 
 ---
+
+> **Engineering status (repair branch):** The repository previously contained simulated local generation and mock server responses. This repair disables those success paths so the applications do not present fabricated output as model inference. Genuine upstream llama.cpp integration, build verification, and physical-device validation are still pending. Historical APK links and feature claims below must not be interpreted as proof that these repaired source files are present in those APKs.
 
 ## 🌟 Overview
 
@@ -50,7 +52,7 @@ The **AgentX Suite** is an advanced on-device AI ecosystem for Android that brid
                                    └───────────────────────┘
 ```
 
-1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by the **Pure Kotlin Zero-Crash Engine & AirLLM progressive layer-streaming** and Cloud Gemini streaming, backed by a collaborative general specialist collective. Features custom adaptive neural vector icon.
+1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) currently under repair; local inference is disabled until a genuine native runtime is integrated; optional cloud-provider support is separate, backed by a collaborative general specialist collective. Features custom adaptive neural vector icon.
    - [Download `AgentX-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-v1.0.0-debug.apk)
 2. **⚕️ AgentX Medical (`:medical`)**: Dedicated standalone Clinical Decision-Support (CDS) application (`com.agentx.medical`) designed for healthcare professionals and medical students. Features verified on-device calculators (eGFR CKD-EPI 2021, $\text{CHA}_2\text{DS}_2\text{-VASc}$), clinical teams, and custom adaptive medical pulse/caduceus icon.
    - [Download `AgentX-Medical-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-Medical-v1.0.0-debug.apk)
@@ -107,10 +109,10 @@ flowchart TD
 
 ## ✨ Key Features & Highlights
 
-### 1. Zero-Crash Pure Kotlin AirLLM Engine
+### 1. Local Inference Runtime (Integration Pending)
 - **Memory-Bounded Layer Streaming**: Executes large language models through bounded layer-streaming ($\le 200$ MB RAM footprint), running multi-billion parameter models locally on mobile devices without crashing or OOM.
-- **Zero JNI Fragility**: Fragile CMake C++ `llama.cpp` JNI binaries were replaced with a pure Kotlin layer-streaming architecture, completely eliminating `SIGSEGV`, `UnsatisfiedLinkError`, and ABI incompatibility crashes.
-- **Cloud Gemini Streaming**: Real-time Server-Sent Events (SSE) streaming with transparent automatic fallback when on-device memory is constrained.
+- The existing JNI bridge is a stub, not upstream llama.cpp. Genuine tensor evaluation, sampling, cancellation, and device validation remain required.
+- Cloud inference must be configured independently and must never be represented as local/offline inference.
 
 ### 2. AgentX Serve: On-Device Model Server & Edge Gateway
 - **Curated Open-Source Edge Models**:
