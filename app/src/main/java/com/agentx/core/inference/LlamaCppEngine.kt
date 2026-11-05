@@ -82,7 +82,10 @@ class LlamaCppEngine : InferenceEngine {
     override suspend fun unloadModel() = withContext(Dispatchers.IO) {
         cancelled.set(true)
         val old = handle.getAndSet(0L)
-        if (old != 0L) LlamaCppNativeBridge.nativeFree(old)
+            if (old != 0L) {
+                LlamaCppNativeBridge.nativeCancel(old)
+                LlamaCppNativeBridge.nativeFree(old)
+            }
         status = ModelStatus(ModelLifecycleState.NOT_LOADED)
     }
 
