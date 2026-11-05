@@ -2,7 +2,7 @@
 
 ## Follow-up after merge of the first safety patch
 
-The first post-merge CI run failed two AgentX Serve tests because the curated catalog still initialized its first entry as loaded/serving and the server status defaulted to LOADED. This follow-up resets the catalog, active model, and telemetry defaults to NOT_LOADED; removes the remaining hardcoded Serve response resolver; stops inferring model size, quantization, or RAM from file size; limits storage discovery to GGUF files; and displays unknown memory as not measured. CI now attempts APK compilation even if unit tests fail so build diagnostics are not hidden by a test failure.
+The first post-merge CI run failed two AgentX Serve tests because the curated catalog still initialized its first entry as loaded/serving and the server status defaulted to LOADED. This follow-up resets the catalog, active model, and telemetry defaults to NOT_LOADED; removes the remaining hardcoded Serve response resolver; stops inferring model size, quantization, or RAM from file size; limits storage discovery to GGUF files; and displays unknown memory as not measured. Regression tests now assert the initial unloaded state and that unknown GGUF metadata is not guessed from file size. CI now attempts APK compilation even if unit tests fail so build diagnostics are not hidden by a test failure.
 
 The README and visible Serve status labels have also been rewritten to avoid claiming that local inference, layer streaming, or measured RAM usage is available.
 
