@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LocalModelServerEngineTest {
-    @Test fun curatedCatalogIsDiscoveryOnlyUntilRuntimeExists() {
+    @Test fun curatedCatalogIsDiscoveryOnlyUntilUserImportsWeights() {
         val engine = LocalModelServerEngine()
         assertTrue(engine.curatedCatalog.isNotEmpty())
         assertTrue(engine.curatedCatalog.none { it.isLoaded || it.isServing })
@@ -36,7 +36,7 @@ class LocalModelServerEngineTest {
             engine.generateCompletionSync("test prompt")
             fail("No real inference runtime is configured")
         } catch (expected: IllegalStateException) {
-            assertTrue(expected.message.orEmpty().contains("real GGUF runtime"))
+            assertTrue(expected.message.orEmpty().contains("Load a local GGUF model"))
         }
     }
 }
