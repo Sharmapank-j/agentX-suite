@@ -58,7 +58,7 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
         ? static_cast<uint64_t>(pageSize) * static_cast<uint64_t>(availablePages) : 0;
     const uint64_t contextEstimate = static_cast<uint64_t>(
         std::clamp(static_cast<int>(contextLength), 256, 32768)) * 64ULL * 1024ULL;
-    const uint64_t estimatedWorkingSet = static_cast<uint64_t>(fileInfo.st_size) + contextEstimate;
+    const uint64_t estimatedWorkingSet = static_cast<uint64_t>(fileInfo.st_size) * 5ULL / 4ULL + contextEstimate;
     if (availableBytes > 0 && estimatedWorkingSet > availableBytes * 8ULL / 10ULL) {
         LOGE("Refusing GGUF load: estimated working set exceeds 80%% of currently available RAM");
         return 0;
