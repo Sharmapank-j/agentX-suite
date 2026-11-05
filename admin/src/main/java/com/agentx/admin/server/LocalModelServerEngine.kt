@@ -172,9 +172,7 @@ class LocalModelServerEngine(
         for (dir in candidateDirs) {
             try {
                 dir.walkTopDown().maxDepth(2).forEach { file ->
-                    if (file.isFile && (file.name.endsWith(".gguf", ignoreCase = true) ||
-                                file.name.endsWith(".bin", ignoreCase = true) ||
-                                file.name.endsWith(".safetensors", ignoreCase = true))) {
+                    if (file.isFile && file.name.endsWith(".gguf", ignoreCase = true)) {
                         val registered = registerStorageModel(file.name, file.absolutePath, file.length())
                         if (!discovered.any { it.id == registered.id }) {
                             discovered.add(registered)
@@ -249,20 +247,14 @@ class LocalModelServerEngine(
             if (match != null) {
                 return match.groupValues[1] + "B"
             }
-            return when {
-                fileSizeBytes >= 6L * 1024 * 1024 * 1024 -> "7B"
-                fileSizeBytes >= 3L * 1024 * 1024 * 1024 -> "3B"
-                fileSizeBytes >= 1500L * 1024 * 1024 -> "1.5B"
-                fileSizeBytes > 0L -> "0.5B"
-                else -> "3B"
-            }
+            return "Unknown"
         }
 
         fun detectQuantization(fileName: String): String {
             val upper = fileName.uppercase()
             val quantRegex = Regex("Q\\d+_[A-Z0-9_]+")
             val match = quantRegex.find(upper)
-            return match?.value ?: if (upper.contains("FP16")) "FP16" else "Q4_K_M"
+            return match?.value ?: if (upper.contains("FP16")) "FP16" else "Unknown"
         }
 
         fun computeLayerStreamingRamMb(fileSizeBytes: Long): Long = 0L // Unknown until a real runtime measures allocation.
