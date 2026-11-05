@@ -1,0 +1,49 @@
+# AgentX llama.cpp / GGUF runtime
+
+## Runtime architecture
+
+- `:core` builds a pinned upstream `ggml-org/llama.cpp` revision through CMake FetchContent.
+- The shared native target is packaged as `libagentx_llama.so` for the configured Android ABIs.
+- JNI owns `llama_model`, `llama_context`, vocabulary and sampler lifetimes.
+- GGUF files are loaded by upstream llama.cpp. Prompt tokenization, tensor evaluation, sampling and token-to-piece conversion run in native code.
+- When a model includes a supported chat template, the runtime applies it before tokenization. A plain role-prefixed prompt is used only when no template is available or the template cannot be applied.
+- AgentX, AgentX Medical and AgentX Serve use the shared native runtime. AgentX Serve only loads user-imported GGUF files with a real local file path; curated catalog entries are discovery metadata, not downloadable weights.
+
+## Build configuration
+
+The Android build uses NDK 27 and CMake 3.22.1. Upstream llama.cpp is pinned to commit `d38bea34227bbf9069d62fdc239c98ab6e05435a`. Tests, examples, server, CURL, OpenMP and llamafile are disabled for the embedded build. The current integration is CPU-first; GPU offload must not be assumed merely because a model config contains a non-zero GPU-layer value.
+
+Supported packaged ABIs are `arm64-v8a` and `x86_64`. The target device should use `arm64-v8a`.
+
+## Model import and loading
+
+1. Import a local `.gguf` file through the app's model picker / storage flow.
+2. Stage the file into app-controlled storage and retain its absolute path.
+3. Pass that path in `ModelConfig.modelPath` or `ModelInfo.modelPath`.
+4. Load the model with a conservative context size (start at 2048 tokens on a 6 GB device).
+5. If native loading fails, keep the model unloaded and surface the error. Never substitute canned text or report a catalog entry as loaded.
+
+The native loader applies an early RAM guard using the model file size and context estimate. This is a conservative heuristic, not a guarantee against Android low-memory-killer termination. Actual peak RSS varies by architecture, quantization, context, KV-cache type, mmap behavior and concurrent apps.
+
+## Generation and lifecycle
+
+- Generation streams decoded token pieces through a JNI callback into Kotlin Flow.
+- Cancellation sets a native atomic flag; unload cancels decoding before freeing the context.
+- End-of-generation tokens terminate decoding.
+- The completion token count is native-generated token pieces. Prompt token accounting and exact resident-memory accounting are not yet exposed.
+- The memory field currently represents an estimated model working set, not measured process RSS.
+
+## Validation required before release
+
+CI must compile the upstream C/C++ dependency and build all three APKs. Host JVM unit tests cannot prove Android JNI loading or successful model execution.
+
+Before enabling this as a production capability, perform physical-device tests with a legally obtained small GGUF model and record:
+- APK ABI and Android version;
+- model SHA-256, architecture, quantization and file size;
+- load success/failure and load duration;
+- prompt evaluation and at least 32 generated tokens;
+- cancellation latency and unload/reload behavior;
+- process peak RSS, available RAM before/after, thermal state and sustained tokens/sec;
+- malformed, unsupported and truncated GGUF failure behavior.
+
+No device-level inference result should be claimed until those tests are completed. Medical output remains educational/decision-support only and requires independent clinical validation; successful model loading does not validate medical accuracy.
