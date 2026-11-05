@@ -27,8 +27,6 @@ class LlamaCppEngine : InferenceEngine {
         mutex.withLock {
             status = ModelStatus(
                 state = ModelLifecycleState.NOT_LOADED,
-                activeModelId = null,
-                activeModelName = null,
                 memoryUsageBytes = 0L
             )
         }
