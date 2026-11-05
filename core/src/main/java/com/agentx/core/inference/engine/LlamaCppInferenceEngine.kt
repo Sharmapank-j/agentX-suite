@@ -35,7 +35,7 @@ class LlamaCppInferenceEngine(
             require(LlamaCppNativeBridge.isNativeLoaded) {
                 "The native llama.cpp library is unavailable for this device ABI."
             }
-            val path = File(model.description.ifBlank { model.id })
+            val path = File(model.modelPath ?: model.description)
             require(path.isFile && path.canRead() && path.extension.equals("gguf", true)) {
                 "Select a readable local .gguf file before loading the model."
             }
