@@ -4,6 +4,10 @@ import android.content.Context
 import android.os.Environment
 import com.agentx.admin.models.LocalModelStatus
 import com.agentx.admin.models.LocalServerModel
+import com.agentx.core.inference.engine.LlamaCppInferenceEngine
+import com.agentx.core.inference.model.GenerationEvent
+import com.agentx.core.inference.model.GenerationRequest
+import com.agentx.core.inference.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -26,6 +30,7 @@ class LocalModelServerEngine(
 
     private val mutex = Mutex()
     private val isCancelled = AtomicBoolean(false)
+    private val inferenceEngine = LlamaCppInferenceEngine()
 
     val curatedCatalog = listOf(
         LocalServerModel(
@@ -190,12 +195,36 @@ class LocalModelServerEngine(
      * is connected, refuse to mark any model as loaded or serving.
      */
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        false
+        mutex.withLock {
+            val selected = allAvailableModels.firstOrNull { it.id == modelId } ?: return@withLock false
+            val path = selected.filePath ?: return@withLock false
+            _status = LocalModelStatus.LOADING
+            val modelInfo = ModelInfo(
+                id = selected.id,
+                name = selected.name,
+                parameters = selected.parameterCount,
+                quantization = selected.quantization,
+                contextWindow = selected.contextWindow,
+                memoryFootprintMb = selected.memoryFootprintMb,
+                isLocal = true,
+                providerId = "agentx_serve_local",
+                modelPath = path
+            )
+            val result = inferenceEngine.loadModel(modelInfo)
+            if (result.isFailure) {
+                _status = LocalModelStatus.NOT_LOADED
+                return@withLock false
+            }
+            _activeModel = selected.copy(isLoaded = true, isServing = false)
+            _status = LocalModelStatus.LOADED
+            true
+        }
     }
 
     suspend fun unloadModel() = withContext(Dispatchers.IO) {
         mutex.withLock {
             isCancelled.set(true)
+            inferenceEngine.unloadModel()
             _activeModel = _activeModel.copy(isLoaded = false, isServing = false)
             _status = LocalModelStatus.NOT_LOADED
         }
@@ -207,9 +236,26 @@ class LocalModelServerEngine(
         temperature: Float = 0.7f,
         maxTokens: Int = 1024
     ): Flow<String> = flow {
-        throw IllegalStateException(
-            "Local model inference is unavailable: AgentX Serve is not connected to a real GGUF runtime. No synthetic output was generated."
-        )
+        check(inferenceEngine.isModelLoaded) { "Load a local GGUF model before serving completions." }
+        _status = LocalModelStatus.GENERATING
+        try {
+            inferenceEngine.generate(
+                GenerationRequest(
+                    prompt = prompt,
+                    systemPrompt = systemPrompt,
+                    temperature = temperature,
+                    maxTokens = maxTokens.coerceIn(1, 4096)
+                )
+            ).collect { event ->
+                when (event) {
+                    is GenerationEvent.Token -> emit(event.text)
+                    is GenerationEvent.Error -> throw IllegalStateException(event.message, event.cause)
+                    is GenerationEvent.Finished -> Unit
+                }
+            }
+        } finally {
+            _status = if (inferenceEngine.isModelLoaded) LocalModelStatus.LOADED else LocalModelStatus.NOT_LOADED
+        }
     }
 
     suspend fun generateCompletionSync(
