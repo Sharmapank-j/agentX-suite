@@ -27,8 +27,6 @@ class AirLlmEngine(val maxMemoryBudgetBytes: Long = 2L * 1024L * 1024L * 1024L) 
         mutex.withLock {
             status = ModelStatus(
                 state = ModelLifecycleState.NOT_LOADED,
-                activeModelId = null,
-                activeModelName = null,
                 memoryUsageBytes = 0L
             )
         }
