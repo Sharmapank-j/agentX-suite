@@ -10,9 +10,9 @@ enum class CloudProvider(val displayName: String) {
 
 @Serializable
 enum class InferenceMode(val displayName: String, val description: String) {
-    LOCAL_ONLY("Local AI (Offline)", "Strictly on-device AirLLM/GGUF layer streaming. 100% offline & zero data tracking."),
+    LOCAL_ONLY("Local AI (Unavailable)", "Local inference is unavailable until a real GGUF runtime is integrated and validated."),
     CLOUD_ONLY("Cloud Model (Online)", "Direct cloud inference with Google Gemini for maximum reasoning accuracy."),
-    HYBRID_AUTO("Hybrid Auto-Failover", "Uses high-precision cloud model when online; automatically falls back to local edge AI if offline.")
+    HYBRID_AUTO("Hybrid (Local Runtime Required)", "Uses the configured cloud provider; local fallback remains unavailable until a real GGUF runtime is integrated.")
 }
 
 @Serializable
