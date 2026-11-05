@@ -8,7 +8,7 @@ AgentX Suite is an Android project with three applications sharing a Kotlin foun
 
 ## Engineering status
 
-<badge>Under active development</badge>
+**Status: Under active development**
 
 The repository previously contained simulated responses that could be mistaken for local model inference. Those paths have been disabled. **The current source does not yet include a working llama.cpp/GGUF inference runtime.** Local model loading and generation are intentionally unavailable until native inference is implemented and validated.
 
