@@ -1,0 +1,106 @@
+{
+  "status": "SUCCESS",
+  "timestamp": 1793911261.4988532,
+  "tests": [
+    {
+      "app": "AgentX Serve",
+      "check": "Initial Stopped State",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Server Running State",
+      "passed": false
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "GET /health 200 OK",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "GET /v1/models 200 OK",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Zero-Trust 401 Unauthorized",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Authenticated Inference 200 Streaming",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "API Keys Tab Rendered",
+      "passed": false
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Models Tab Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "CLI Console Tab Rendered",
+      "passed": false
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Traffic Audit Tab Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX",
+      "check": "Chat Screen Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX",
+      "check": "History Drawer Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX",
+      "check": "Models Screen Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX",
+      "check": "Settings Screen Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX",
+      "check": "Chat Response Streaming",
+      "passed": true
+    },
+    {
+      "app": "AgentX Medical",
+      "check": "Disclaimer Notice Banner",
+      "passed": true
+    },
+    {
+      "app": "AgentX Medical",
+      "check": "Consultation Drawer Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX Medical",
+      "check": "Models Screen Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX Medical",
+      "check": "Settings Screen Rendered",
+      "passed": true
+    },
+    {
+      "app": "AgentX Medical",
+      "check": "Clinical Consult Response Delivered",
+      "passed": true
+    }
+  ]
+}
