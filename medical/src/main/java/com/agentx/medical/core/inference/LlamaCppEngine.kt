@@ -49,10 +49,6 @@ class LlamaCppEngine : InferenceEngine {
         status = status.copy(state = ModelLifecycleState.GENERATING)
         val started = System.currentTimeMillis()
         var count = 0
-        val prompt = buildString {
-            request.systemPrompt?.takeIf { it.isNotBlank() }?.let { append("System: ").append(it).append("\n\n") }
-            append("User: ").append(request.prompt).append("\nAssistant:")
-        }
         try {
             count = withContext(Dispatchers.IO) {
                 LlamaCppNativeBridge.nativeGenerate(
