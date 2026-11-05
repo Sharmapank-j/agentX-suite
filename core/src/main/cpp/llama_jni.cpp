@@ -91,17 +91,45 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
 
 JNIEXPORT jint JNICALL
 Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
-        JNIEnv * env, jobject, jlong handle, jstring promptString, jint maxTokens,
-        jfloat temperature, jfloat topP, jobject callback) {
+        JNIEnv * env, jobject, jlong handle, jstring systemPromptString, jstring userPromptString,
+        jint maxTokens, jfloat temperature, jfloat topP, jobject callback) {
     AgentXContext * state = fromHandle(handle);
-    if (state == nullptr || state->context == nullptr || promptString == nullptr || callback == nullptr) return -1;
+    if (state == nullptr || state->context == nullptr || userPromptString == nullptr || callback == nullptr) return -1;
     std::lock_guard<std::mutex> guard(state->generationMutex);
     state->cancelled.store(false);
 
-    const char * rawPrompt = env->GetStringUTFChars(promptString, nullptr);
-    if (rawPrompt == nullptr) return -1;
-    const std::string prompt(rawPrompt);
-    env->ReleaseStringUTFChars(promptString, rawPrompt);
+    const char * rawUser = env->GetStringUTFChars(userPromptString, nullptr);
+    if (rawUser == nullptr) return -1;
+    const std::string userPrompt(rawUser);
+    env->ReleaseStringUTFChars(userPromptString, rawUser);
+    std::string systemPrompt;
+    if (systemPromptString != nullptr) {
+        const char * rawSystem = env->GetStringUTFChars(systemPromptString, nullptr);
+        if (rawSystem != nullptr) {
+            systemPrompt.assign(rawSystem);
+            env->ReleaseStringUTFChars(systemPromptString, rawSystem);
+        }
+    }
+
+    std::string prompt;
+    const char * chatTemplate = llama_model_chat_template(state->model, nullptr);
+    if (chatTemplate != nullptr) {
+        llama_chat_message messages[2];
+        size_t messageCount = 0;
+        if (!systemPrompt.empty()) messages[messageCount++] = {"system", systemPrompt.c_str()};
+        messages[messageCount++] = {"user", userPrompt.c_str()};
+        const size_t capacity = (systemPrompt.size() + userPrompt.size()) * 4 + 4096;
+        std::vector<char> formatted(capacity);
+        const int32_t formattedLength = llama_chat_apply_template(
+            chatTemplate, messages, messageCount, true, formatted.data(), static_cast<int32_t>(formatted.size()));
+        if (formattedLength > 0 && static_cast<size_t>(formattedLength) < formatted.size()) {
+            prompt.assign(formatted.data(), static_cast<size_t>(formattedLength));
+        }
+    }
+    if (prompt.empty()) {
+        if (!systemPrompt.empty()) prompt = "System: " + systemPrompt + "\n\n";
+        prompt += "User: " + userPrompt + "\nAssistant:";
+    }
 
     jclass callbackClass = env->GetObjectClass(callback);
     jmethodID onToken = callbackClass == nullptr ? nullptr :
