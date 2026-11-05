@@ -71,7 +71,8 @@ class LlamaCppInferenceEngine(
             emitted = withContext(Dispatchers.IO) {
                 LlamaCppNativeBridge.nativeGenerate(
                     nativeHandle,
-                    prompt,
+                    request.systemPrompt,
+                    request.prompt,
                     request.maxTokens.coerceIn(1, 4096),
                     request.temperature.coerceIn(0f, 2f),
                     0.9f,
