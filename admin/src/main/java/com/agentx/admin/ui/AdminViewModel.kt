@@ -21,7 +21,6 @@ import com.agentx.admin.models.TunnelStatus
 import com.agentx.admin.server.TunnelManager
 import com.agentx.admin.service.AgentXServerService
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -419,19 +418,13 @@ class AdminViewModel(
                     }
                 } else {
                     val fullResponse = cloudGateway.generateChatCompletion(prompt = prompt)
-                    val ttft = System.currentTimeMillis() - start
-                    _liveTest.value = _liveTest.value.copy(ttftMs = ttft)
-                    val words = fullResponse.split(" ")
-                    for ((idx, word) in words.withIndex()) {
-                        count++
-                        val piece = if (idx == 0) word else " $word"
-                        val currentText = (_liveTest.value.response ?: "") + piece
-                        _liveTest.value = _liveTest.value.copy(
-                            response = currentText,
-                            tokenCount = count
-                        )
-                        delay(10)
-                    }
+                    val completedAt = System.currentTimeMillis()
+                    _liveTest.value = _liveTest.value.copy(
+                        response = fullResponse,
+                        ttftMs = completedAt - start,
+                        tokenCount = 0,
+                        tokensPerSecond = 0.0
+                    )
                 }
 
                 val totalDuration = System.currentTimeMillis() - start
