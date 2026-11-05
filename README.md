@@ -14,7 +14,7 @@
 
 ## 🌟 Overview
 
-The **AgentX Suite** is an advanced on-device AI ecosystem for Android that bridges local offline edge computing with cutting-edge multi-agent orchestration. The suite consists of **3 distinct, fully decoupled applications**:
+The **AgentX Suite** is an advanced on-device AI ecosystem for Android that bridges local offline edge computing with cutting-edge multi-agent orchestration. The suite consists of **3 distinct, fully decoupled applications** connected via a shared foundation:
 
 ```
                        ┌───────────────────────────────────────────────┐
@@ -28,14 +28,26 @@ The **AgentX Suite** is an advanced on-device AI ecosystem for Android that brid
  │ (General AI)  │                     │  (Clinical)   │                     │  (Edge Host)  │
  ├───────────────┤                     ├───────────────┤                     ├───────────────┤
  │ • ChatGPT     │                     │ • Medical CDS │                     │ • Background  │
- │   Persona     │                     │ • Verified    │                     │   HTTP Server │
- │ • Multi-Agent │                     │   Tools (eGFR,│                     │ • AirLLM Pure │
- │   Orchestrator│                     │   CHA2DS2)    │                     │   Local Engine│
- │ • AirLLM Pure │                     │ • Safety Audit│                     │ • OpenAI REST │
- │   Streaming   │                     │ • Evidence    │                     │   API Gateway │
- │ • Specs HUD   │                     │   Synthesis   │                     │ • WakeLock &  │
- │ • 100% Private│                     │ • Zero Crash  │                     │   WifiLock    │
- └───────────────┘                     └───────────────┘                     └───────────────┘
+ │   Persona     │                     │ • 14 Verified │                     │   HTTP Server │
+ │ • Background  │                     │   Calculators │                     │ • Room DB Auth│
+ │   Orchestrator│                     │ • Safety Audit│                     │   & TLS (8443)│
+ │ • DYK Welcome │                     │ • Evidence    │                     │ • OpenAI REST │
+ │   Insights    │                     │   Synthesis   │                     │   API Gateway │
+ │ • 2.0GB Heap  │                     │ • Zero Crash  │                     │ • WakeLock &  │
+ │ • 100% Private│                     │ • DYK Welcome │                     │   WifiLock    │
+ └───────┬───────┘                     └───────┬───────┘                     └───────┬───────┘
+         │                                     │                                     │
+         └─────────────────────────────────────┼─────────────────────────────────────┘
+                                               │
+                                               ▼
+                                   ┌───────────────────────┐
+                                   │     :core Library     │
+                                   ├───────────────────────┤
+                                   │ • InferenceProvider   │
+                                   │ • GGUF Metadata Parser│
+                                   │ • Provider Routing    │
+                                   │ • OpenAI SSE Client   │
+                                   └───────────────────────┘
 ```
 
 1. **🌟 AgentX (`:app`)**: Dedicated personal AI assistant application (`com.agentx`) powered by the **Pure Kotlin Zero-Crash Engine & AirLLM progressive layer-streaming** and Cloud Gemini streaming, backed by a collaborative general specialist collective. Features custom adaptive neural vector icon.
@@ -107,6 +119,10 @@ flowchart TD
   - `qwen-2.5-coder-3b`: Qwen 2.5 Coder 3B (Software architecture & coding synthesis, 196 MB RAM)
   - `biomistral-7b`: BioMistral 7B (Biomedical & clinical guidelines, 240 MB RAM)
   - `phi-3.5-mini`: Microsoft Phi 3.5 Mini Instruct (Compact reasoning & math, 210 MB RAM)
+- **Production Persistence & Security**:
+  - **Room Database (`AdminDatabase`)**: Persistent SQLite storage for API keys (`ApiKeyEntity`), authenticated client sessions (`ClientSessionEntity`), and real-time request traffic audits (`TrafficLogEntity`).
+  - **TLS/HTTPS Sockets**: Hardware-bound SSL/TLS server socket on port `8443` alongside plaintext HTTP on port `8080`.
+  - **Strict Access Control**: Zero-trust API authorization (`isAuthEnforced = true` by default) with auto-seeded master credentials.
 - **Serving Modes**:
   - `LOCAL_MODEL`: 100% offline, zero cloud cost, complete data privacy.
   - `CLOUD_GATEWAY`: Relays requests to Google Gemini for large-scale multimodal queries.
@@ -121,6 +137,7 @@ flowchart TD
 - **Background Persistence**: Runs on Android's `FOREGROUND_SERVICE_CONNECTED_DEVICE` with `PowerManager.PARTIAL_WAKE_LOCK` and `WifiManager.WIFI_MODE_FULL_HIGH_PERF`.
 
 ### 3. Multi-Agent Planning, Roles & Aggregator
+- **Background Orchestration**: Agent orchestration operates silently in the background, keeping the chat UI clean, minimal, and responsive.
 - **Dynamic Task Decomposition**: `HeuristicTaskPlanner` automatically parses query intent (coding algorithms, medical pathophysiology, pharmacological dosing, quantitative data analysis, or general conversation).
 - **Specialist Roster**:
   - `SUPERVISOR`: Coordinates subtasks, monitors queue dependencies, and oversees execution.
@@ -133,10 +150,22 @@ flowchart TD
   - `ASSISTANT`: Friendly, conversational ChatGPT-style persona for general everyday queries.
 
 ### 4. Deterministic Clinical Calculators (AgentX Medical)
-- **eGFR (CKD-EPI 2021)**: High-precision implementation of the 2021 race-free equation:
-  $$\text{eGFR} = 142 \times \min(S_{cr}/\kappa, 1)^\alpha \times \max(S_{cr}/\kappa, 1)^{-1.200} \times 0.9938^{\text{Age}} \times [1.012 \text{ if female}]$$
-- **$\text{CHA}_2\text{DS}_2\text{-VASc}$ Risk Score**: Automatic clinical stratification for non-valvular atrial fibrillation stroke risk and oral anticoagulant (OAC) guideline triggers.
-- **Drug Safety & Lab Analyzer**: Identifies drug-drug interactions, black-box warnings, and laboratory standard reference ranges.
+All 14 clinical calculations are deterministic and verified without model arithmetic hallucination:
+1. **eGFR (CKD-EPI 2021)**: High-precision implementation of the 2021 race-free equation.
+2. **$\text{CHA}_2\text{DS}_2\text{-VASc}$ Risk Score**: Validated non-valvular AF stroke risk stratification (monotonic risk scaling up to 15.2% at Score 9).
+3. **HAS-BLED Score**: Major bleeding risk evaluation in atrial fibrillation anticoagulation.
+4. **Anion Gap & Delta-Delta Ratio**: Serum anion gap calculation accompanied by full $\Delta\text{AG}/\Delta\text{HCO}_3$ ratio analysis for mixed HAGMA, NAGMA, and concurrent metabolic alkalosis.
+5. **Corrected Calcium**: Serum calcium adjustment for hypoalbuminemia.
+6. **Corrected Sodium**: Katz and Hillier glucose correction for hyperosmolar hyperglycemia.
+7. **Serum Osmolality & Osmolar Gap**: Osmolality calculation with toxic alcohol screening gap.
+8. **QTc Interval**: Bazett and Fridericia formula comparisons with drug-induced arrhythmia risk alerts.
+9. **Wells Score for DVT**: Deep vein thrombosis pre-test probability and D-dimer routing.
+10. **Wells Score for PE**: Pulmonary embolism risk stratification and CTPA triggers.
+11. **CURB-65**: Community-acquired pneumonia mortality risk and outpatient vs. inpatient triage.
+12. **MELD Score**: End-stage liver disease mortality scoring for transplant priority.
+13. **APGAR Score**: 1-minute and 5-minute neonatal viability and resuscitation assessment.
+14. **BMI & Body Surface Area (BSA)**: Body mass index with Mosteller BSA computation for drug dosing.
+- **Drug Safety Checker**: Hardened pharmacopoeia auditor verifying contraindications, black-box warnings, and QT-prolonging combinations with zero false reassurance.
 
 ### 5. Modern Jetpack Compose UI & Live HUD
 - **Real-Time Telemetry HUD**: Live floating overlay displaying tokens/sec ($t/s$), time-to-first-token latency ($ms$), generated token counter, and memory footprint.
