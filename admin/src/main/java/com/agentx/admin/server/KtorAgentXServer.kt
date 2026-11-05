@@ -183,7 +183,6 @@ class KtorAgentXServer(
             allowHeader(HttpHeaders.Authorization)
             allowHeader(HttpHeaders.ContentType)
             allowHeader(HttpHeaders.Accept)
-            anyHost()
         }
         install(ContentNegotiation) {
             json(Json { prettyPrint = true; ignoreUnknownKeys = true })
@@ -194,7 +193,6 @@ class KtorAgentXServer(
         routing {
             // CORS Preflight
             options("{...}") {
-                call.response.header("Access-Control-Allow-Origin", "*")
                 call.response.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
                 call.response.header("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept")
                 call.respond(HttpStatusCode.OK)
@@ -473,29 +471,11 @@ class KtorAgentXServer(
 
     private suspend fun handleEmbeddings(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
-        val bodyText = call.receiveText()
-        val json = try { Json.parseToJsonElement(bodyText).jsonObject } catch (_: Exception) { null }
-        val input = json?.get("input")?.jsonPrimitive?.content ?: ""
-
-        val mockEmb = listOf(0.12f, -0.45f, 0.88f, 0.05f)
-        val res = """
-            {
-              "object": "list",
-              "data": [
-                {
-                  "object": "embedding",
-                  "embedding": $mockEmb,
-                  "index": 0
-                }
-              ],
-              "model": "agentx-embed-local",
-              "usage": {
-                "prompt_tokens": ${input.length / 4},
-                "total_tokens": ${input.length / 4}
-              }
-            }
-        """.trimIndent()
-        call.respondText(res, ContentType.Application.Json)
+        call.respondText(
+            """{"error":{"message":"Embeddings are unavailable because no real embedding model is configured.","type":"server_error","code":"embedding_runtime_unavailable"}}""",
+            ContentType.Application.Json,
+            HttpStatusCode.NotImplemented
+        )
     }
 
     private suspend fun handleAgentsList(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
@@ -516,11 +496,10 @@ class KtorAgentXServer(
 
     private suspend fun handleAgentExecute(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
-        val body = call.receiveText()
-        val taskId = "task-${UUID.randomUUID().toString().take(8)}"
         call.respondText(
-            "{\"taskId\":\"$taskId\",\"status\":\"COMPLETED\",\"result\":\"Task executed through AgentX Serve scheduler.\"}",
-            ContentType.Application.Json
+            """{"error":{"message":"Agent execution is unavailable because the production inference runtime is not configured.","type":"server_error","code":"agent_runtime_unavailable"}}""",
+            ContentType.Application.Json,
+            HttpStatusCode.NotImplemented
         )
     }
 

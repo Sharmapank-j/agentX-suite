@@ -7,99 +7,29 @@ import com.agentx.core.inference.ModelConfig
 import com.agentx.core.inference.ModelLifecycleState
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Assert.*
 import org.junit.Test
 
 class LlamaCppEngineTest {
-
-    private lateinit var engine: LlamaCppEngine
-
-    @Before
-    fun setUp() {
-        engine = LlamaCppEngine()
+    @Test fun startsNotLoaded() {
+        assertEquals(ModelLifecycleState.NOT_LOADED, LlamaCppEngine().getModelStatus().state)
     }
 
-    @Test
-    fun testInitialStatusNotLoaded() {
-        val status = engine.getModelStatus()
-        assertEquals(ModelLifecycleState.NOT_LOADED, status.state)
-        assertNull(status.activeModelId)
-        assertEquals(0L, status.memoryUsageBytes)
+    @Test fun refusesToClaimModelLoadedWithoutNativeRuntime() = runTest {
+        val engine = LlamaCppEngine()
+        try {
+            engine.loadModel(ModelConfig(modelId = "fixture", modelPath = "/missing/model.gguf"))
+            fail("A stub runtime must not claim a model was loaded")
+        } catch (expected: UnsupportedOperationException) {
+            assertTrue(expected.message.orEmpty().contains("Real GGUF inference"))
+        }
+        assertEquals(ModelLifecycleState.NOT_LOADED, engine.getModelStatus().state)
     }
 
-    @Test
-    fun testLoadModelTransitionsToLoaded() = runTest {
-        val config = ModelConfig(
-            modelId = "model_biomistral_7b",
-            modelPath = "/data/user/0/com.agentx/files/models/biomistral-7b-q4_k_m.gguf",
-            contextLength = 4096,
-            threads = 4,
-            gpuLayers = 0
-        )
-
-        engine.loadModel(config)
-        val status = engine.getModelStatus()
-
-        assertEquals(ModelLifecycleState.LOADED, status.state)
-        assertEquals("model_biomistral_7b", status.activeModelId)
-        assertEquals("biomistral-7b-q4_k_m.gguf", status.activeModelName)
-        assertTrue(status.memoryUsageBytes > 0)
-    }
-
-    @Test
-    fun testGenerationStreamEmitsTokensAndFinished() = runTest {
-        val config = ModelConfig(
-            modelId = "model_biomistral_7b",
-            modelPath = "/data/user/0/com.agentx/files/models/biomistral-7b-q4_k_m.gguf"
-        )
-        engine.loadModel(config)
-
-        val request = InferenceRequest(
-            prompt = "What are the first-line therapies for essential hypertension?",
-            systemPrompt = "You are a clinical decision support specialist.",
-            maxTokens = 20,
-            temperature = 0.2f
-        )
-
-        val events = engine.generate(request).toList()
-        assertTrue("Expected at least one token event", events.any { it is GenerationEvent.Token })
-
-        val finishedEvent = events.filterIsInstance<GenerationEvent.Finished>().firstOrNull()
-        assertNotNull("Expected Finished event at the end of generation", finishedEvent)
-        assertTrue((finishedEvent?.totalTokens ?: 0) > 0)
-
-        val reconstructedText = events.filterIsInstance<GenerationEvent.Token>()
-            .joinToString("") { it.text }
-        assertTrue(reconstructedText.isNotBlank())
-    }
-
-    @Test
-    fun testGenerationWithoutModelEmitsError() = runTest {
-        val request = InferenceRequest(prompt = "Test prompt")
-        val events = engine.generate(request).toList()
-
-        assertEquals(1, events.size)
-        assertTrue("Expected error event when no model is loaded", events.first() is GenerationEvent.Error)
-        val errorEvent = events.first() as GenerationEvent.Error
-        assertTrue(errorEvent.message.contains("No model"))
-    }
-
-    @Test
-    fun testUnloadModelTransitionsToNotLoaded() = runTest {
-        val config = ModelConfig(
-            modelId = "model_meditron_7b",
-            modelPath = "/data/user/0/com.agentx/files/models/meditron-7b-q4_k_m.gguf"
-        )
-        engine.loadModel(config)
-        assertEquals(ModelLifecycleState.LOADED, engine.getModelStatus().state)
-
-        engine.unloadModel()
-        val postUnloadStatus = engine.getModelStatus()
-        assertEquals(ModelLifecycleState.NOT_LOADED, postUnloadStatus.state)
-        assertNull(postUnloadStatus.activeModelId)
+    @Test fun emitsExplicitErrorAndNoSyntheticTokens() = runTest {
+        val events = LlamaCppEngine().generate(InferenceRequest(prompt = "test")).toList()
+        assertTrue(events.any { it is GenerationEvent.Error })
+        assertFalse(events.any { it is GenerationEvent.Token })
+        assertFalse(events.any { it is GenerationEvent.Finished })
     }
 }

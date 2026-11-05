@@ -30,39 +30,11 @@ class LlamaCppInferenceEngine(
     private val isCancelled = AtomicBoolean(false)
 
     override suspend fun loadModel(model: ModelInfo): Result<Unit> = withContext(Dispatchers.IO) {
-        if (!LlamaCppNativeBridge.isNativeLoaded) {
-            return@withContext Result.failure(
-                IllegalStateException("Native llama.cpp library 'agentx_llama' is not loaded on this architecture.")
+        Result.failure(
+            UnsupportedOperationException(
+                "The bundled JNI bridge is a GGUF header/tokenization stub, not llama.cpp. Model loading is disabled until upstream llama.cpp tensor evaluation and sampling are integrated."
             )
-        }
-
-        // Verify model file exists
-        val file = File(model.id)
-        if (!file.exists()) {
-            return@withContext Result.failure(
-                IllegalArgumentException("Model file does not exist at path: ${model.id}")
-            )
-        }
-
-        if (isModelLoaded) {
-            unloadModel()
-        }
-
-        val handle = LlamaCppNativeBridge.nativeLoadModel(
-            modelPath = model.id,
-            contextLength = if (model.contextWindow > 0) model.contextWindow else defaultContextLength,
-            nThreads = nThreads
         )
-
-        if (handle == 0L) {
-            return@withContext Result.failure(
-                IllegalStateException("nativeLoadModel returned null/0 context handle for: ${model.id}")
-            )
-        }
-
-        contextHandle = handle
-        _loadedModel = model
-        Result.success(Unit)
     }
 
     override suspend fun generate(request: GenerationRequest): Flow<GenerationEvent> = flow {
@@ -102,7 +74,14 @@ class LlamaCppInferenceEngine(
                 topP = 0.9f
             ) ?: ""
 
-            val textToEmit = if (sampledToken.isNotBlank()) sampledToken else if (i < words.size) "${words[i]} " else "token "
+            if (sampledToken.isBlank()) {
+                val error = UnsupportedOperationException(
+                    "Native sampling returned no token. Synthetic fallback tokens are disabled."
+                )
+                emit(GenerationEvent.Error(error, error.message ?: "Native sampling unavailable"))
+                return@flow
+            }
+            val textToEmit = sampledToken
             emit(GenerationEvent.Token(textToEmit, i))
             generatedCount++
         }

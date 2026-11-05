@@ -191,15 +191,12 @@ class LocalModelServerEngine(
         return discovered
     }
 
+    /**
+     * Model catalog entries are not loaded weights. Until the shared native runtime
+     * is connected, refuse to mark any model as loaded or serving.
+     */
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val target = allAvailableModels.find { it.id == modelId } ?: return@withContext false
-            _status = LocalModelStatus.LOADING
-            delay(150) // Progressive layer mapping simulation
-            _activeModel = target.copy(isLoaded = true, isServing = true)
-            _status = LocalModelStatus.LOADED
-            true
-        }
+        false
     }
 
     suspend fun unloadModel() = withContext(Dispatchers.IO) {
@@ -216,32 +213,10 @@ class LocalModelServerEngine(
         temperature: Float = 0.7f,
         maxTokens: Int = 1024
     ): Flow<String> = flow {
-        if (_status != LocalModelStatus.LOADED && _status != LocalModelStatus.GENERATING) {
-            loadModel(_activeModel.id)
-        }
-
-        isCancelled.set(false)
-        _status = LocalModelStatus.GENERATING
-
-        try {
-            val substantiveText = resolveSubstantiveServerOutput(prompt, systemPrompt, _activeModel)
-            val tokens = substantiveText.split(Regex("(?<=\\s)|(?=\\n)"))
-            val limit = if (maxTokens > 0) maxTokens else 1024
-            var emitted = 0
-
-            for (token in tokens) {
-                if (isCancelled.get()) break
-                if (emitted >= limit) break
-
-                emit(token)
-                emitted++
-                val throttleDelay = thermalManager?.getThrottleDelayMs() ?: 0L
-                delay(12L + throttleDelay) // Adaptive layer-streaming cadence
-            }
-        } finally {
-            _status = LocalModelStatus.LOADED
-        }
-    }.flowOn(Dispatchers.IO)
+        throw IllegalStateException(
+            "Local model inference is unavailable: AgentX Serve is not connected to a real GGUF runtime. No synthetic output was generated."
+        )
+    }
 
     suspend fun generateCompletionSync(
         prompt: String,
