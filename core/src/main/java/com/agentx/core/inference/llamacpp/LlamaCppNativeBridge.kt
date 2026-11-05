@@ -1,14 +1,10 @@
 package com.agentx.core.inference.llamacpp
 
-import android.util.Log
-
 /**
  * JNI boundary for the pinned upstream llama.cpp runtime.
  * All model execution happens in native llama.cpp; Kotlin never fabricates tokens.
  */
 object LlamaCppNativeBridge {
-    private const val TAG = "AgentX_LlamaBridge"
-
     fun interface TokenCallback {
         /** Return false to stop generation. */
         fun onToken(text: String): Boolean
@@ -18,8 +14,7 @@ object LlamaCppNativeBridge {
         try {
             System.loadLibrary("agentx_llama")
             nativeInit()
-        } catch (error: Throwable) {
-            Log.e(TAG, "Unable to load the llama.cpp runtime", error)
+        } catch (_: Throwable) {
             false
         }
     }
