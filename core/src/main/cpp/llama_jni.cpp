@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define TAG "AgentX_LlamaCPP"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
@@ -51,8 +52,20 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
         return 0;
     }
 
+    const long pageSize = sysconf(_SC_PAGESIZE);
+    const long availablePages = sysconf(_SC_AVPHYS_PAGES);
+    const uint64_t availableBytes = pageSize > 0 && availablePages > 0
+        ? static_cast<uint64_t>(pageSize) * static_cast<uint64_t>(availablePages) : 0;
+    const uint64_t contextEstimate = static_cast<uint64_t>(
+        std::clamp(static_cast<int>(contextLength), 256, 32768)) * 64ULL * 1024ULL;
+    const uint64_t estimatedWorkingSet = static_cast<uint64_t>(fileInfo.st_size) + contextEstimate;
+    if (availableBytes > 0 && estimatedWorkingSet > availableBytes * 8ULL / 10ULL) {
+        LOGE("Refusing GGUF load: estimated working set exceeds 80%% of currently available RAM");
+        return 0;
+    }
+
     auto * state = new AgentXContext();
-    state->modelFileBytes = static_cast<jlong>(fileInfo.st_size);
+    state->modelFileBytes = static_cast<jlong>(estimatedWorkingSet);
 
     llama_model_params modelParams = llama_model_default_params();
     modelParams.n_gpu_layers = std::max(0, static_cast<int>(gpuLayers));
@@ -85,7 +98,7 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
         return 0;
     }
 
-    LOGI("Loaded GGUF model with llama.cpp; file footprint=%lld bytes", (long long) state->modelFileBytes);
+    LOGI("Loaded GGUF model with llama.cpp; estimated working set=%lld bytes", (long long) state->modelFileBytes);
     return static_cast<jlong>(reinterpret_cast<intptr_t>(state));
 }
 
