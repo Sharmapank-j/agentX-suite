@@ -136,7 +136,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "AgentX operates locally on device using progressive layer streaming (AirLLM/GGUF) or custom endpoints. Private data never leaves your device without consent.",
+                            "AgentX uses the provider configured in Settings. Local GGUF inference is currently unavailable; requests sent to custom or cloud endpoints leave this device according to that provider's privacy policy.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )
@@ -514,7 +514,7 @@ fun SettingsScreen(
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            "Active Model: ${server.activeModel.ifEmpty { "AirLLM Layer Stream" }}",
+                                            "Active Model: ${server.activeModel.ifEmpty { "No local model loaded" }}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                         Text(

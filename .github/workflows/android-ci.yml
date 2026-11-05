@@ -1,5 +1,9 @@
 name: AgentX Suite CI
 
+concurrency:
+  group: agentx-suite-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ main, master ]
@@ -34,6 +38,7 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build Debug APKs (All 3 Applications)
+        if: always()
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Upload Test Results
@@ -48,6 +53,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload Debug APKs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: agentx-suite-debug-apks

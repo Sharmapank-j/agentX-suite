@@ -21,7 +21,6 @@ import com.agentx.admin.models.TunnelStatus
 import com.agentx.admin.server.TunnelManager
 import com.agentx.admin.service.AgentXServerService
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -56,7 +55,7 @@ data class AdminUiState(
     val storageModels: List<LocalServerModel> = emptyList(),
     val isScanningStorage: Boolean = false,
     val activeLocalModel: LocalServerModel? = null,
-    val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
+    val localModelStatus: LocalModelStatus = LocalModelStatus.NOT_LOADED,
     val testPrompt: String = "Explain how on-device AI models stream layers efficiently on mobile hardware.",
     val testResponse: String? = null,
     val isGeneratingTest: Boolean = false,
@@ -274,7 +273,7 @@ class AdminViewModel(
     fun loadLocalModel(modelId: String) {
         viewModelScope.launch {
             _localModelStatus.value = LocalModelStatus.LOADING
-            _notification.value = "Loading model $modelId into AirLLM runtime..."
+            _notification.value = "Checking local runtime availability for $modelId..."
             val ok = server.switchLocalModel(modelId)
             if (ok) {
                 _activeLocalModel.value = localEngine.activeModel
@@ -306,7 +305,7 @@ class AdminViewModel(
             _storageModels.value = localEngine.storageModels.map {
                 it.copy(isLoaded = false, isServing = false)
             }
-            _notification.value = "Unloaded local model from memory."
+            _notification.value = "Local runtime is not loaded."
         }
     }
 
@@ -378,7 +377,7 @@ class AdminViewModel(
             val isLocal = activeMode == ServingMode.LOCAL_MODEL || (activeMode == ServingMode.HYBRID && !cloudGateway.isConfigured)
 
             val modelName = if (isLocal) localEngine.activeModel.name else cloudGateway.activeModelName
-            val engineType = if (isLocal) "AirLLM Layer-Stream (Edge)" else "Google Gemini Gateway (Cloud)"
+            val engineType = if (isLocal) "Local GGUF runtime unavailable" else "Google Gemini Gateway (Cloud)"
             val memFootprint = if (isLocal) localEngine.activeModel.memoryFootprintMb else 0L
 
             _liveTest.value = _liveTest.value.copy(
@@ -419,19 +418,13 @@ class AdminViewModel(
                     }
                 } else {
                     val fullResponse = cloudGateway.generateChatCompletion(prompt = prompt)
-                    val ttft = System.currentTimeMillis() - start
-                    _liveTest.value = _liveTest.value.copy(ttftMs = ttft)
-                    val words = fullResponse.split(" ")
-                    for ((idx, word) in words.withIndex()) {
-                        count++
-                        val piece = if (idx == 0) word else " $word"
-                        val currentText = (_liveTest.value.response ?: "") + piece
-                        _liveTest.value = _liveTest.value.copy(
-                            response = currentText,
-                            tokenCount = count
-                        )
-                        delay(10)
-                    }
+                    val completedAt = System.currentTimeMillis()
+                    _liveTest.value = _liveTest.value.copy(
+                        response = fullResponse,
+                        ttftMs = completedAt - start,
+                        tokenCount = 0,
+                        tokensPerSecond = 0.0
+                    )
                 }
 
                 val totalDuration = System.currentTimeMillis() - start

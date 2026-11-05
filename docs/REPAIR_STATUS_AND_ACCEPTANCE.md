@@ -1,5 +1,11 @@
 # AgentX Suite — Repair Status and Remaining Work
 
+## Follow-up after merge of the first safety patch
+
+The first post-merge CI run failed two AgentX Serve tests because the curated catalog still initialized its first entry as loaded/serving and the server status defaulted to LOADED. This follow-up resets the catalog, active model, and telemetry defaults to NOT_LOADED; removes the remaining hardcoded Serve response resolver; stops inferring model size, quantization, or RAM from file size; limits storage discovery to GGUF files; and displays unknown memory as not measured. Regression tests now assert the initial unloaded state and that unknown GGUF metadata is not guessed from file size. CI now attempts APK compilation even if unit tests fail so build diagnostics are not hidden by a test failure.
+
+The README and visible Serve status labels have also been rewritten to avoid claiming that local inference, layer streaming, or measured RAM usage is available.
+
 ## Scope of this repair branch
 
 This branch is a safety-first remediation, not a claim that the entire suite is now production-ready. Static source inspection found components reporting successful inference without executing GGUF weights. The first change stops those false-success paths.
@@ -71,4 +77,4 @@ This branch is a safety-first remediation, not a claim that the entire suite is 
 
 ## Validation status
 
-The changes in this branch were written through the GitHub repository API. A Gradle build, Android lint, emulator run, and physical-device run have not been executed in this environment. Do not treat this branch as a verified APK release until CI and device validation pass.
+The follow-up has not yet been validated by a fresh CI run. The preceding main-branch run failed two AgentX Serve unit tests; the test causes were identified and corrected in this branch. APK compilation, Android lint, emulator execution, and physical-device testing remain unverified until the follow-up workflow completes. Do not treat this branch as a verified APK release until CI and device validation pass.

@@ -36,7 +36,7 @@ data class ModelInfo(
     val parameters: String = "3B",
     val quantization: String = "Q4_K_M",
     val contextWindow: Int = 4096,
-    val memoryFootprintMb: Long = 1850L,
+    val memoryFootprintMb: Long = 0L,
     val isLocal: Boolean = true,
     val providerId: String = "local_embedded",
     val description: String = ""

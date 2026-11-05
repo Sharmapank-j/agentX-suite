@@ -288,7 +288,7 @@ fun ChatScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "AirLLM Engine Ready",
+                                "Local inference unavailable",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextSecondary,
                                 fontWeight = FontWeight.Medium
@@ -339,7 +339,7 @@ fun ChatScreen(
                         onSend = viewModel::sendMessage,
                         onStop = viewModel::stopGeneration,
                         isStreaming = state.isStreaming,
-                        activeModelName = state.activeModel?.quantization ?: "AirLLM"
+                        activeModelName = state.activeModel?.quantization ?: "Local runtime unavailable"
                     )
                 }
             },

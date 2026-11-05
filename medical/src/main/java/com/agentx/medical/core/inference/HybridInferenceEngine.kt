@@ -84,8 +84,6 @@ class HybridInferenceEngine(
                     }
 
                     if (cloudFailed) {
-                        val backendName = if (activeLocalBackend == LocalBackendType.AIR_LLM) "AirLLM Layer-Streaming" else "LlamaCpp GGUF"
-                        emit(GenerationEvent.Token("[Cloud unavailable — auto-switching to On-Device $backendName Engine]\n\n"))
                         localEngine.generate(request).collect { emit(it) }
                     }
                 } else {

@@ -58,6 +58,16 @@ class InferenceSchedulerTest {
     }
 
     @Test
+    fun testUnknownLocalMemoryRequirementIsRejected() = runBlocking {
+        val scheduler = DefaultInferenceScheduler(memoryBudgetMb = 2048L)
+        val unknownModel = ModelInfo(id = "unknown", name = "Unknown local model", isLocal = true)
+        val result = scheduler.loadModel(unknownModel)
+        assertTrue(result.isFailure)
+        assertFalse(scheduler.isModelLoaded.value)
+        assertEquals(0L, scheduler.currentMemoryUsageMb.value)
+    }
+
+    @Test
     fun testSingleActiveModelInvariant() = runBlocking {
         val scheduler = DefaultInferenceScheduler(memoryBudgetMb = 2048L)
         val modelA = ModelInfo(id = "model-3b", name = "Model 3B", memoryFootprintMb = 1200L, isLocal = true)

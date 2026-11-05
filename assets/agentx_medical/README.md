@@ -1,14 +1,15 @@
-# ⚕️ AgentX Medical CDS App Assets
+# AgentX Medical App Assets
 
-**Package ID:** `com.agentx.medical`  
-**Application Role:** Clinical Decision Support System (CDS) & Medical Education  
-**Target SDK:** 35 (Android 15) | Min SDK: 26 (Android 8.0)  
+**Package:** `com.agentx.medical`  
+**Module:** `:medical`  
+**Role:** Medical education and clinical-support development app.
 
-## Included Assets
-- **`AgentX-Medical-v1.0.0-debug.apk`** (~18.4 MB): Standalone production debug APK for AgentX Medical.
-  - [Download `AgentX-Medical-v1.0.0-debug.apk`](https://github.com/Sharmapank-j/agentX-suite/releases/download/v1.0.0/AgentX-Medical-v1.0.0-debug.apk)
-  - Dedicated clinical specialists (Chief Medical Officer, Clinical Pharmacologist, Cardiologist, Diagnostician).
-  - Deterministic verified calculators: eGFR CKD-EPI 2021, CHA₂DS₂-VASc stroke risk, drug-drug safety checker.
-  - Pure Kotlin zero-crash inference and layer-streaming without native JNI dependencies.
-- **`ic_launcher_foreground.xml`**: Clinical emerald cross with pulsing white EKG heartbeat line vector drawable.
-- **`ic_launcher_background.xml`**: Hospital deep teal `#042F2E` ambient background vector drawable.
+This directory contains branding assets and may contain historical APK artifacts.
+
+**Important:** The historical `v1.0.0` APK predates the inference safety repair. Local generation is disabled until a genuine shared GGUF runtime is integrated. Medical calculators and clinical logic require independent reference-based validation; this project is not a validated medical device.
+
+Do not use generated content as a substitute for clinical judgement, institutional protocols, or verified references.
+
+## Branding assets
+- `ic_launcher_foreground.xml` — clinical cross / EKG vector.
+- `ic_launcher_background.xml` — dark teal background vector.

@@ -78,6 +78,13 @@ class DefaultInferenceScheduler(
     private var thermalDelayMs: Long = 0L
 
     override suspend fun loadModel(model: ModelInfo): Result<Unit> = modelLock.withLock {
+        // Local models must have a measured/validated memory requirement before admission.
+        if (model.isLocal && model.memoryFootprintMb <= 0L) {
+            return Result.failure(
+                IllegalArgumentException("Model '${model.name}' has no validated memory requirement; refusing to mark it loaded.")
+            )
+        }
+
         // Enforce memory budgeting constraint
         if (model.isLocal && model.memoryFootprintMb > memoryBudgetMb) {
             return Result.failure(

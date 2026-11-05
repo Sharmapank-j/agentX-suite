@@ -9,8 +9,11 @@ class LocalModelServerEngineTest {
     @Test fun curatedCatalogIsDiscoveryOnlyUntilRuntimeExists() {
         val engine = LocalModelServerEngine()
         assertTrue(engine.curatedCatalog.isNotEmpty())
+        assertTrue(engine.curatedCatalog.none { it.isLoaded || it.isServing })
         assertFalse(engine.activeModel.isLoaded)
         assertFalse(engine.activeModel.isServing)
+        assertEquals(com.agentx.admin.models.LocalModelStatus.NOT_LOADED, engine.status)
+        assertEquals(0L, engine.activeModel.memoryFootprintMb)
     }
 
     @Test fun refusesToMarkCatalogEntryAsLoaded() = runTest {
@@ -18,6 +21,13 @@ class LocalModelServerEngineTest {
         assertFalse(engine.loadModel(engine.curatedCatalog.first().id))
         assertFalse(engine.activeModel.isLoaded)
         assertFalse(engine.activeModel.isServing)
+        assertEquals(com.agentx.admin.models.LocalModelStatus.NOT_LOADED, engine.status)
+    }
+
+    @Test fun unknownModelMetadataIsNotGuessedFromFileSize() {
+        assertEquals("Unknown", LocalModelServerEngine.detectParameters("custom-model.gguf", 7L * 1024 * 1024 * 1024))
+        assertEquals("Unknown", LocalModelServerEngine.detectQuantization("custom-model.gguf"))
+        assertEquals(0L, LocalModelServerEngine.computeLayerStreamingRamMb(7L * 1024 * 1024 * 1024))
     }
 
     @Test fun generationFailsInsteadOfReturningMockTokens() = runTest {

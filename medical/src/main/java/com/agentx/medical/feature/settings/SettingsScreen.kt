@@ -511,7 +511,7 @@ fun SettingsScreen(
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            "Active Model: ${server.activeModel.ifEmpty { "AirLLM Layer Stream" }}",
+                                            "Active Model: ${server.activeModel.ifEmpty { "No local model loaded" }}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                         Text(

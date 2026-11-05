@@ -573,7 +573,7 @@ private fun LocalModelsTab(
                         ) {
                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("RAM Footprint", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
-                                Text("${model.memoryFootprintMb} MB", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(if (model.memoryFootprintMb > 0L) "${model.memoryFootprintMb} MB" else "Not measured", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                         Surface(
@@ -787,7 +787,7 @@ private fun LocalModelsTab(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "${model.architecture} • ${model.parameterCount} • ${model.quantization} • ${model.memoryFootprintMb} MB RAM",
+                                "${model.architecture} • ${model.parameterCount} • ${model.quantization} • ${if (model.memoryFootprintMb > 0L) "${model.memoryFootprintMb} MB RAM" else "RAM unknown"}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontFamily = FontFamily.Monospace
