@@ -15,7 +15,6 @@ import com.agentx.core.inference.GenerationEvent
 import com.agentx.core.inference.LlamaCppEngine
 import com.agentx.core.inference.ModelConfig
 import com.agentx.core.inference.ModelLifecycleState
-import com.agentx.core.inference.NativeTokenCallback
 import com.agentx.domain.models.Agent
 import com.agentx.domain.models.AgentRole
 import com.agentx.domain.models.Conversation
@@ -148,26 +147,6 @@ class ProguardSerializationCompatibilityTest {
     }
 }
 
-// ─── Native JNI Interface & Callback Contract Tests ──────────────────────────
-
-class NativeTokenCallbackContractTest {
-
-    @Test
-    fun `NativeTokenCallback functional interface receives tokens reliably`() {
-        val receivedTokens = mutableListOf<String>()
-        val callback = NativeTokenCallback { token ->
-            receivedTokens.add(token)
-        }
-
-        callback.onToken("Myocardial ")
-        callback.onToken("Infarction ")
-        callback.onToken("Protocol")
-
-        assertEquals(3, receivedTokens.size)
-        assertEquals("Myocardial Infarction Protocol", receivedTokens.joinToString(""))
-    }
-}
-
 // ─── Memory Budget & Engine Lifecycle Tests ───────────────────────────────────
 
 class MemoryManagementAndEngineLifecycleTest {
@@ -182,42 +161,38 @@ class MemoryManagementAndEngineLifecycleTest {
     }
 
     @Test
-    fun `LlamaCppEngine loads virtual fallback model and reports LOADED with memory allocated`() = runTest {
+    fun `LlamaCppEngine refuses to claim a model loaded without native runtime`() = runTest {
         val engine = LlamaCppEngine()
-        engine.loadModel(
-            ModelConfig(
-                modelId = "test_model",
-                modelPath = "/path/test.gguf",
-                threads = 4,
-                contextLength = 2048
+        try {
+            engine.loadModel(
+                ModelConfig(
+                    modelId = "test_model",
+                    modelPath = "/path/test.gguf",
+                    threads = 4,
+                    contextLength = 2048
+                )
             )
-        )
+            throw AssertionError("Stub runtime must not report a model as loaded")
+        } catch (expected: UnsupportedOperationException) {
+            assertTrue(expected.message.orEmpty().contains("Real GGUF inference"))
+        }
 
         val status = engine.getModelStatus()
-        assertEquals(ModelLifecycleState.LOADED, status.state)
-        assertTrue("Memory should be allocated for loaded model", status.memoryUsageBytes > 0)
-        assertEquals("test_model", status.activeModelId)
-
-        // Unload and verify memory cleared
-        engine.unloadModel()
-        val afterUnload = engine.getModelStatus()
-        assertEquals(ModelLifecycleState.NOT_LOADED, afterUnload.state)
-        assertEquals(0L, afterUnload.memoryUsageBytes)
+        assertEquals(ModelLifecycleState.NOT_LOADED, status.state)
+        assertEquals(0L, status.memoryUsageBytes)
     }
 
     @Test
-    fun `LlamaCppEngine generates tokens through fallback and streams finished event`() = runTest {
+    fun `LlamaCppEngine emits explicit error without synthetic tokens`() = runTest {
         val engine = LlamaCppEngine()
-        engine.loadModel(ModelConfig(modelId = "test", modelPath = "/test.gguf"))
-
         val events = engine.generate(
             com.agentx.core.inference.InferenceRequest(prompt = "Patient has chest pain")
         ).toList()
 
-        assertTrue("Should receive tokens", events.any { it is GenerationEvent.Token })
-        assertTrue("Should receive finished event", events.any { it is GenerationEvent.Finished })
-    }
-}
+        assertTrue("Should receive an explicit error", events.any { it is GenerationEvent.Error })
+        assertFalse("Must not emit fabricated tokens", events.any { it is GenerationEvent.Token })
+        assertFalse("Must not report fabricated completion", events.any { it is GenerationEvent.Finished })
+    }}
 
 // ─── Hardware CPU Thread Clamping Tests ───────────────────────────────────────
 
