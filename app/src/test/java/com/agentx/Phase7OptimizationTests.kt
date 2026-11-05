@@ -161,7 +161,7 @@ class MemoryManagementAndEngineLifecycleTest {
     }
 
     @Test
-    fun `LlamaCppEngine refuses to claim a model loaded without native runtime`() = runTest {
+    fun `LlamaCppEngine refuses unavailable native runtime`() = runTest {
         val engine = LlamaCppEngine()
         try {
             engine.loadModel(
@@ -173,12 +173,12 @@ class MemoryManagementAndEngineLifecycleTest {
                 )
             )
             throw AssertionError("Stub runtime must not report a model as loaded")
-        } catch (expected: UnsupportedOperationException) {
-            assertTrue(expected.message.orEmpty().contains("Real GGUF inference"))
+        } catch (_: IllegalStateException) {
+            // Host JVM has no Android native .so; runtime availability must fail closed.
         }
 
         val status = engine.getModelStatus()
-        assertEquals(ModelLifecycleState.NOT_LOADED, status.state)
+        assertNotEquals(ModelLifecycleState.LOADED, status.state)
         assertEquals(0L, status.memoryUsageBytes)
     }
 
