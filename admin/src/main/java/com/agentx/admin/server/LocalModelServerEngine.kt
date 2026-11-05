@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * On-Device Local Model Server Engine for AgentX Serve.
  *
- * Provides model discovery and server integration points. Model execution remains disabled until a genuine GGUF runtime is connected.
+ * Provides model discovery and executes user-imported GGUF files through the shared native llama.cpp runtime.
  *
  * Supports both pre-configured curated edge models and user-chosen models stored in phone storage (.gguf).
  */
@@ -191,8 +191,7 @@ class LocalModelServerEngine(
     }
 
     /**
-     * Model catalog entries are not loaded weights. Until the shared native runtime
-     * is connected, refuse to mark any model as loaded or serving.
+     * Catalog entries are metadata only. Only a selected local GGUF file can be loaded and served.
      */
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
