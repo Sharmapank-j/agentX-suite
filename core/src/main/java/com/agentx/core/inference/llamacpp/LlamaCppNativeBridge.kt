@@ -28,7 +28,8 @@ object LlamaCppNativeBridge {
     ): Long
     external fun nativeGenerate(
         contextHandle: Long,
-        prompt: String,
+        systemPrompt: String?,
+        userPrompt: String,
         maxTokens: Int,
         temperature: Float,
         topP: Float,
