@@ -77,6 +77,7 @@ class LlamaCppInferenceEngine(
                     }
                 )
             }
+            check(emitted >= 0) { "llama.cpp failed during prompt evaluation or token generation." }
             if (!cancelled.get()) {
                 send(GenerationEvent.Finished(
                     totalTokens = emitted,
