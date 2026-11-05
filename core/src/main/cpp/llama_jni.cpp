@@ -4,6 +4,8 @@
 
 #include <atomic>
 #include <algorithm>
+#include <codecvt>
+#include <locale>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -23,6 +25,16 @@ struct AgentXContext {
     std::mutex generationMutex;
     jlong modelFileBytes = 0;
 };
+
+static jstring utf8ToJString(JNIEnv * env, const char * bytes, size_t length) {
+    try {
+        std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+        const std::u16string utf16 = converter.from_bytes(bytes, bytes + length);
+        return env->NewString(reinterpret_cast<const jchar *>(utf16.data()), static_cast<jsize>(utf16.size()));
+    } catch (...) {
+        return env->NewString(nullptr, 0);
+    }
+}
 
 static AgentXContext * fromHandle(jlong handle) {
     return reinterpret_cast<AgentXContext *>(static_cast<intptr_t>(handle));
@@ -197,7 +209,7 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
             break;
         }
         if (pieceLength > 0) {
-            jstring text = env->NewStringUTF(std::string(piece, static_cast<size_t>(pieceLength)).c_str());
+            jstring text = utf8ToJString(env, piece, static_cast<size_t>(pieceLength));
             if (text == nullptr) break;
             const jboolean keepGoing = env->CallBooleanMethod(callback, onToken, text);
             env->DeleteLocalRef(text);
