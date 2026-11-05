@@ -5,9 +5,9 @@ import java.util.UUID
 
 @Serializable
 enum class ServingMode(val label: String, val description: String) {
-    LOCAL_MODEL("Local On-Device Engine (AirLLM)", "Serves requests completely offline using mobile layer-streaming (zero cloud cost, 100% private)."),
-    CLOUD_GATEWAY("Cloud Gateway (Gemini API)", "Relays requests to Google Gemini cloud for large-scale multimodal inference."),
-    HYBRID("Hybrid Auto-Fallback", "Prioritizes local on-device engine; falls back to cloud gateway when available.")
+    LOCAL_MODEL("Local GGUF Runtime (Unavailable)", "Local inference is unavailable until a real GGUF runtime is installed and validated."),
+    CLOUD_GATEWAY("Cloud Gateway (Gemini API)", "Relays requests to the configured Gemini cloud endpoint."),
+    HYBRID("Hybrid (Local Runtime Required)", "Uses a validated local runtime when available; cloud fallback requires explicit configuration.")
 }
 
 @Serializable
@@ -63,7 +63,7 @@ data class LocalServerModel(
     val parameterCount: String,
     val quantization: String,
     val contextWindow: Int = 4096,
-    val memoryFootprintMb: Long = 1850L,
+    val memoryFootprintMb: Long = 0L,
     val description: String,
     val isLoaded: Boolean = false,
     val isServing: Boolean = false,
@@ -114,9 +114,9 @@ data class ServerTelemetry(
     val tokensEmitted: Long = 0L,
     val startedAtMs: Long? = null,
     val servingMode: ServingMode = ServingMode.LOCAL_MODEL,
-    val activeLocalModel: String? = "Llama-3.2-3B-Instruct (AirLLM)",
-    val localModelStatus: LocalModelStatus = LocalModelStatus.LOADED,
-    val localMemoryUsageMb: Long = 1850L,
+    val activeLocalModel: String? = null,
+    val localModelStatus: LocalModelStatus = LocalModelStatus.NOT_LOADED,
+    val localMemoryUsageMb: Long = 0L,
     val activeCloudModel: String = "gemini-2.5-flash",
     val isCloudConnected: Boolean = false,
     val lastConnectedIp: String? = null,
