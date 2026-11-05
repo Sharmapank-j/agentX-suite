@@ -15,15 +15,17 @@ class LlamaCppEngineTest {
         assertEquals(ModelLifecycleState.NOT_LOADED, LlamaCppEngine().getModelStatus().state)
     }
 
-    @Test fun refusesToClaimModelLoadedWithoutNativeRuntime() = runTest {
+    @Test fun refusesMissingOrUnavailableNativeModel() = runTest {
         val engine = LlamaCppEngine()
         try {
             engine.loadModel(ModelConfig(modelId = "fixture", modelPath = "/missing/model.gguf"))
             fail("A stub runtime must not claim a model was loaded")
-        } catch (expected: UnsupportedOperationException) {
-            assertTrue(expected.message.orEmpty().contains("Real GGUF inference"))
+        } catch (_: IllegalStateException) {
+            // Host JVM has no Android native library; unavailable runtime must fail closed.
+        } catch (_: IllegalArgumentException) {
+            // Missing model path is rejected before native loading on some platforms.
         }
-        assertEquals(ModelLifecycleState.NOT_LOADED, engine.getModelStatus().state)
+        assertNotEquals(ModelLifecycleState.LOADED, engine.getModelStatus().state)
     }
 
     @Test fun emitsExplicitErrorAndNoSyntheticTokens() = runTest {

@@ -39,7 +39,8 @@ data class ModelInfo(
     val memoryFootprintMb: Long = 0L,
     val isLocal: Boolean = true,
     val providerId: String = "local_embedded",
-    val description: String = ""
+    val description: String = "",
+    val modelPath: String? = null
 )
 
 @Serializable

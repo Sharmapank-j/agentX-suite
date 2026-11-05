@@ -6,108 +6,107 @@ import com.agentx.core.inference.model.GenerationRequest
 import com.agentx.core.inference.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Genuine llama.cpp Inference Engine operating over native NDK/JNI bindings.
+ * Executes GGUF weights with upstream llama.cpp through the shared JNI runtime.
+ * The native library is built for each configured Android ABI by CMake/NDK.
  */
 class LlamaCppInferenceEngine(
-    private val nThreads: Int = 4,
-    private val defaultContextLength: Int = 2048
+    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+    private val defaultContextLength: Int = 2048,
+    private val gpuLayers: Int = 0
 ) : InferenceEngine {
+    override val engineName = "llama.cpp"
+    private val handle = AtomicLong(0L)
+    private val cancelled = AtomicBoolean(false)
+    @Volatile private var currentModel: ModelInfo? = null
 
-    override val engineName: String = "LlamaCpp_Native_Engine"
-
-    private var contextHandle: Long = 0L
-    private var _loadedModel: ModelInfo? = null
-    override val loadedModel: ModelInfo? get() = _loadedModel
-    override val isModelLoaded: Boolean get() = contextHandle != 0L
-
-    private val isCancelled = AtomicBoolean(false)
+    override val isModelLoaded: Boolean get() = handle.get() != 0L
+    override val loadedModel: ModelInfo? get() = currentModel
 
     override suspend fun loadModel(model: ModelInfo): Result<Unit> = withContext(Dispatchers.IO) {
-        Result.failure(
-            UnsupportedOperationException(
-                "The bundled JNI bridge is a GGUF header/tokenization stub, not llama.cpp. Model loading is disabled until upstream llama.cpp tensor evaluation and sampling are integrated."
+        runCatching {
+            require(LlamaCppNativeBridge.isNativeLoaded) {
+                "The native llama.cpp library is unavailable for this device ABI."
+            }
+            val path = File(model.modelPath ?: "")
+            require(path.isFile && path.canRead() && path.extension.equals("gguf", true)) {
+                "Select a readable local .gguf file before loading the model."
+            }
+            unloadModel().getOrThrow()
+            val nativeHandle = LlamaCppNativeBridge.nativeLoadModel(
+                path.absolutePath,
+                model.contextWindow.takeIf { it > 0 } ?: defaultContextLength,
+                nThreads.coerceIn(1, 16),
+                gpuLayers.coerceAtLeast(0)
             )
-        )
+            check(nativeHandle != 0L) {
+                "llama.cpp could not load this GGUF model. Check model integrity, RAM, and supported architecture."
+            }
+            handle.set(nativeHandle)
+            currentModel = model
+        }
     }
 
-    override suspend fun generate(request: GenerationRequest): Flow<GenerationEvent> = flow {
-        if (!isModelLoaded) {
-            emit(GenerationEvent.Error(IllegalStateException("No model loaded in llama.cpp engine"), "No model loaded"))
-            return@flow
+    override suspend fun generate(request: GenerationRequest): Flow<GenerationEvent> = channelFlow {
+        val nativeHandle = handle.get()
+        if (nativeHandle == 0L) {
+            send(GenerationEvent.Error(IllegalStateException("No GGUF model is loaded"), "No GGUF model is loaded"))
+            return@channelFlow
         }
-
-        isCancelled.set(false)
-        val startTime = System.currentTimeMillis()
-
-        // 1. Tokenize prompt via JNI
-        val tokens = LlamaCppNativeBridge.nativeTokenize(contextHandle, request.prompt)
-        if (tokens == null || tokens.isEmpty()) {
-            emit(GenerationEvent.Error(IllegalStateException("Tokenization failed for prompt"), "Tokenization failed"))
-            return@flow
-        }
-
-        // 2. Evaluate prompt tokens via JNI
-        val evalSuccess = LlamaCppNativeBridge.nativeEval(contextHandle, tokens)
-        if (!evalSuccess) {
-            emit(GenerationEvent.Error(IllegalStateException("nativeEval failed on prompt"), "Prompt evaluation failed"))
-            return@flow
-        }
-
-        // 3. Incremental token sampling loop
-        val words = request.prompt.split(" ")
-        var generatedCount = 0
-
-        for (i in 0 until request.maxTokens.coerceAtMost(64)) {
-            if (isCancelled.get()) break
-
-            val sampledToken = LlamaCppNativeBridge.nativeSampleToken(
-                contextHandle = contextHandle,
-                tokenIndex = i,
-                temperature = request.temperature,
-                topP = 0.9f
-            ) ?: ""
-
-            if (sampledToken.isBlank()) {
-                val error = UnsupportedOperationException(
-                    "Native sampling returned no token. Synthetic fallback tokens are disabled."
+        cancelled.set(false)
+        val started = System.currentTimeMillis()
+        var emitted = 0
+        try {
+            emitted = withContext(Dispatchers.IO) {
+                LlamaCppNativeBridge.nativeGenerate(
+                    nativeHandle,
+                    request.systemPrompt,
+                    request.prompt,
+                    request.maxTokens.coerceIn(1, 4096),
+                    request.temperature.coerceIn(0f, 2f),
+                    0.9f,
+                    LlamaCppNativeBridge.TokenCallback { token ->
+                        if (cancelled.get()) false
+                        else trySend(GenerationEvent.Token(token)).isSuccess
+                    }
                 )
-                emit(GenerationEvent.Error(error, error.message ?: "Native sampling unavailable"))
-                return@flow
             }
-            val textToEmit = sampledToken
-            emit(GenerationEvent.Token(textToEmit, i))
-            generatedCount++
+            check(emitted >= 0) { "llama.cpp failed during prompt evaluation or token generation." }
+            if (!cancelled.get()) {
+                send(GenerationEvent.Finished(
+                    totalTokens = emitted,
+                    promptTokens = 0,
+                    completionTokens = emitted,
+                    durationMs = System.currentTimeMillis() - started,
+                    providerId = "llama_cpp",
+                    modelId = currentModel?.id ?: "unknown"
+                ))
+            }
+        } catch (error: Throwable) {
+            send(GenerationEvent.Error(error, error.message ?: "llama.cpp generation failed"))
         }
-
-        emit(
-            GenerationEvent.Finished(
-                totalTokens = tokens.size + generatedCount,
-                promptTokens = tokens.size,
-                completionTokens = generatedCount,
-                durationMs = System.currentTimeMillis() - startTime,
-                providerId = "llama_cpp_native",
-                modelId = _loadedModel?.id ?: "unknown"
-            )
-        )
-    }.flowOn(Dispatchers.IO)
+    }
 
     override suspend fun cancel(requestId: String) {
-        isCancelled.set(true)
+        cancelled.set(true)
+        handle.get().takeIf { it != 0L }?.let(LlamaCppNativeBridge::nativeCancel)
     }
 
     override suspend fun unloadModel(): Result<Unit> = withContext(Dispatchers.IO) {
-        if (contextHandle != 0L) {
-            LlamaCppNativeBridge.nativeFree(contextHandle)
-            contextHandle = 0L
-            _loadedModel = null
+        runCatching {
+            cancelled.set(true)
+            val old = handle.getAndSet(0L)
+            if (old != 0L) {
+                LlamaCppNativeBridge.nativeCancel(old)
+                check(LlamaCppNativeBridge.nativeFree(old)) { "Native model release failed" }
+            }
+            currentModel = null
         }
-        Result.success(Unit)
     }
 }
