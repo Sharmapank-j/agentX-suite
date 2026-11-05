@@ -24,6 +24,12 @@ class LocalModelServerEngineTest {
         assertEquals(com.agentx.admin.models.LocalModelStatus.NOT_LOADED, engine.status)
     }
 
+    @Test fun unknownModelMetadataIsNotGuessedFromFileSize() {
+        assertEquals("Unknown", LocalModelServerEngine.detectParameters("custom-model.gguf", 7L * 1024 * 1024 * 1024))
+        assertEquals("Unknown", LocalModelServerEngine.detectQuantization("custom-model.gguf"))
+        assertEquals(0L, LocalModelServerEngine.computeLayerStreamingRamMb(7L * 1024 * 1024 * 1024))
+    }
+
     @Test fun generationFailsInsteadOfReturningMockTokens() = runTest {
         val engine = LocalModelServerEngine()
         try {
