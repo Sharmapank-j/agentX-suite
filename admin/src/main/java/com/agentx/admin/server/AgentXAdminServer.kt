@@ -92,7 +92,12 @@ class AgentXAdminServer(
         if (_telemetry.value.isRunning) return@withContext true
 
         try {
-            serverSocket = ServerSocket(port)
+            val useTls = tlsManager?.config?.value?.enabled == true
+            serverSocket = if (useTls) {
+                tlsManager?.createSslServerSocket(port) ?: ServerSocket(port)
+            } else {
+                ServerSocket(port)
+            }
             val actualPort = serverSocket?.localPort ?: port
             val ip = getLocalIpAddress()
 

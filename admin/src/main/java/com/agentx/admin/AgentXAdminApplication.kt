@@ -33,16 +33,20 @@ class AgentXAdminApplication : Application() {
     lateinit var nsdHelper: AgentXNsdHelper
         private set
 
+    lateinit var database: com.agentx.admin.data.local.AdminDatabase
+        private set
+
     lateinit var server: AgentXAdminServer
         private set
 
     override fun onCreate() {
         super.onCreate()
+        database = com.agentx.admin.data.local.AdminDatabase.getInstance(this)
         thermalManager = ThermalBatteryManager(this)
         tlsManager = LocalTlsManager(this)
         tunnelManager = TunnelManager(this)
         nsdHelper = AgentXNsdHelper(this)
-        clientManager = ClientManager()
+        clientManager = ClientManager(database)
         cloudGateway = CloudGeminiGateway()
         localEngine = LocalModelServerEngine(thermalManager)
         server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager)

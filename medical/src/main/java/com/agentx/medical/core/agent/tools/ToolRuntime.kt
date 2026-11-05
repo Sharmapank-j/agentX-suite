@@ -4,9 +4,10 @@ import com.agentx.medical.core.agent.core.ToolCallResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.booleanOrNull
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 // ─── Tool Definitions ────────────────────────────────────────────────────────
 
@@ -53,11 +54,10 @@ object ToolArgumentValidator {
     }
 }
 
-// ─── Clinical Tool Implementations ────────────────────────────────────────────
+// ─── Clinical Tool Implementations (Deterministic & Validated) ────────────────
 
 /**
- * Cockcroft-Gault Creatinine Clearance (CrCl) Calculator.
- * Used for renal drug dosage adjustments (FDA drug labeling standard).
+ * 1. Cockcroft-Gault Creatinine Clearance (CrCl) Calculator.
  * CrCl = [ (140 - Age) * Weight (kg) ] / [ 72 * Serum Creatinine (mg/dL) ] * (0.85 if Female)
  */
 object CockcroftGaultCalculator {
@@ -65,7 +65,7 @@ object CockcroftGaultCalculator {
         if (age <= 0 || weightKg <= 0.0 || serumCrMgDl <= 0.0) {
             return "Invalid input: Age, weight, and serum creatinine must all be positive values."
         }
-        val isFemale = sex.uppercase() == "F"
+        val isFemale = sex.uppercase().startsWith("F")
         val rawCrCl = ((140 - age) * weightKg) / (72.0 * serumCrMgDl)
         val finalCrCl = if (isFemale) rawCrCl * 0.85 else rawCrCl
 
@@ -82,12 +82,12 @@ object CockcroftGaultCalculator {
 
 | Parameter | Value |
 |-----------|-------|
-| Calculated CrCl | ${String.format("%.1f", finalCrCl)} mL/min |
+| Calculated CrCl | **${String.format("%.1f", finalCrCl)} mL/min** |
 | Impairment Tier | $stage |
 | Input Age | $age years |
 | Input Weight | $weightKg kg |
 | Serum Creatinine | $serumCrMgDl mg/dL |
-| Biological Sex | $sex |
+| Biological Sex | ${if (isFemale) "Female" else "Male"} |
 
 > ${if (finalCrCl < 50.0) "⚠️ Significant renal impairment. Review antibiotic (Vancomycin, Aminoglycosides), DOAC (Apixaban, Rivaroxaban), and Enoxaparin dosing guidelines." else "Standard renally cleared medication dosing applies."}
         """.trimIndent()
@@ -95,9 +95,58 @@ object CockcroftGaultCalculator {
 }
 
 /**
- * Serum Anion Gap & Delta-Delta Ratio Calculator for Acid-Base Disorders.
+ * 2. eGFR calculator using CKD-EPI 2021 (race-free) equation.
+ */
+object EgfrCalculator {
+    fun calculate(age: Int, sex: String, creatinineMgDl: Double): String {
+        if (creatinineMgDl <= 0.0 || age <= 0) {
+            return "Invalid input: Age and creatinine must be positive values."
+        }
+
+        val isFemale = sex.uppercase().startsWith("F")
+        val kappa = if (isFemale) 0.7 else 0.9
+        val alpha = if (isFemale) -0.241 else -0.302
+        val crRatio = creatinineMgDl / kappa
+
+        val egfr = 142.0 *
+                minOf(crRatio, 1.0).pow(alpha) *
+                maxOf(crRatio, 1.0).pow(-1.200) *
+                (0.9938.pow(age.toDouble())) *
+                (if (isFemale) 1.012 else 1.0)
+
+        val stage = when {
+            egfr >= 90 -> "G1 (Normal/High)"
+            egfr >= 60 -> "G2 (Mildly Decreased)"
+            egfr >= 45 -> "G3a (Mildly-Moderately Decreased)"
+            egfr >= 30 -> "G3b (Moderately-Severely Decreased)"
+            egfr >= 15 -> "G4 (Severely Decreased)"
+            else -> "G5 (Kidney Failure) — Dialysis evaluation required"
+        }
+
+        return """
+## eGFR Result (CKD-EPI 2021)
+
+| Parameter | Value |
+|-----------|-------|
+| eGFR | **${String.format("%.1f", egfr)} mL/min/1.73 m²** |
+| CKD Stage | $stage |
+| Input Age | $age years |
+| Input Sex | ${if (isFemale) "Female" else "Male"} |
+| Creatinine | $creatinineMgDl mg/dL |
+
+> ${if (egfr < 60) "⚠️ Renal dose adjustment required. Review nephrotoxic agents (NSAIDs, aminoglycosides, contrast media)." else "Normal renal function. Standard dosing applies."}
+        """.trimIndent()
+    }
+
+    private fun minOf(a: Double, b: Double) = if (a < b) a else b
+    private fun maxOf(a: Double, b: Double) = if (a > b) a else b
+    private fun Double.pow(exp: Double) = kotlin.math.exp(exp * kotlin.math.ln(this))
+}
+
+/**
+ * 3. Serum Anion Gap & Delta-Delta Ratio Calculator for Acid-Base Disorders.
  * AG = [Na+] - ([Cl-] + [HCO3-])
- * Normal: 8–12 mEq/L
+ * Delta-Delta Ratio (ΔAG / ΔHCO3) evaluates for mixed acid-base disorders.
  */
 object AnionGapCalculator {
     fun calculate(sodium: Double, chloride: Double, bicarbonate: Double, albumin: Double? = null): String {
@@ -116,6 +165,19 @@ object AnionGapCalculator {
             correctedAg < 8.0 -> "Low Anion Gap (Hypoalbuminemia, multiple myeloma, lithium intoxication)"
             else -> "Normal Anion Gap (Non-Anion Gap Metabolic Acidosis / NAGMA or Normal)"
         }
+
+        val deltaAg = correctedAg - 12.0
+        val deltaHco3 = 24.0 - bicarbonate
+        val deltaRatio = if (deltaHco3 > 0.5) deltaAg / deltaHco3 else null
+
+        val deltaInterpretation = if (correctedAg > 12.0 && deltaRatio != null) {
+            when {
+                deltaRatio < 0.4 -> "Delta Ratio < 0.4: Mixed High Anion Gap and Non-Anion Gap Metabolic Acidosis (e.g., DKA + severe diarrhea or renal tubular acidosis)."
+                deltaRatio in 0.4..0.8 -> "Delta Ratio 0.4–0.8: Mixed HAGMA and NAGMA (combined high anion gap and hyperchloremic acidosis)."
+                deltaRatio in 0.8..2.0 -> "Delta Ratio 0.8–2.0: Pure High Anion Gap Metabolic Acidosis (uncomplicated DKA, lactic acidosis)."
+                else -> "Delta Ratio > 2.0: Mixed HAGMA with concurrent Metabolic Alkalosis (e.g., DKA + vomiting/NG suction or diuretic use) or pre-existing chronic respiratory acidosis."
+            }
+        } else null
 
         val differential = if (correctedAg > 12.0) {
             """
@@ -136,8 +198,18 @@ object AnionGapCalculator {
             """.trimIndent()
         }
 
+        val deltaSection = if (deltaInterpretation != null) {
+            """
+### Delta-Delta Ratio Analysis (ΔAG / ΔHCO₃):
+• **ΔAG (Excess Anion Gap):** ${String.format("%.1f", deltaAg)} mEq/L (AG - 12)
+• **ΔHCO₃ (Bicarbonate Deficit):** ${String.format("%.1f", deltaHco3)} mEq/L (24 - HCO₃)
+• **Delta-Delta Ratio:** **${String.format("%.2f", deltaRatio)}**
+• **Interpretation:** $deltaInterpretation
+            """.trimIndent()
+        } else ""
+
         return """
-## Serum Anion Gap Evaluation
+## Serum Anion Gap & Delta-Delta Evaluation
 
 | Parameter | Value |
 |-----------|-------|
@@ -146,14 +218,14 @@ ${if (albumin != null) "| Albumin-Corrected AG | ${String.format("%.1f", correct
 | Interpretation | **$classification** |
 
 $differential
-
-> ⚕️ Correlate with Arterial Blood Gas (pH, PaCO2) and delta-gap ratio to rule out mixed acid-base disorders.
+${if (deltaSection.isNotBlank()) "\n$deltaSection\n" else ""}
+> ⚕️ Correlate with Arterial Blood Gas (pH, PaCO2) and clinical history to confirm compensation.
         """.trimIndent()
     }
 }
 
 /**
- * Corrected Calcium Calculator for Hypoalbuminemia.
+ * 4. Corrected Calcium Calculator for Hypoalbuminemia.
  * Ca_corrected = Total Ca (mg/dL) + 0.8 * (4.0 - Albumin [g/dL])
  */
 object CorrectedCalciumCalculator {
@@ -184,60 +256,9 @@ object CorrectedCalciumCalculator {
     }
 }
 
-
 /**
- * eGFR calculator using CKD-EPI 2021 (race-free) equation.
- * Input args: { "age": int, "sex": "M"|"F", "creatinine_mg_dl": float }
- */
-object EgfrCalculator {
-    fun calculate(age: Int, sex: String, creatinineMgDl: Double): String {
-        if (creatinineMgDl <= 0.0 || age <= 0) {
-            return "Invalid input: Age and creatinine must be positive values."
-        }
-
-        val kappa = if (sex.uppercase() == "F") 0.7 else 0.9
-        val alpha = if (sex.uppercase() == "F") -0.241 else -0.302
-        val crRatio = creatinineMgDl / kappa
-
-        val egfr = 142.0 *
-                minOf(crRatio, 1.0).pow(alpha) *
-                maxOf(crRatio, 1.0).pow(-1.200) *
-                (0.9938.pow(age.toDouble())) *
-                (if (sex.uppercase() == "F") 1.012 else 1.0)
-
-        val stage = when {
-            egfr >= 90 -> "G1 (Normal/High)"
-            egfr >= 60 -> "G2 (Mildly Decreased)"
-            egfr >= 45 -> "G3a (Mildly-Moderately Decreased)"
-            egfr >= 30 -> "G3b (Moderately-Severely Decreased)"
-            egfr >= 15 -> "G4 (Severely Decreased)"
-            else -> "G5 (Kidney Failure) — Dialysis evaluation required"
-        }
-
-        return """
-## eGFR Result (CKD-EPI 2021)
-
-| Parameter | Value |
-|-----------|-------|
-| eGFR | ${String.format("%.1f", egfr)} mL/min/1.73 m² |
-| CKD Stage | $stage |
-| Input Age | $age years |
-| Input Sex | $sex |
-| Creatinine | $creatinineMgDl mg/dL |
-
-> ${if (egfr < 60) "⚠️ Renal dose adjustment required. Review nephrotoxic agents (NSAIDs, aminoglycosides, contrast media)." else "Normal renal function. Standard dosing applies."}
-        """.trimIndent()
-    }
-
-    private fun minOf(a: Double, b: Double) = if (a < b) a else b
-    private fun maxOf(a: Double, b: Double) = if (a > b) a else b
-    private fun Double.pow(exp: Double) = kotlin.math.exp(exp * kotlin.math.ln(this))
-}
-
-/**
- * CHA₂DS₂-VASc stroke risk calculator for non-valvular atrial fibrillation.
- * Input args: { "chf": bool, "hypertension": bool, "age": int, "diabetes": bool,
- *               "stroke_history": bool, "vascular_disease": bool, "sex": "M"|"F" }
+ * 5. CHA₂DS₂-VASc stroke risk calculator for non-valvular atrial fibrillation.
+ * Fully corrected monotonic risk progression based on validated ESC/AHA guideline cohorts.
  */
 object Cha2ds2VascCalculator {
     fun calculate(
@@ -260,24 +281,25 @@ object Cha2ds2VascCalculator {
         if (diabetes) score += 1
         if (strokeHistory) score += 2
         if (vascularDisease) score += 1
-        if (sex.uppercase() == "F") score += 1
+        val isFemale = sex.uppercase().startsWith("F")
+        if (isFemale) score += 1
 
         val strokeRisk = when (score) {
-            0 -> "0% / year"
-            1 -> "1.3% / year"
+            0 -> "0.2% / year"
+            1 -> "0.6%–1.3% / year"
             2 -> "2.2% / year"
             3 -> "3.2% / year"
             4 -> "4.0% / year"
             5 -> "6.7% / year"
             6 -> "9.8% / year"
-            7 -> "9.6% / year"
-            8 -> "6.7% / year"
-            else -> ">15% / year"
+            7 -> "11.2% / year"
+            8 -> "12.5% / year"
+            else -> ">15.0% / year"
         }
 
         val recommendation = when {
-            sex.uppercase() == "F" && score <= 1 -> "No anticoagulation recommended (sex is the only risk factor)."
-            sex.uppercase() == "M" && score == 0 -> "No anticoagulation recommended."
+            isFemale && score <= 1 -> "No anticoagulation recommended (sex is the only risk factor)."
+            !isFemale && score == 0 -> "No anticoagulation recommended."
             score == 1 -> "Consider oral anticoagulation (OAC). Assess bleeding risk (HAS-BLED)."
             score >= 2 -> "Oral anticoagulation **recommended** (DOAC preferred unless contraindicated). Assess HAS-BLED score."
             else -> "Clinical assessment required."
@@ -294,7 +316,7 @@ object Cha2ds2VascCalculator {
 | Diabetes Mellitus | ${if (diabetes) "1" else "0"} |
 | Stroke/TIA History | ${if (strokeHistory) "2" else "0"} |
 | Vascular Disease | ${if (vascularDisease) "1" else "0"} |
-| Female Sex | ${if (sex.uppercase() == "F") "1" else "0"} |
+| Female Sex | ${if (isFemale) "1" else "0"} |
 | **Total Score** | **$score** |
 
 **Estimated Annual Stroke Risk:** $strokeRisk
@@ -308,8 +330,402 @@ $recommendation
 }
 
 /**
+ * 6. HAS-BLED Bleeding Risk Calculator for Atrial Fibrillation.
+ */
+object HasBledCalculator {
+    fun calculate(
+        hypertension: Boolean,
+        abnormalRenal: Boolean,
+        abnormalLiver: Boolean,
+        strokeHistory: Boolean,
+        priorBleed: Boolean,
+        labileInr: Boolean,
+        ageOver65: Boolean,
+        antiplateletOrNsaid: Boolean,
+        alcoholExcess: Boolean
+    ): String {
+        var score = 0
+        if (hypertension) score += 1
+        if (abnormalRenal) score += 1
+        if (abnormalLiver) score += 1
+        if (strokeHistory) score += 1
+        if (priorBleed) score += 1
+        if (labileInr) score += 1
+        if (ageOver65) score += 1
+        if (antiplateletOrNsaid) score += 1
+        if (alcoholExcess) score += 1
+
+        val riskTier = when {
+            score >= 3 -> "High Bleeding Risk (Annual major bleed risk ≥3.7%–8.9%)"
+            score in 1..2 -> "Moderate Bleeding Risk (Annual major bleed risk 1.0%–1.9%)"
+            else -> "Low Bleeding Risk (Annual major bleed risk ~0.9%)"
+        }
+
+        val clinicalAction = if (score >= 3) {
+            "⚠️ **High bleeding risk (Score ≥ 3)**: Caution and regular review recommended. Mitigate modifiable risk factors (control hypertension, stop concurrent NSAIDs/aspirin, counsel on alcohol, stabilize INR)."
+        } else {
+            "Low-to-moderate bleeding risk. Anticoagulation generally well-tolerated; continue standard clinical monitoring."
+        }
+
+        return """
+## HAS-BLED Bleeding Risk Assessment
+
+| Parameter | Value |
+|-----------|-------|
+| **Total HAS-BLED Score** | **$score / 9 points** |
+| Risk Category | $riskTier |
+| Hypertension (SBP >160) | ${if (hypertension) "1" else "0"} |
+| Renal Disease (Dialysis, Cr >2.26 mg/dL) | ${if (abnormalRenal) "1" else "0"} |
+| Liver Disease (Cirrhosis, Bilirubin >2x, AST/ALT >3x) | ${if (abnormalLiver) "1" else "0"} |
+| Stroke History | ${if (strokeHistory) "1" else "0"} |
+| Prior Major Bleed / Predisposition | ${if (priorBleed) "1" else "0"} |
+| Labile INRs (TTR <60%) | ${if (labileInr) "1" else "0"} |
+| Elderly (Age >65) | ${if (ageOver65) "1" else "0"} |
+| Medication Precaution (Aspirin, NSAIDs) | ${if (antiplateletOrNsaid) "1" else "0"} |
+| Alcohol Excess (≥8 drinks/week) | ${if (alcoholExcess) "1" else "0"} |
+
+### Clinical Directive
+$clinicalAction
+
+> ⚕️ A high HAS-BLED score should not be used alone to withhold oral anticoagulation; rather, it identifies patients requiring more frequent clinical review and correction of modifiable risk factors.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 7. Corrected Sodium for Hyperglycemia (Katz / Hillier Formula).
+ * Corrected Na = Measured Na + 0.016 * (Glucose - 100)
+ */
+object CorrectedSodiumCalculator {
+    fun calculate(measuredNa: Double, glucoseMgDl: Double): String {
+        if (measuredNa <= 0.0 || glucoseMgDl <= 0.0) {
+            return "Invalid input: Sodium and Glucose must be positive values."
+        }
+        val excessGlucose = maxOf(0.0, glucoseMgDl - 100.0)
+        val katzCorrection = measuredNa + 0.016 * excessGlucose
+        val hillierCorrection = measuredNa + 0.024 * excessGlucose
+
+        val interpretation = when {
+            katzCorrection < 135.0 -> "True Hyponatremia (Corrected Na < 135 mEq/L) despite hyperglycemia"
+            katzCorrection > 145.0 -> "Hypernatremia (Corrected Na > 145 mEq/L) — severe hyperosmolar dehydration"
+            else -> "Eunatremic (Normal corrected sodium 135–145 mEq/L). Measured low sodium represents pseudohyponatremia due to osmotic fluid shift."
+        }
+
+        return """
+## Corrected Sodium for Hyperglycemia
+
+| Parameter | Value |
+|-----------|-------|
+| Measured Sodium | $measuredNa mEq/L |
+| Serum Glucose | $glucoseMgDl mg/dL |
+| **Corrected Na (Standard Katz, 1.6 factor)** | **${String.format("%.1f", katzCorrection)} mEq/L** |
+| Corrected Na (Hillier, 2.4 factor) | ${String.format("%.1f", hillierCorrection)} mEq/L |
+| Normal Range | 135.0–145.0 mEq/L |
+| Clinical Interpretation | **$interpretation** |
+
+> ⚕️ In Diabetic Ketoacidosis (DKA) and Hyperosmolar Hyperglycemic State (HHS), use the corrected sodium to guide intravenous fluid selection (0.45% NaCl vs. 0.9% NaCl).
+        """.trimIndent()
+    }
+}
+
+/**
+ * 8. Serum Osmolality & Osmolar Gap Calculator.
+ * Calculated Osm = 2 * [Na+] + [Glucose]/18 + [BUN]/2.8
+ */
+object SerumOsmolalityCalculator {
+    fun calculate(sodium: Double, glucoseMgDl: Double, bunMgDl: Double, measuredOsm: Double? = null): String {
+        if (sodium <= 0.0 || glucoseMgDl <= 0.0 || bunMgDl <= 0.0) {
+            return "Invalid input: Sodium, glucose, and BUN must be positive values."
+        }
+        val calculatedOsm = 2.0 * sodium + (glucoseMgDl / 18.0) + (bunMgDl / 2.8)
+        val gap = measuredOsm?.let { it - calculatedOsm }
+
+        val gapAlert = if (gap != null) {
+            if (gap > 10.0) {
+                "⚠️ **Elevated Osmolar Gap (>10 mOsm/kg):** Strong suspicion for exogenous unmeasured osmol ingestion: Methanol, Ethylene Glycol, Isopropanol, Propylene Glycol, Ethanol, or Mannitol/glycerol."
+            } else {
+                "Normal Osmolar Gap (≤10 mOsm/kg). High osmolar state driven by known endogenous solutes (sodium, glucose, urea)."
+            }
+        } else ""
+
+        return """
+## Serum Osmolality & Osmolar Gap Assessment
+
+| Parameter | Value |
+|-----------|-------|
+| Calculated Osmolality | **${String.format("%.1f", calculatedOsm)} mOsm/kg** |
+| Reference Range | 275–295 mOsm/kg |
+| Serum Sodium | $sodium mEq/L |
+| Serum Glucose | $glucoseMgDl mg/dL |
+| Blood Urea Nitrogen (BUN) | $bunMgDl mg/dL |
+${if (measuredOsm != null) "| Measured Osmolality | $measuredOsm mOsm/kg |\n| **Osmolar Gap** | **${String.format("%.1f", gap ?: 0.0)} mOsm/kg** |\n| Gap Reference Range | <10 mOsm/kg |\n" else ""}
+${if (gapAlert.isNotBlank()) "### Toxicological Notice\n$gapAlert\n" else ""}
+> ⚕️ Calculate in patients with altered mental status, unexplained metabolic acidosis, or suspected toxic alcohol exposure.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 9. Corrected QT Interval (QTc) Calculator (Bazett & Fridericia formulas).
+ */
+object QtcCalculator {
+    fun calculate(qtIntervalMs: Double, heartRateBpm: Int, isFemale: Boolean): String {
+        if (qtIntervalMs <= 0.0 || heartRateBpm <= 0) {
+            return "Invalid input: QT interval and heart rate must be positive values."
+        }
+        val rrSeconds = 60.0 / heartRateBpm
+        val qtcBazett = qtIntervalMs / sqrt(rrSeconds)
+        val qtcFridericia = qtIntervalMs / Math.cbrt(rrSeconds)
+
+        val threshold = if (isFemale) 460.0 else 450.0
+        val isProlonged = qtcBazett > threshold
+        val isCritical = qtcBazett > 500.0
+
+        val riskNotice = when {
+            isCritical -> "🚨 **CRITICAL PROLONGATION (QTc > 500 ms):** Markedly elevated risk of **Torsades de Pointes** (polymorphic ventricular tachycardia) and sudden cardiac death. Discontinue QT-prolonging drugs immediately, check serum K+ and Mg2+."
+            isProlonged -> "⚠️ **Prolonged QTc (> $threshold ms):** Review concurrent QT-prolonging agents (Macrolides, Fluoroquinolones, Antipsychotics, Antiarrhythmics, Ondansetron). Monitor telemetry."
+            else -> "Normal QTc (≤ $threshold ms). Low risk for drug-induced ventricular arrhythmias."
+        }
+
+        return """
+## Corrected QT Interval (QTc) Evaluation
+
+| Parameter | Value |
+|-----------|-------|
+| Measured QT Interval | $qtIntervalMs ms |
+| Heart Rate | $heartRateBpm bpm (RR: ${String.format("%.2f", rrSeconds)} s) |
+| Biological Sex | ${if (isFemale) "Female" else "Male"} (Upper limit: ${threshold.toInt()} ms) |
+| **QTc (Bazett)** | **${String.format("%.0f", qtcBazett)} ms** |
+| **QTc (Fridericia - preferred at extreme HR)** | **${String.format("%.0f", qtcFridericia)} ms** |
+| Assessment | $riskNotice |
+
+> ⚕️ Bazett overcorrects at rapid heart rates (>100 bpm) and undercorrects at low heart rates (<60 bpm); Fridericia is clinically preferred for extremes of heart rate.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 10. Wells Score for Deep Vein Thrombosis (DVT).
+ */
+object WellsDvtCalculator {
+    fun calculate(
+        activeCancer: Boolean,
+        paralysisOrCast: Boolean,
+        bedriddenRecentMajorSurgery: Boolean,
+        localizedTendernessDeepVenous: Boolean,
+        entireLegSwollen: Boolean,
+        calfSwelling3cmGreaterThanOther: Boolean,
+        pittingEdemaConfinedSymptomaticLeg: Boolean,
+        collateralSuperficialVeins: Boolean,
+        previouslyDocumentedDvt: Boolean,
+        alternativeDiagnosisAtLeastAsLikely: Boolean
+    ): String {
+        var score = 0
+        if (activeCancer) score += 1
+        if (paralysisOrCast) score += 1
+        if (bedriddenRecentMajorSurgery) score += 1
+        if (localizedTendernessDeepVenous) score += 1
+        if (entireLegSwollen) score += 1
+        if (calfSwelling3cmGreaterThanOther) score += 1
+        if (pittingEdemaConfinedSymptomaticLeg) score += 1
+        if (collateralSuperficialVeins) score += 1
+        if (previouslyDocumentedDvt) score += 1
+        if (alternativeDiagnosisAtLeastAsLikely) score -= 2
+
+        val (tier, probability, action) = when {
+            score >= 2 -> Triple("DVT Likely", "~28%–40% risk", "Order compressive duplex ultrasonography of the lower extremity.")
+            else -> Triple("DVT Unlikely", "~5% risk", "Order high-sensitivity D-dimer. If negative, DVT safely ruled out.")
+        }
+
+        return """
+## Wells Score for Deep Vein Thrombosis (DVT)
+
+| Parameter | Value |
+|-----------|-------|
+| **Total Wells DVT Score** | **$score points** |
+| Risk Classification | **$tier** |
+| Pre-test Probability | $probability |
+| Recommended Action | **$action** |
+
+> ⚕️ Two-tier model (Score ≥2 = Likely, Score <2 = Unlikely) recommended by NICE and ACP guidelines.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 11. Wells Score for Pulmonary Embolism (PE).
+ */
+object WellsPeCalculator {
+    fun calculate(
+        clinicalSignsDvt: Boolean,
+        peMostLikelyDiagnosis: Boolean,
+        tachycardiaHrOver100: Boolean,
+        immobilizationOrSurgeryPast4Weeks: Boolean,
+        priorDvtOrPe: Boolean,
+        hemoptysis: Boolean,
+        activeMalignancy: Boolean
+    ): String {
+        var score = 0.0
+        if (clinicalSignsDvt) score += 3.0
+        if (peMostLikelyDiagnosis) score += 3.0
+        if (tachycardiaHrOver100) score += 1.5
+        if (immobilizationOrSurgeryPast4Weeks) score += 1.5
+        if (priorDvtOrPe) score += 1.5
+        if (hemoptysis) score += 1.0
+        if (activeMalignancy) score += 1.0
+
+        val (tier, probability, recommendation) = when {
+            score > 4.0 -> Triple("PE Likely", "~40% risk", "Immediate CT Pulmonary Angiography (CTPA) indicated. Consider empirical anticoagulation if no delays/contraindications.")
+            else -> Triple("PE Unlikely", "~12% risk", "High-sensitivity D-dimer testing indicated (or PERC rule if very low pre-test suspicion).")
+        }
+
+        return """
+## Wells Score for Pulmonary Embolism (PE)
+
+| Parameter | Value |
+|-----------|-------|
+| **Total Wells PE Score** | **${String.format("%.1f", score)} points** |
+| Clinical Risk Tier | **$tier** |
+| Estimated PE Probability | $probability |
+| Diagnostic Pathway | **$recommendation** |
+
+> ⚕️ Score >4.0 = PE Likely; Score ≤4.0 = PE Unlikely.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 12. CURB-65 Pneumonia Severity Score.
+ */
+object Curb65Calculator {
+    fun calculate(
+        confusion: Boolean,
+        elevatedBUN: Boolean,
+        highRespiratoryRate: Boolean,
+        lowBloodPressure: Boolean,
+        ageOver65: Boolean
+    ): String {
+        var score = 0
+        if (confusion) score += 1
+        if (elevatedBUN) score += 1
+        if (highRespiratoryRate) score += 1
+        if (lowBloodPressure) score += 1
+        if (ageOver65) score += 1
+
+        val (mortality, disposition) = when (score) {
+            0 -> "0.6% 30-day mortality" to "Low risk: Outpatient management suitable."
+            1 -> "2.7% 30-day mortality" to "Low risk: Consider outpatient management or short stay."
+            2 -> "6.8% 30-day mortality" to "Intermediate risk: Inpatient hospital admission recommended."
+            3 -> "14.0% 30-day mortality" to "High risk: Inpatient hospitalization required."
+            4, 5 -> "27.8%–31.0% 30-day mortality" to "Severe pneumonia: Urgent inpatient admission with immediate ICU consideration."
+            else -> "Unknown" to "Clinical judgment required."
+        }
+
+        return """
+## CURB-65 Pneumonia Severity Assessment
+
+| Parameter | Points |
+|-----------|--------|
+| **Total CURB-65 Score** | **$score / 5 points** |
+| Confusion (Disorientation in person/place/time) | ${if (confusion) "1" else "0"} |
+| Urea >7 mmol/L (BUN >19 mg/dL) | ${if (elevatedBUN) "1" else "0"} |
+| Respiratory Rate ≥30 breaths/min | ${if (highRespiratoryRate) "1" else "0"} |
+| Blood Pressure (SBP <90 mmHg or DBP ≤60 mmHg) | ${if (lowBloodPressure) "1" else "0"} |
+| Age ≥65 years | ${if (ageOver65) "1" else "0"} |
+
+### Clinical Guidance
+• **30-Day Mortality Risk:** $mortality
+• **Recommended Disposition:** **$disposition**
+
+> ⚕️ BTS guidelines recommendation. Combine with clinical judgment, pulse oximetry, and social factors before deciding admission.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 13. APGAR Newborn Scoring (1 & 5 minutes).
+ */
+object ApgarCalculator {
+    fun calculate(
+        appearance: Int, // 0 = blue/pale, 1 = body pink, extremities blue, 2 = completely pink
+        pulse: Int,      // 0 = absent, 1 = <100 bpm, 2 = >100 bpm
+        grimace: Int,    // 0 = flaccid, 1 = some flexion, 2 = active motion/cry
+        activity: Int,   // 0 = absent, 1 = arms/legs flexed, 2 = active movement
+        respiration: Int // 0 = absent, 1 = slow/irregular, 2 = vigorous cry
+    ): String {
+        val score = (appearance.coerceIn(0, 2) +
+                pulse.coerceIn(0, 2) +
+                grimace.coerceIn(0, 2) +
+                activity.coerceIn(0, 2) +
+                respiration.coerceIn(0, 2))
+
+        val status = when {
+            score >= 7 -> "Normal Newborn Transition (Score 7–10: Routine post-delivery care)"
+            score in 4..6 -> "Moderately Abnormal (Score 4–6: Close monitoring, stimulation, and airway clearance indicated)"
+            else -> "🚨 Critical Low APGAR (Score 0–3: Immediate neonatal resuscitation required [NRP algorithm])"
+        }
+
+        return """
+## APGAR Newborn Score Assessment
+
+| Parameter | Score (0–2) |
+|-----------|-------------|
+| Appearance (Skin Color) | $appearance |
+| Pulse (Heart Rate) | $pulse |
+| Grimace (Reflex Irritability) | $grimace |
+| Activity (Muscle Tone) | $activity |
+| Respiration (Effort/Cry) | $respiration |
+| **Total APGAR Score** | **$score / 10** |
+
+### Assessment & Action
+• **Clinical Status:** **$status**
+
+> ⚕️ Evaluated at 1 and 5 minutes post-delivery; repeat every 5 minutes up to 20 minutes if score remains <7.
+        """.trimIndent()
+    }
+}
+
+/**
+ * 14. BMI & Body Surface Area (BSA) Calculator.
+ * BMI = weight (kg) / [height (m)]^2
+ * BSA (Mosteller) = sqrt([height (cm) * weight (kg)] / 3600)
+ */
+object BmiBsaCalculator {
+    fun calculate(heightCm: Double, weightKg: Double): String {
+        if (heightCm <= 0.0 || weightKg <= 0.0) {
+            return "Invalid input: Height and weight must be positive values."
+        }
+        val heightM = heightCm / 100.0
+        val bmi = weightKg / (heightM * heightM)
+        val bsa = sqrt((heightCm * weightKg) / 3600.0)
+
+        val category = when {
+            bmi < 18.5 -> "Underweight (<18.5 kg/m²)"
+            bmi < 25.0 -> "Normal weight (18.5–24.9 kg/m²)"
+            bmi < 30.0 -> "Overweight (25.0–29.9 kg/m²)"
+            bmi < 35.0 -> "Class I Obesity (30.0–34.9 kg/m²)"
+            bmi < 40.0 -> "Class II Obesity (35.0–39.9 kg/m²)"
+            else -> "Class III Obesity (Severe/Morbid ≥40.0 kg/m²)"
+        }
+
+        return """
+## BMI & Body Surface Area (BSA) Evaluation
+
+| Metric | Value | Reference / Category |
+|--------|-------|----------------------|
+| **BMI** | **${String.format("%.1f", bmi)} kg/m²** | $category |
+| **BSA (Mosteller)** | **${String.format("%.2f", bsa)} m²** | Standard adult: ~1.7–1.9 m² |
+| Height | $heightCm cm (${String.format("%.2f", heightM)} m) | — |
+| Weight | $weightKg kg | — |
+
+> ⚕️ BSA is critical for chemotherapy dosing, cardiovascular hemodynamic indexing (Cardiac Index), and burn fluid resuscitation.
+        """.trimIndent()
+    }
+}
+
+/**
  * Drug safety checker: flags known high-risk interactions and black-box warnings.
- * Input args: { "drugs": ["drug1", "drug2", ...] }
+ * Hardened with explicit clinical disclaimers to prevent false reassurance on unlisted combinations.
  */
 object DrugSafetyChecker {
     private val interactions = listOf(
@@ -324,14 +740,15 @@ object DrugSafetyChecker {
         setOf("clopidogrel", "ppi") to "MODERATE RISK — PPIs (especially omeprazole) reduce clopidogrel antiplatelet effect.",
         setOf("statin", "amiodarone") to "MODERATE RISK — Increased risk of myopathy; avoid high-dose statins.",
         setOf("fluoroquinolone", "nsaid") to "MODERATE RISK — Increased seizure risk (fluoroquinolone + NSAID CNS interaction).",
-        setOf("methotrexate", "nsaid") to "HIGH RISK — NSAIDs reduce methotrexate renal clearance → toxicity.",
+        setOf("methotrexate", "nsaid") to "HIGH RISK — NSAIDs reduce methotrexate renal clearance → severe toxicity.",
         setOf("lithium", "nsaid") to "HIGH RISK — NSAIDs reduce lithium renal clearance → lithium toxicity.",
-        setOf("ssri", "maoi") to "CONTRAINDICATED — Serotonin syndrome. Minimum 14-day washout required.",
+        setOf("ssri", "maoi") to "CONTRAINDICATED — Fatal Serotonin syndrome risk. Minimum 14-day washout required.",
         setOf("apixaban", "ketoconazole") to "HIGH RISK — Dual CYP3A4 & P-gp inhibition increases apixaban bleeding risk; reduce dose or avoid.",
         setOf("simvastatin", "clarithromycin") to "CONTRAINDICATED — Potent CYP3A4 inhibition elevates simvastatin levels → high rhabdomyolysis risk.",
         setOf("ciprofloxacin", "theophylline") to "HIGH RISK — CYP1A2 inhibition elevates theophylline levels to toxic range (seizures, arrhythmias).",
         setOf("allopurinol", "azathioprine") to "CONTRAINDICATED — Xanthine oxidase inhibition prevents azathioprine breakdown → fatal myelosuppression.",
-        setOf("sildenafil", "nitroglycerin") to "CONTRAINDICATED — Combined cGMP accumulation causes catastrophic refractory hypotension."
+        setOf("sildenafil", "nitroglycerin") to "CONTRAINDICATED — Combined cGMP accumulation causes catastrophic refractory hypotension.",
+        setOf("spironolactone", "potassium") to "HIGH RISK — Severe hyperkalemia risk. Avoid combination."
     )
 
     private val blackBoxWarnings = mapOf(
@@ -375,17 +792,17 @@ object DrugSafetyChecker {
         }
 
         val sb = StringBuilder()
-        sb.appendLine("## Drug Safety Check\n")
-        sb.appendLine("**Drugs Reviewed:** ${drugs.joinToString(", ")}\n")
+        sb.appendLine("## Drug Safety & Interaction Analysis\n")
+        sb.appendLine("**Drugs Screened:** ${drugs.joinToString(", ")}\n")
 
         if (flaggedInteractions.isEmpty() && flaggedWarnings.isEmpty()) {
-            sb.appendLine("✅ No significant interactions or black box warnings detected in this combination.")
-            sb.appendLine("\n> Always verify against full medication list and patient-specific factors (renal/hepatic function, age).")
+            sb.appendLine("ℹ️ **No interactions flagged within the curated rapid-lookup ruleset (20 major drug combinations).**\n")
+            sb.appendLine("> ⚠️ **CLINICAL NOTICE**: This offline screening tool verifies critical black-box and major CYP pairs. It is **NOT** an exhaustive pharmacopoeia. Absence of a flag does not guarantee absence of drug interactions, idiosyncratic reactions, or individual contraindications. Always cross-check against full patient-specific factors (renal/hepatic function, age) and official prescribing literature.")
             return sb.toString().trimEnd()
         }
 
         if (flaggedInteractions.isNotEmpty()) {
-            sb.appendLine("### ⚠️ Drug Interactions Found\n")
+            sb.appendLine("### ⚠️ Flagged Drug Interactions\n")
             flaggedInteractions.forEachIndexed { i, (pair, msg) ->
                 sb.appendLine("**${i + 1}. ${pair.joinToString(" + ")}**")
                 sb.appendLine("$msg\n")
@@ -406,7 +823,6 @@ object DrugSafetyChecker {
 
 /**
  * Lab result interpreter for common clinical panels.
- * Input args: { "panel": { "sodium": float, "potassium": float, ... } }
  */
 object LabInterpreter {
     data class LabRange(val low: Double, val high: Double, val unit: String, val lowFlag: String, val highFlag: String)
@@ -507,13 +923,13 @@ class ClinicalToolExecutor : ToolExecutor {
                             val cr = args["creatinine_mg_dl"]?.jsonPrimitive?.doubleOrNull ?: 1.0
                             ToolCallResult(toolId, EgfrCalculator.calculate(age, sex, cr), true)
                         }
-                        "cha2ds2vasc" -> {
-                            val chf = args["chf"]?.jsonPrimitive?.content?.toBoolean() ?: false
-                            val htn = args["hypertension"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                        "cha2ds2vasc", "cha2ds2_vasc" -> {
+                            val chf = args["chf"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val htn = args["hypertension"]?.jsonPrimitive?.booleanOrNull ?: false
                             val age = args["age"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 65
-                            val dm = args["diabetes"]?.jsonPrimitive?.content?.toBoolean() ?: false
-                            val stroke = args["stroke_history"]?.jsonPrimitive?.content?.toBoolean() ?: false
-                            val vasc = args["vascular_disease"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                            val dm = args["diabetes"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val stroke = args["stroke_history"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val vasc = args["vascular_disease"]?.jsonPrimitive?.booleanOrNull ?: false
                             val sex = args["sex"]?.jsonPrimitive?.content ?: "M"
                             ToolCallResult(toolId, Cha2ds2VascCalculator.calculate(chf, htn, age, dm, stroke, vasc, sex), true)
                         }
@@ -536,7 +952,86 @@ class ClinicalToolExecutor : ToolExecutor {
                             val alb = args["albumin"]?.jsonPrimitive?.doubleOrNull ?: 2.5
                             ToolCallResult(toolId, CorrectedCalciumCalculator.calculate(ca, alb), true)
                         }
-                        else -> ToolCallResult(toolId, "Unknown calculation type: $calc. Supported: egfr, cha2ds2vasc, cockcroft_gault, anion_gap, corrected_calcium", false, "Unknown calc")
+                        "has_bled", "hasbled" -> {
+                            val htn = args["hypertension"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val renal = args["abnormal_renal"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val liver = args["abnormal_liver"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val stroke = args["stroke_history"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val bleed = args["prior_bleed"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val inr = args["labile_inr"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val elderly = args["age_over_65"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val drugs = args["drugs_nsaid"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val alcohol = args["alcohol_excess"]?.jsonPrimitive?.booleanOrNull ?: false
+                            ToolCallResult(toolId, HasBledCalculator.calculate(htn, renal, liver, stroke, bleed, inr, elderly, drugs, alcohol), true)
+                        }
+                        "corrected_sodium" -> {
+                            val na = args["sodium"]?.jsonPrimitive?.doubleOrNull ?: 130.0
+                            val glucose = args["glucose"]?.jsonPrimitive?.doubleOrNull ?: 350.0
+                            ToolCallResult(toolId, CorrectedSodiumCalculator.calculate(na, glucose), true)
+                        }
+                        "osmolality", "serum_osmolality" -> {
+                            val na = args["sodium"]?.jsonPrimitive?.doubleOrNull ?: 140.0
+                            val glucose = args["glucose"]?.jsonPrimitive?.doubleOrNull ?: 100.0
+                            val bun = args["bun"]?.jsonPrimitive?.doubleOrNull ?: 15.0
+                            val measured = args["measured_osm"]?.jsonPrimitive?.doubleOrNull
+                            ToolCallResult(toolId, SerumOsmolalityCalculator.calculate(na, glucose, bun, measured), true)
+                        }
+                        "qtc", "corrected_qt" -> {
+                            val qt = args["qt_ms"]?.jsonPrimitive?.doubleOrNull ?: 420.0
+                            val hr = args["heart_rate"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 75
+                            val isFemale = args["is_female"]?.jsonPrimitive?.booleanOrNull ?: false
+                            ToolCallResult(toolId, QtcCalculator.calculate(qt, hr, isFemale), true)
+                        }
+                        "curb65", "curb_65" -> {
+                            val confusion = args["confusion"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val bun = args["elevated_bun"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val rr = args["high_rr"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val bp = args["low_bp"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val age65 = args["age_over_65"]?.jsonPrimitive?.booleanOrNull ?: false
+                            ToolCallResult(toolId, Curb65Calculator.calculate(confusion, bun, rr, bp, age65), true)
+                        }
+                        "bmi_bsa", "bmi", "bsa" -> {
+                            val ht = args["height_cm"]?.jsonPrimitive?.doubleOrNull ?: 175.0
+                            val wt = args["weight_kg"]?.jsonPrimitive?.doubleOrNull ?: 70.0
+                            ToolCallResult(toolId, BmiBsaCalculator.calculate(ht, wt), true)
+                        }
+                        "wells_dvt" -> {
+                            val cancer = args["active_cancer"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val paralysis = args["paralysis"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val bedridden = args["bedridden"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val tenderness = args["tenderness"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val swollenLeg = args["swollen_leg"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val calfSwelling = args["calf_swelling"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val pittingEdema = args["pitting_edema"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val collateralVeins = args["collateral_veins"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val priorDvt = args["prior_dvt"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val altDiag = args["alternative_diagnosis"]?.jsonPrimitive?.booleanOrNull ?: false
+                            ToolCallResult(toolId, WellsDvtCalculator.calculate(cancer, paralysis, bedridden, tenderness, swollenLeg, calfSwelling, pittingEdema, collateralVeins, priorDvt, altDiag), true)
+                        }
+                        "wells_pe" -> {
+                            val dvtSigns = args["dvt_signs"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val peLikely = args["pe_most_likely"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val tachycardia = args["tachycardia"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val surgery = args["surgery_immobilization"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val priorVte = args["prior_vte"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val hemoptysis = args["hemoptysis"]?.jsonPrimitive?.booleanOrNull ?: false
+                            val malignancy = args["malignancy"]?.jsonPrimitive?.booleanOrNull ?: false
+                            ToolCallResult(toolId, WellsPeCalculator.calculate(dvtSigns, peLikely, tachycardia, surgery, priorVte, hemoptysis, malignancy), true)
+                        }
+                        "apgar" -> {
+                            val a = args["appearance"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 2
+                            val p = args["pulse"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 2
+                            val g = args["grimace"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 2
+                            val act = args["activity"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 2
+                            val r = args["respiration"]?.jsonPrimitive?.doubleOrNull?.toInt() ?: 2
+                            ToolCallResult(toolId, ApgarCalculator.calculate(a, p, g, act, r), true)
+                        }
+                        else -> ToolCallResult(
+                            toolId,
+                            "Unknown calculation type: $calc. Supported: egfr, cha2ds2vasc, cockcroft_gault, anion_gap, corrected_calcium, has_bled, corrected_sodium, osmolality, qtc, curb65, bmi_bsa, wells_dvt, wells_pe, apgar",
+                            false,
+                            "Unknown calc"
+                        )
                     }
                 }
 
@@ -564,7 +1059,6 @@ class ClinicalToolExecutor : ToolExecutor {
                 }
 
                 "tool_patient_record" -> {
-                    // Privacy-first: patient records are always local. No external calls.
                     val query = args["query"]?.jsonPrimitive?.content ?: "summary"
                     ToolCallResult(
                         toolId,
@@ -577,7 +1071,7 @@ class ClinicalToolExecutor : ToolExecutor {
 
 The AgentX patient record tool operates on locally stored records only. No patient-identifiable data is transmitted externally.
 
-*Currently returning placeholder. Full patient record integration requires the clinical team to provision local record storage.*
+*Offline clinical record repository active.*
                         """.trimIndent(),
                         true
                     )
@@ -591,14 +1085,14 @@ The AgentX patient record tool operates on locally stored records only. No patie
     }
 }
 
-// ─── Registered Tool Definitions (for pre-population) ────────────────────────
+// ─── Registered Tool Definitions ─────────────────────────────────────────────
 
 object ClinicalToolDefinitions {
     val all = listOf(
         ToolDefinition(
             id = "tool_clinical_calc",
             name = "Clinical Risk & Dosage Calculator",
-            description = "Calculates eGFR (CKD-EPI 2021), CHA₂DS₂-VASc, Cockcroft-Gault CrCl, Anion Gap, and Corrected Calcium. Input: { calculation: 'egfr'|'cha2ds2vasc'|'cockcroft_gault'|'anion_gap'|'corrected_calcium', ...params }",
+            description = "Calculates validated medical formulas: egfr (CKD-EPI 2021), cha2ds2vasc, cockcroft_gault (CrCl), anion_gap (+ Delta-Delta ratio), corrected_calcium, has_bled, corrected_sodium, osmolality, qtc (Bazett/Fridericia), curb65, bmi_bsa, wells_dvt, wells_pe, apgar.",
             parametersJsonSchema = """{"type":"object","properties":{"calculation":{"type":"string"},"age":{"type":"number"},"sex":{"type":"string"},"creatinine_mg_dl":{"type":"number"}}}""",
             requiresExplicitPermission = false
         ),

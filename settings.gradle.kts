@@ -20,6 +20,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "AgentX"
+include(":core")
 include(":app")
 include(":medical")
 include(":admin")
