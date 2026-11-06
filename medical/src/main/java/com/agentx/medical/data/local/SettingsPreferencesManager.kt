@@ -21,6 +21,8 @@ class SettingsPreferencesManager(context: Context) {
         private const val KEY_INFERENCE_MODE = "inference_mode"
         private const val KEY_CLOUD_PROVIDER = "cloud_provider"
         private const val KEY_API_KEY = "api_key"
+        private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+        private const val KEY_GATEWAY_API_KEY = "gateway_api_key"
         private const val KEY_MODEL_NAME = "model_name"
         private const val KEY_CUSTOM_BASE_URL = "custom_base_url"
         private const val KEY_LOCAL_BACKEND = "local_backend"
@@ -44,13 +46,19 @@ class SettingsPreferencesManager(context: Context) {
             InferenceMode.HYBRID_AUTO
         }
 
-        val apiKey = prefs.getString(KEY_API_KEY, "") ?: ""
+        val legacyApiKey = prefs.getString(KEY_API_KEY, "") ?: ""
+        val geminiApiKey = prefs.getString(KEY_GEMINI_API_KEY, null)
+            ?: if (provider == CloudProvider.GEMINI) legacyApiKey else ""
+        val gatewayApiKey = prefs.getString(KEY_GATEWAY_API_KEY, null)
+            ?: if (provider == CloudProvider.CUSTOM_GATEWAY) legacyApiKey else ""
         val modelName = prefs.getString(KEY_MODEL_NAME, "clinical-llama-3b") ?: "clinical-llama-3b"
         val customBaseUrl = prefs.getString(KEY_CUSTOM_BASE_URL, "http://192.168.1.100:8080/v1") ?: "http://192.168.1.100:8080/v1"
 
         return CloudModelConfig(
             provider = provider,
-            apiKey = apiKey,
+            geminiApiKey = geminiApiKey,
+            gatewayApiKey = gatewayApiKey,
+            apiKey = "",
             modelName = modelName,
             customBaseUrl = customBaseUrl,
             inferenceMode = mode,
@@ -62,7 +70,9 @@ class SettingsPreferencesManager(context: Context) {
         prefs.edit()
             .putString(KEY_CLOUD_PROVIDER, config.provider.name)
             .putString(KEY_INFERENCE_MODE, config.inferenceMode.name)
-            .putString(KEY_API_KEY, config.apiKey)
+            .putString(KEY_GEMINI_API_KEY, config.geminiApiKey)
+            .putString(KEY_GATEWAY_API_KEY, config.gatewayApiKey)
+            .remove(KEY_API_KEY)
             .putString(KEY_MODEL_NAME, config.modelName)
             .putString(KEY_CUSTOM_BASE_URL, config.customBaseUrl)
             .apply()

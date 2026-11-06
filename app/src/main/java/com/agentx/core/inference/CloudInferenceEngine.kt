@@ -89,7 +89,7 @@ class CloudInferenceEngine(
         request: InferenceRequest,
         onToken: suspend (String) -> Unit
     ) = withContext(Dispatchers.IO) {
-        val apiKey = config.apiKey.trim()
+        val apiKey = config.apiKeyFor(CloudProvider.GEMINI)
         if (apiKey.isBlank()) {
             throw IllegalStateException("Google Gemini API Key is missing. Please configure your API key in Settings -> Cloud Models.")
         }
@@ -187,9 +187,10 @@ class CloudInferenceEngine(
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "application/json, text/event-stream")
-            if (config.apiKey.isNotBlank()) {
+            val gatewayApiKey = config.apiKeyFor(CloudProvider.CUSTOM_GATEWAY)
+            if (gatewayApiKey.isNotBlank()) {
                 setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
-                setRequestProperty("X-API-Key", config.apiKey.trim())
+                setRequestProperty("X-API-Key", gatewayApiKey)
             }
             connectTimeout = 15_000
             readTimeout = 60_000

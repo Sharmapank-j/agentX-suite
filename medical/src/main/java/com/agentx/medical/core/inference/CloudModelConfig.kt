@@ -18,6 +18,8 @@ enum class InferenceMode(val displayName: String, val description: String) {
 @Serializable
 data class CloudModelConfig(
     val provider: CloudProvider = CloudProvider.GEMINI,
+    val geminiApiKey: String = "",
+    val gatewayApiKey: String = "",
     val apiKey: String = "",
     val modelName: String = "gemini-2.5-flash",
     val customBaseUrl: String = "http://192.168.1.100:8080/v1",
@@ -26,6 +28,13 @@ data class CloudModelConfig(
     val maxOutputTokens: Int = 1024,
     val isEnabled: Boolean = false
 ) {
+    fun apiKeyFor(provider: CloudProvider = this.provider): String {
+        return when (provider) {
+            CloudProvider.GEMINI -> geminiApiKey.trim()
+            CloudProvider.CUSTOM_GATEWAY -> gatewayApiKey.trim()
+        }
+    }
+
     companion object {
         val AVAILABLE_GEMINI_MODELS = listOf(
             "gemini-2.5-flash" to "Gemini 2.5 Flash (Ultra-fast clinical triage & differential)",
