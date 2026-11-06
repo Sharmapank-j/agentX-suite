@@ -180,13 +180,19 @@ class SettingsViewModel(
     fun updateCloudConfig(
         provider: CloudProvider? = null,
         apiKey: String? = null,
+        geminiApiKey: String? = null,
+        gatewayApiKey: String? = null,
         modelName: String? = null,
         customBaseUrl: String? = null
     ) {
         val current = _cloudConfig.value
+        val resolvedProvider = provider ?: current.provider
         val updated = current.copy(
-            provider = provider ?: current.provider,
-            apiKey = apiKey ?: current.apiKey,
+            provider = resolvedProvider,
+            geminiApiKey = geminiApiKey
+                ?: if (apiKey != null && resolvedProvider == CloudProvider.GEMINI) apiKey else current.geminiApiKey,
+            gatewayApiKey = gatewayApiKey
+                ?: if (apiKey != null && resolvedProvider == CloudProvider.CUSTOM_GATEWAY) apiKey else current.gatewayApiKey,
             modelName = modelName ?: current.modelName,
             customBaseUrl = customBaseUrl ?: current.customBaseUrl
         )
@@ -202,13 +208,14 @@ class SettingsViewModel(
             try {
                 val config = _cloudConfig.value
                 if (config.provider == CloudProvider.GEMINI) {
-                    if (config.apiKey.isBlank()) {
+                    val geminiApiKey = config.apiKeyFor(CloudProvider.GEMINI)
+                    if (geminiApiKey.isBlank()) {
                         _cloudTestResult.value = "Error: Gemini API Key is empty. Configure key above."
                         return@launch
                     }
                     val start = System.currentTimeMillis()
                     withContext(Dispatchers.IO) {
-                        val pingUrl = URL("https://generativelanguage.googleapis.com/v1beta/models?key=${config.apiKey.trim()}")
+                        val pingUrl = URL("https://generativelanguage.googleapis.com/v1beta/models?key=$geminiApiKey")
                         val conn = (pingUrl.openConnection() as HttpURLConnection).apply {
                             requestMethod = "GET"
                             connectTimeout = 8_000
@@ -228,6 +235,7 @@ class SettingsViewModel(
 
                 // CUSTOM_GATEWAY: Real network ping to AgentX Serve
                 val endpoints = GatewayUrlNormalizer.normalize(config.customBaseUrl)
+                val gatewayApiKey = config.apiKeyFor(CloudProvider.CUSTOM_GATEWAY)
                 val (serverInfo, models) = withContext(Dispatchers.IO) {
                     val start = System.currentTimeMillis()
                     val healthUrl = URL(endpoints.healthUrl)
@@ -235,9 +243,9 @@ class SettingsViewModel(
                         requestMethod = "GET"
                         connectTimeout = 6_000
                         readTimeout = 6_000
-                        if (config.apiKey.isNotBlank()) {
+                        if (gatewayApiKey.isNotBlank()) {
                             setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
-                            setRequestProperty("X-API-Key", config.apiKey.trim())
+                            setRequestProperty("X-API-Key", gatewayApiKey)
                         }
                     }
 
@@ -256,7 +264,7 @@ class SettingsViewModel(
                             ?: "Active Model"
                         val uptime = parsed?.get("uptimeSeconds")?.jsonPrimitive?.content?.toLongOrNull() ?: 0L
 
-                        val fetchedModels = queryModelsFromGateway(endpoints, config.apiKey)
+                        val fetchedModels = queryModelsFromGateway(endpoints, gatewayApiKey)
 
                         val info = GatewayServerInfo(
                             status = "online",
@@ -308,8 +316,9 @@ class SettingsViewModel(
             try {
                 val config = _cloudConfig.value
                 val endpoints = GatewayUrlNormalizer.normalize(config.customBaseUrl)
+                val gatewayApiKey = config.apiKeyFor(CloudProvider.CUSTOM_GATEWAY)
                 val models = withContext(Dispatchers.IO) {
-                    queryModelsFromGateway(endpoints, config.apiKey)
+                    queryModelsFromGateway(endpoints, gatewayApiKey)
                 }
                 if (models.isNotEmpty()) {
                     _availableGatewayModels.value = models

@@ -89,7 +89,8 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     var showHipaaDialog by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
-    var apiKeyText by remember(state.cloudConfig.apiKey) { mutableStateOf(state.cloudConfig.apiKey) }
+    val providerApiKey = state.cloudConfig.apiKeyFor(state.cloudConfig.provider)
+    var apiKeyText by remember(state.cloudConfig.provider, providerApiKey) { mutableStateOf(providerApiKey) }
     var customUrlText by remember(state.cloudConfig.customBaseUrl) { mutableStateOf(state.cloudConfig.customBaseUrl) }
 
     val detectedCores = remember { Runtime.getRuntime().availableProcessors() }

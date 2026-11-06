@@ -49,8 +49,8 @@ class HybridInferenceEngine(
                 cloudEngine.generate(request).collect { emit(it) }
             }
             InferenceMode.HYBRID_AUTO -> {
-                val hasCloudKey = cloudEngine.config.apiKey.isNotBlank() ||
-                        cloudEngine.config.provider == CloudProvider.CUSTOM_GATEWAY
+                val hasCloudKey = cloudEngine.config.provider == CloudProvider.CUSTOM_GATEWAY ||
+                        cloudEngine.config.apiKeyFor(CloudProvider.GEMINI).isNotBlank()
 
                 if (hasCloudKey) {
                     var hasEmittedCloudToken = false
