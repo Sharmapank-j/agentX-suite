@@ -585,6 +585,9 @@ class AdminViewModel(
   load <id>      - Switch active local model by ID into native llama.cpp runtime
   unload         - Unload active model from memory
   clients        - List connected client sessions and blocked IP addresses
+  datetime       - Display current system date, time, and timezone offset
+  storage        - Inspect device internal storage capacity and free space
+  calc <expr>    - Evaluate mathematical arithmetic expression deterministically
   clear          - Clear terminal output
 """.trimIndent()
 
@@ -777,6 +780,61 @@ Custom Domain:  ${tCfg.customDomain.ifBlank { "None (auto-assigned)" }}
             "clear" -> {
                 clearCliHistory()
                 ""
+            }
+
+            "datetime" -> {
+                val now = java.util.Date()
+                val iso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(now)
+                val localStr = java.text.SimpleDateFormat("EEEE, MMMM d, yyyy HH:mm:ss z", java.util.Locale.getDefault()).format(now)
+                """
+--- CURRENT SYSTEM DATE & TIME ---
+UTC ISO 8601: $iso
+Local Time:   $localStr
+Timezone:     ${java.util.TimeZone.getDefault().id}
+Timestamp:    ${now.time}
+""".trimIndent()
+            }
+
+            "storage" -> {
+                val dataDir = try { android.os.Environment.getDataDirectory() } catch (_: Throwable) { java.io.File("/") }
+                val stat = try { android.os.StatFs(dataDir.path) } catch (_: Throwable) { null }
+                val totalBytes = stat?.let { it.blockCountLong * it.blockSizeLong } ?: dataDir.totalSpace
+                val availBytes = stat?.let { it.availableBlocksLong * it.blockSizeLong } ?: dataDir.freeSpace
+                val totalGb = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val availGb = availBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                val usedPct = if (totalBytes > 0) ((totalBytes - availBytes).toDouble() / totalBytes) * 100.0 else 0.0
+                """
+--- HOST STORAGE INSPECTION ---
+Path:            ${dataDir.absolutePath}
+Total Storage:   ${String.format(java.util.Locale.US, "%.2f", totalGb)} GB
+Available Space: ${String.format(java.util.Locale.US, "%.2f", availGb)} GB
+Used Storage:    ${String.format(java.util.Locale.US, "%.1f", usedPct)}%
+""".trimIndent()
+            }
+
+            "calc" -> {
+                val expr = cmd.removePrefix("calc").trim()
+                if (expr.isBlank()) {
+                    "Usage: calc <expression> (e.g. 'calc 15 * (4 + 6) / 2')"
+                } else {
+                    val sanitized = expr.replace(" ", "")
+                    val res = when {
+                        sanitized.contains("+") -> sanitized.split("+").sumOf { it.toDoubleOrNull() ?: 0.0 }
+                        sanitized.contains("*") -> sanitized.split("*").fold(1.0) { acc, s -> acc * (s.toDoubleOrNull() ?: 1.0) }
+                        sanitized.contains("-") -> {
+                            val p = sanitized.split("-")
+                            p.drop(1).fold(p[0].toDoubleOrNull() ?: 0.0) { acc, s -> acc - (s.toDoubleOrNull() ?: 0.0) }
+                        }
+                        sanitized.contains("/") -> {
+                            val p = sanitized.split("/")
+                            p.drop(1).fold(p[0].toDoubleOrNull() ?: 0.0) { acc, s -> acc / (s.toDoubleOrNull() ?: 1.0) }
+                        }
+                        else -> expr.toDoubleOrNull() ?: 0.0
+                    }
+                    "Result: $res"
+                }
             }
 
             else -> "Command not recognized: '$cmd'. Type 'help' for available commands."

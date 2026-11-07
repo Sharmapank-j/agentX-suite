@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The native library is built for each configured Android ABI by CMake/NDK.
  */
 class LlamaCppInferenceEngine(
-    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 8),
     private val defaultContextLength: Int = 2048,
     private val gpuLayers: Int = 0
 ) : InferenceEngine {
@@ -65,13 +65,17 @@ class LlamaCppInferenceEngine(
         try {
             emitted = withContext(Dispatchers.IO) {
                 LlamaCppNativeBridge.nativeGenerate(
-                    nativeHandle,
-                    request.systemPrompt,
-                    request.prompt,
-                    request.maxTokens.coerceIn(1, 4096),
-                    request.temperature.coerceIn(0f, 2f),
-                    0.9f,
-                    LlamaCppNativeBridge.TokenCallback { token ->
+                    contextHandle = nativeHandle,
+                    systemPrompt = request.systemPrompt,
+                    userPrompt = request.prompt,
+                    maxTokens = request.maxTokens.coerceIn(1, 4096),
+                    temperature = request.temperature.coerceIn(0f, 2f),
+                    topP = request.topP.coerceIn(0.01f, 1.0f),
+                    topK = request.topK.coerceAtLeast(1),
+                    repetitionPenalty = request.repetitionPenalty.coerceAtLeast(1.0f),
+                    seed = request.seed,
+                    stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                    callback = LlamaCppNativeBridge.TokenCallback { token ->
                         if (cancelled.get()) false
                         else trySend(GenerationEvent.Token(token)).isSuccess
                     }

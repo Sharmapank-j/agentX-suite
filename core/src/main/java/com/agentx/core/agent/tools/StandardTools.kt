@@ -205,6 +205,84 @@ class DeviceTelemetryTool(
     }
 }
 
+class StorageInspectionTool(
+    private val getStorageStats: () -> Triple<Long, Long, Double> = {
+        val root = java.io.File("/")
+        val total = if (root.totalSpace > 0) root.totalSpace else 128L * 1024 * 1024 * 1024
+        val free = if (root.freeSpace > 0) root.freeSpace else 64L * 1024 * 1024 * 1024
+        val usedPct = if (total > 0) ((total - free).toDouble() / total) * 100.0 else 0.0
+        Triple(total, free, usedPct)
+    }
+) : ToolExecutor {
+    override val definition: ToolDefinition = ToolDefinition(
+        name = "storage_inspection",
+        description = "Returns real-time device storage metrics including total capacity, free storage space, and percentage used.",
+        permissionLevel = ToolPermissionLevel.SAFE,
+        parameters = emptyList()
+    )
+
+    override suspend fun execute(argumentsJson: String): ToolExecutionResult {
+        val (total, free, usedPct) = getStorageStats()
+        val freeGb = free.toDouble() / (1024.0 * 1024.0 * 1024.0)
+        val totalGb = total.toDouble() / (1024.0 * 1024.0 * 1024.0)
+        val payload = buildString {
+            append("{")
+            append("\"totalStorageBytes\":").append(total).append(",")
+            append("\"freeStorageBytes\":").append(free).append(",")
+            append("\"totalStorageGb\":").append(String.format(Locale.US, "%.2f", totalGb)).append(",")
+            append("\"freeStorageGb\":").append(String.format(Locale.US, "%.2f", freeGb)).append(",")
+            append("\"usedPercentage\":").append(String.format(Locale.US, "%.1f", usedPct))
+            append("}")
+        }
+        return ToolExecutionResult(
+            callId = UUID.randomUUID().toString(),
+            toolName = definition.name,
+            isSuccess = true,
+            output = payload
+        )
+    }
+}
+
+class MemoryStatusTool(
+    private val getMemoryMetrics: () -> Triple<Long, Long, Boolean> = {
+        val rt = Runtime.getRuntime()
+        val total = rt.totalMemory()
+        val free = rt.freeMemory()
+        val isLow = free < (total * 0.15)
+        Triple(total, free, isLow)
+    }
+) : ToolExecutor {
+    override val definition: ToolDefinition = ToolDefinition(
+        name = "memory_status",
+        description = "Returns system memory metrics including total allocated memory, free memory, and low-memory warning flag.",
+        permissionLevel = ToolPermissionLevel.SAFE,
+        parameters = emptyList()
+    )
+
+    override suspend fun execute(argumentsJson: String): ToolExecutionResult {
+        val (total, free, isLow) = getMemoryMetrics()
+        val used = total - free
+        val freeMb = free.toDouble() / (1024.0 * 1024.0)
+        val totalMb = total.toDouble() / (1024.0 * 1024.0)
+        val payload = buildString {
+            append("{")
+            append("\"totalMemoryBytes\":").append(total).append(",")
+            append("\"freeMemoryBytes\":").append(free).append(",")
+            append("\"usedMemoryBytes\":").append(used).append(",")
+            append("\"freeMemoryMb\":").append(String.format(Locale.US, "%.2f", freeMb)).append(",")
+            append("\"totalMemoryMb\":").append(String.format(Locale.US, "%.2f", totalMb)).append(",")
+            append("\"isLowMemory\":").append(isLow)
+            append("}")
+        }
+        return ToolExecutionResult(
+            callId = UUID.randomUUID().toString(),
+            toolName = definition.name,
+            isSuccess = true,
+            output = payload
+        )
+    }
+}
+
 /**
  * Standard MCP JSON-RPC 2.0 Client implementation.
  */

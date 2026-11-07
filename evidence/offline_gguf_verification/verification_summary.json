@@ -1,0 +1,14 @@
+{
+  "airplane_mode_offline": "PASS (Device 100% Air-Gapped)",
+  "com.agentx_model_file": "PASS (medimind-v2-q5_k_m.gguf present, ~1.05 GB)",
+  "com.agentx.medical.debug_model_file": "PASS (medimind-v2-q5_k_m.gguf present, ~1.05 GB)",
+  "com.agentx.admin.debug_model_file": "PASS (medimind-v2-q5_k_m.gguf present, ~1.05 GB)",
+  "cli_stats": "PASS",
+  "cli_device": "PASS",
+  "cli_datetime": "PASS (Executed)",
+  "cli_storage": "PASS (Executed)",
+  "cli_calc": "PASS (Executed)",
+  "cli_llm": "PASS",
+  "AgentX_app_launch": "PASS (UI Rendered, Local Engine Active)",
+  "AgentX_Medical_launch": "PASS (Clinical Consult UI Rendered Offline)"
+}

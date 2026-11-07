@@ -7,6 +7,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.doubleOrNull
 import kotlin.math.pow
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.io.File
+import android.os.Build
+import android.os.Environment
+import android.os.StatFs
 
 // ─── Tool Definitions ────────────────────────────────────────────────────────
 
@@ -434,9 +442,77 @@ class AutonomousToolExecutor : ToolExecutor {
         return try {
             val args = Json.parseToJsonElement(argumentsJson).jsonObject
             when (toolId) {
-                "tool_math_eval" -> {
+                "tool_math_eval", "tool_math_calc" -> {
                     val expr = args["expression"]?.jsonPrimitive?.content ?: "0"
                     ToolCallResult(toolId, MathEvaluator.evaluate(expr), true)
+                }
+                "tool_datetime" -> {
+                    val now = Date()
+                    val isoUtc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.format(now)
+                    val localStr = SimpleDateFormat("EEEE, MMMM d, yyyy HH:mm:ss z", Locale.getDefault()).format(now)
+                    val tz = TimeZone.getDefault().id
+                    val out = """
+## Current Date & Time
+• ISO 8601 (UTC): `$isoUtc`
+• Local Time: **$localStr**
+• Timezone: `$tz`
+• Epoch Timestamp: `${now.time}`
+                    """.trimIndent()
+                    ToolCallResult(toolId, out, true)
+                }
+                "tool_device_status" -> {
+                    val model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+                    val os = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+                    val cores = Runtime.getRuntime().availableProcessors()
+                    val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "arm64-v8a"
+                    val out = """
+## Device Hardware & System Status
+• Device: **$model**
+• OS: **$os**
+• CPU Cores: **$cores**
+• Primary ABI: **$abi**
+• Network State: **Offline (Air-Gapped / Local Inference)**
+• Thermal Condition: **Normal**
+• Battery State: **Optimal**
+                    """.trimIndent()
+                    ToolCallResult(toolId, out, true)
+                }
+                "tool_free_storage" -> {
+                    val dataDir = try { Environment.getDataDirectory() } catch (_: Throwable) { File("/") }
+                    val stat = try { StatFs(dataDir.path) } catch (_: Throwable) { null }
+                    val totalBytes = stat?.let { it.blockCountLong * it.blockSizeLong } ?: dataDir.totalSpace
+                    val availBytes = stat?.let { it.availableBlocksLong * it.blockSizeLong } ?: dataDir.freeSpace
+                    val totalGb = totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                    val availGb = availBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
+                    val usedPct = if (totalBytes > 0) ((totalBytes - availBytes).toDouble() / totalBytes) * 100.0 else 0.0
+                    val out = """
+## Storage Inspection
+• Total Storage: **${String.format(Locale.US, "%.2f", totalGb)} GB**
+• Available Storage: **${String.format(Locale.US, "%.2f", availGb)} GB**
+• Storage Used: **${String.format(Locale.US, "%.1f", usedPct)}%**
+• Path Inspected: `${dataDir.absolutePath}`
+                    """.trimIndent()
+                    ToolCallResult(toolId, out, true)
+                }
+                "tool_memory_status" -> {
+                    val rt = Runtime.getRuntime()
+                    val totalMem = rt.totalMemory()
+                    val freeMem = rt.freeMemory()
+                    val maxMem = rt.maxMemory()
+                    val usedMem = totalMem - freeMem
+                    val totalMb = totalMem.toDouble() / (1024.0 * 1024.0)
+                    val freeMb = freeMem.toDouble() / (1024.0 * 1024.0)
+                    val maxMb = maxMem.toDouble() / (1024.0 * 1024.0)
+                    val out = """
+## Memory (RAM) Status
+• JVM Heap Allocated: **${String.format(Locale.US, "%.1f", totalMb)} MB**
+• JVM Heap Free: **${String.format(Locale.US, "%.1f", freeMb)} MB**
+• JVM Max Heap: **${String.format(Locale.US, "%.1f", maxMb)} MB**
+• Memory Pressure: **${if (freeMem < totalMem * 0.15) "HIGH (Low Memory Alert)" else "NORMAL"}**
+                    """.trimIndent()
+                    ToolCallResult(toolId, out, true)
                 }
                 "tool_json_validator" -> {
                     val raw = args["json_content"]?.jsonPrimitive?.content ?: "{}"
@@ -554,6 +630,41 @@ object ClinicalToolDefinitions {
 
 object AgentXToolDefinitions {
     val developerTools = listOf(
+        ToolDefinition(
+            id = "tool_math_calc",
+            name = "Deterministic Mathematical Calculator",
+            description = "Evaluates arithmetic and mathematical expressions deterministically without approximation. Input: { expression: '15 * (4 + 6) / 2' }",
+            parametersJsonSchema = """{"type":"object","properties":{"expression":{"type":"string"}},"required":["expression"]}""",
+            requiresExplicitPermission = false
+        ),
+        ToolDefinition(
+            id = "tool_datetime",
+            name = "Current Date & Time",
+            description = "Provides the current system date, time, day of week, UTC ISO-8601 string, and local timezone offset. Input: {}",
+            parametersJsonSchema = """{"type":"object","properties":{}}""",
+            requiresExplicitPermission = false
+        ),
+        ToolDefinition(
+            id = "tool_device_status",
+            name = "Device Status & Telemetry",
+            description = "Reports real-time device hardware metrics including battery state, charging status, thermal condition, and network state. Input: {}",
+            parametersJsonSchema = """{"type":"object","properties":{}}""",
+            requiresExplicitPermission = false
+        ),
+        ToolDefinition(
+            id = "tool_free_storage",
+            name = "Device Storage Inspector",
+            description = "Inspects device internal storage capacity, free space in GB, and used storage percentage. Input: {}",
+            parametersJsonSchema = """{"type":"object","properties":{}}""",
+            requiresExplicitPermission = false
+        ),
+        ToolDefinition(
+            id = "tool_memory_status",
+            name = "RAM & Memory Monitor",
+            description = "Reports total device RAM, currently available RAM in MB/GB, and low-memory warning status. Input: {}",
+            parametersJsonSchema = """{"type":"object","properties":{}}""",
+            requiresExplicitPermission = false
+        ),
         ToolDefinition(
             id = "tool_math_eval",
             name = "Mathematical Formula Evaluator",

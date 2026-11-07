@@ -52,9 +52,17 @@ class LlamaCppEngine : InferenceEngine {
         try {
             count = withContext(Dispatchers.IO) {
                 LlamaCppNativeBridge.nativeGenerate(
-                    nativeHandle, request.systemPrompt, request.prompt, request.maxTokens.coerceIn(1, 4096),
-                    request.temperature, request.topP,
-                    LlamaCppNativeBridge.TokenCallback { token ->
+                    contextHandle = nativeHandle,
+                    systemPrompt = request.systemPrompt,
+                    userPrompt = request.prompt,
+                    maxTokens = request.maxTokens.coerceIn(1, 4096),
+                    temperature = request.temperature.coerceIn(0f, 2f),
+                    topP = request.topP.coerceIn(0.01f, 1.0f),
+                    topK = request.topK.coerceAtLeast(1),
+                    repetitionPenalty = request.repeatPenalty.coerceAtLeast(1.0f),
+                    seed = request.seed,
+                    stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                    callback = LlamaCppNativeBridge.TokenCallback { token ->
                         if (cancelled.get()) false else trySend(GenerationEvent.Token(token)).isSuccess
                     }
                 )
@@ -78,10 +86,10 @@ class LlamaCppEngine : InferenceEngine {
     override suspend fun unloadModel() = withContext(Dispatchers.IO) {
         cancelled.set(true)
         val old = handle.getAndSet(0L)
-            if (old != 0L) {
-                LlamaCppNativeBridge.nativeCancel(old)
-                LlamaCppNativeBridge.nativeFree(old)
-            }
+        if (old != 0L) {
+            LlamaCppNativeBridge.nativeCancel(old)
+            LlamaCppNativeBridge.nativeFree(old)
+        }
         status = ModelStatus(ModelLifecycleState.NOT_LOADED)
     }
 

@@ -25,7 +25,10 @@ data class DeviceSpecs(
     val cpuCores: Int,
     val primaryAbi: String,
     val batteryPercent: Int?,
-    val performanceTier: DevicePerformanceTier
+    val performanceTier: DevicePerformanceTier,
+    val performanceCores: Int = cpuCores,
+    val efficiencyCores: Int = 0,
+    val recommendedThreads: Int = minOf(4, cpuCores)
 )
 
 @Serializable
@@ -82,6 +85,12 @@ object DeviceHardwareInspector {
             else -> DevicePerformanceTier.ENTRY
         }
 
+        val topology = try {
+            com.agentx.core.device.CpuTopologyInspector.inspect()
+        } catch (_: Throwable) {
+            null
+        }
+
         return DeviceSpecs(
             deviceModel = model,
             osVersion = os,
@@ -90,7 +99,10 @@ object DeviceHardwareInspector {
             cpuCores = cores,
             primaryAbi = abi,
             batteryPercent = batteryPct,
-            performanceTier = tier
+            performanceTier = tier,
+            performanceCores = topology?.performanceCores ?: cores,
+            efficiencyCores = topology?.efficiencyCores ?: 0,
+            recommendedThreads = topology?.recommendedInferenceThreads ?: minOf(4, cores)
         )
     }
 

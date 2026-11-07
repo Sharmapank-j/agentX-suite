@@ -35,14 +35,11 @@ static jstring utf8ToJString(JNIEnv * env, const char * bytes, size_t length) {
         const std::u16string utf16 = converter.from_bytes(bytes, bytes + length);
         return env->NewString(reinterpret_cast<const jchar *>(utf16.data()), static_cast<jsize>(utf16.size()));
     } catch (...) {
-        // Safe fallback in case of unconverted bytes
         std::string safe(bytes, length);
         return env->NewStringUTF(safe.c_str());
     }
 }
 
-// Determines the length of complete UTF-8 codepoints in the buffer.
-// If the buffer ends with an incomplete multi-byte sequence, returns the length before it.
 static size_t getCompleteUtf8Length(const std::string & s) {
     if (s.empty()) return 0;
     const size_t len = s.size();
@@ -51,11 +48,9 @@ static size_t getCompleteUtf8Length(const std::string & s) {
         --i;
         unsigned char c = static_cast<unsigned char>(s[i]);
         if ((c & 0x80) == 0) {
-            // ASCII byte: completely valid sequence
             return len;
         }
         if ((c & 0xC0) == 0xC0) {
-            // Leading byte of a multi-byte sequence
             size_t needed = 1;
             if ((c & 0xE0) == 0xC0) needed = 2;
             else if ((c & 0xF0) == 0xE0) needed = 3;
@@ -63,7 +58,6 @@ static size_t getCompleteUtf8Length(const std::string & s) {
 
             size_t available = len - i;
             if (available < needed) {
-                // Incomplete sequence at end of buffer
                 return i;
             } else {
                 return len;
@@ -129,7 +123,6 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
          (unsigned long long)(totalRam / (1024ULL * 1024ULL)),
          (unsigned long long)(memAvailable / (1024ULL * 1024ULL)));
 
-    // Model file size cannot exceed 80% of total physical RAM
     if (totalRam > 0 && static_cast<uint64_t>(fileInfo.st_size) > totalRam * 80ULL / 100ULL) {
         LOGE("Refusing GGUF load: model file size (%lld bytes) exceeds 80%% of physical RAM (%llu bytes)",
              (long long)fileInfo.st_size, (unsigned long long)totalRam);
@@ -157,10 +150,15 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
     contextParams.n_ctx = static_cast<uint32_t>(std::clamp(static_cast<int>(contextLength), 256, 16384));
     contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 512);
     contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 128);
+
     int threads = static_cast<int>(nThreads);
-    if (threads <= 0) threads = 4;
-    contextParams.n_threads = std::clamp(threads, 1, 6);
+    if (threads <= 0) {
+        const long onlineCpus = sysconf(_SC_NPROCESSORS_ONLN);
+        threads = onlineCpus > 0 ? static_cast<int>(onlineCpus) : 4;
+    }
+    contextParams.n_threads = std::clamp(threads, 1, 16);
     contextParams.n_threads_batch = contextParams.n_threads;
+
     state->context = llama_init_from_model(state->model, contextParams);
     if (state->context == nullptr) {
         LOGE("llama_init_from_model failed");
@@ -177,15 +175,15 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
         return 0;
     }
 
-    LOGI("Loaded GGUF model with llama.cpp; estimated working set=%lld bytes, n_ctx=%u, n_batch=%u",
-         (long long) state->modelFileBytes, contextParams.n_ctx, contextParams.n_batch);
+    LOGI("Loaded GGUF model with llama.cpp; estimated working set=%lld bytes, n_ctx=%u, n_batch=%u, threads=%u",
+         (long long) state->modelFileBytes, contextParams.n_ctx, contextParams.n_batch, contextParams.n_threads);
     return static_cast<jlong>(reinterpret_cast<intptr_t>(state));
 }
 
-JNIEXPORT jint JNICALL
-Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
-        JNIEnv * env, jobject, jlong handle, jstring systemPromptString, jstring userPromptString,
-        jint maxTokens, jfloat temperature, jfloat topP, jobject callback) {
+static jint internalGenerate(
+        JNIEnv * env, jlong handle, jstring systemPromptString, jstring userPromptString,
+        jint maxTokens, jfloat temperature, jfloat topP, jint topK, jfloat repetitionPenalty,
+        jint seed, jobjectArray stopSequencesArray, jobject callback) {
     AgentXContext * state = fromHandle(handle);
     if (state == nullptr || state->context == nullptr || userPromptString == nullptr || callback == nullptr) return -1;
     std::lock_guard<std::mutex> guard(state->generationMutex);
@@ -201,6 +199,24 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
         if (rawSystem != nullptr) {
             systemPrompt.assign(rawSystem);
             env->ReleaseStringUTFChars(systemPromptString, rawSystem);
+        }
+    }
+
+    std::vector<std::string> stopSequences;
+    if (stopSequencesArray != nullptr) {
+        const jsize numStops = env->GetArrayLength(stopSequencesArray);
+        for (jsize s = 0; s < numStops; ++s) {
+            auto stopStr = static_cast<jstring>(env->GetObjectArrayElement(stopSequencesArray, s));
+            if (stopStr != nullptr) {
+                const char * rawStop = env->GetStringUTFChars(stopStr, nullptr);
+                if (rawStop != nullptr) {
+                    if (strlen(rawStop) > 0) {
+                        stopSequences.emplace_back(rawStop);
+                    }
+                    env->ReleaseStringUTFChars(stopStr, rawStop);
+                }
+                env->DeleteLocalRef(stopStr);
+            }
         }
     }
 
@@ -255,7 +271,6 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
     tokens.resize(static_cast<size_t>(tokenCount));
 
     const uint32_t n_ctx = llama_n_ctx(state->context);
-    // Context length protection: truncate from start of prompt if token count exceeds window
     if (static_cast<uint32_t>(tokenCount) >= n_ctx) {
         const int32_t maxAllowed = std::max<int32_t>(16, static_cast<int32_t>(n_ctx) - 64);
         LOGI("Prompt length (%d) exceeds context window (%u); truncating to latest %d tokens",
@@ -266,7 +281,6 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
 
     llama_memory_clear(llama_get_memory(state->context), true);
 
-    // Prompt evaluation in chunks of n_batch to prevent n_tokens > n_batch failures
     const int32_t n_batch = static_cast<int32_t>(llama_n_batch(state->context));
     for (int32_t i = 0; i < tokenCount; i += n_batch) {
         if (state->cancelled.load()) return 0;
@@ -280,11 +294,16 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
 
     auto samplerParams = llama_sampler_chain_default_params();
     llama_sampler * sampler = llama_sampler_chain_init(samplerParams);
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40));
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
     llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.01f, 1.0f), 1));
+    if (repetitionPenalty > 1.0f) {
+        const int32_t n_vocab = llama_vocab_n_tokens(state->vocab);
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(n_vocab, 64, repetitionPenalty, 0.0f, 0.0f));
+    }
     if (temperature > 0.0f) {
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
-        llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
+        const uint32_t s = seed > 0 ? static_cast<uint32_t>(seed) : LLAMA_DEFAULT_SEED;
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(s));
     } else {
         llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
     }
@@ -292,10 +311,10 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
     int generated = 0;
     char piece[4096];
     std::string utf8Buffer;
+    std::string totalGeneratedText;
 
     for (int i = 0; i < std::clamp(static_cast<int>(maxTokens), 1, 4096); ++i) {
         if (state->cancelled.load()) break;
-        // Stop gracefully if context limit is reached
         if (static_cast<uint32_t>(tokenCount + generated) >= n_ctx - 1) {
             LOGI("Context window limit reached (%u). Gracefully finishing generation.", n_ctx);
             break;
@@ -314,6 +333,22 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
             utf8Buffer.append(piece, static_cast<size_t>(pieceLength));
             const size_t completeLen = getCompleteUtf8Length(utf8Buffer);
             if (completeLen > 0) {
+                std::string pieceStr(utf8Buffer.data(), completeLen);
+                totalGeneratedText.append(pieceStr);
+
+                // Stop sequence check
+                bool hitStop = false;
+                for (const auto & stopSeq : stopSequences) {
+                    if (!stopSeq.empty() && totalGeneratedText.find(stopSeq) != std::string::npos) {
+                        hitStop = true;
+                        break;
+                    }
+                }
+                if (hitStop) {
+                    LOGI("Stop sequence encountered; terminating generation.");
+                    break;
+                }
+
                 jstring text = utf8ToJString(env, utf8Buffer.data(), completeLen);
                 utf8Buffer.erase(0, completeLen);
                 if (text != nullptr) {
@@ -327,7 +362,6 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
                     if (keepGoing != JNI_TRUE) break;
                 }
             } else {
-                // Fragment buffered waiting for next token continuation byte
                 ++generated;
             }
         }
@@ -339,7 +373,6 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
         }
     }
 
-    // Flush any remaining buffered bytes
     if (!utf8Buffer.empty()) {
         jstring text = utf8ToJString(env, utf8Buffer.data(), utf8Buffer.size());
         if (text != nullptr) {
@@ -352,6 +385,26 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
 
     llama_sampler_free(sampler);
     return generated;
+}
+
+// Full 12-argument JNI method
+JNIEXPORT jint JNICALL
+Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerate(
+        JNIEnv * env, jobject, jlong handle, jstring systemPromptString, jstring userPromptString,
+        jint maxTokens, jfloat temperature, jfloat topP, jint topK, jfloat repetitionPenalty,
+        jint seed, jobjectArray stopSequencesArray, jobject callback) {
+    return internalGenerate(env, handle, systemPromptString, userPromptString,
+                            maxTokens, temperature, topP, topK, repetitionPenalty,
+                            seed, stopSequencesArray, callback);
+}
+
+// Backward-compatible 7-argument overload
+JNIEXPORT jint JNICALL
+Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerateLegacy(
+        JNIEnv * env, jobject, jlong handle, jstring systemPromptString, jstring userPromptString,
+        jint maxTokens, jfloat temperature, jfloat topP, jobject callback) {
+    return internalGenerate(env, handle, systemPromptString, userPromptString,
+                            maxTokens, temperature, topP, 40, 1.1f, 0, nullptr, callback);
 }
 
 JNIEXPORT void JNICALL

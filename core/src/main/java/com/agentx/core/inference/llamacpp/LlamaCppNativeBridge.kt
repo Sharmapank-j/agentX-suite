@@ -26,6 +26,7 @@ object LlamaCppNativeBridge {
         nThreads: Int,
         gpuLayers: Int
     ): Long
+
     external fun nativeGenerate(
         contextHandle: Long,
         systemPrompt: String?,
@@ -33,8 +34,13 @@ object LlamaCppNativeBridge {
         maxTokens: Int,
         temperature: Float,
         topP: Float,
+        topK: Int = 40,
+        repetitionPenalty: Float = 1.1f,
+        seed: Int = 0,
+        stopSequences: Array<String>? = null,
         callback: TokenCallback
     ): Int
+
     external fun nativeCancel(contextHandle: Long)
     external fun nativeGetMemoryUsage(contextHandle: Long): Long
     external fun nativeFree(contextHandle: Long): Boolean

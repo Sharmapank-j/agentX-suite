@@ -13,7 +13,9 @@ data class ModelConfig(
     val batchSize: Int = 512,
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,
-    val repeatPenalty: Float = 1.1f
+    val topK: Int = 40,
+    val repeatPenalty: Float = 1.1f,
+    val seed: Int = 0
 )
 
 @Serializable
@@ -23,6 +25,9 @@ data class InferenceRequest(
     val maxTokens: Int = 1024,
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,
+    val topK: Int = 40,
+    val repeatPenalty: Float = 1.1f,
+    val seed: Int = 0,
     val stopSequences: List<String> = emptyList()
 )
 
