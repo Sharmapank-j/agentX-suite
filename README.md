@@ -6,25 +6,30 @@ AgentX Suite is an Android project with three applications sharing a Kotlin foun
 - **AgentX Medical (`:medical`)** — medical education and clinical-support tools.
 - **AgentX Serve (`:admin`)** — Android-hosted API/server interface for local or configured remote inference.
 
-## Engineering status
+## Current repository state
 
-**Status: Under active development**
+**Source branch:** `main`  
+**Latest verified source commit:** `5ccef43fb98dbe0abdf9eceb7e5d60c8906b11f9`  
+**Latest verified CI run:** [Run #48](https://github.com/Sharmapank-j/agentX-suite/actions/runs/42197108940) — passed on 6 November 2026.  
+**CI output:** Debug APKs for all three applications and unit-test reports.  
+**Release page:** [GitHub Releases](https://github.com/Sharmapank-j/agentX-suite/releases). The published `v1.0.0` release is dated 4 November 2026 and does **not** contain the later source updates.
 
-The repository previously contained simulated responses that could be mistaken for local model inference. Those paths have been disabled. **The current source does not yet include a working llama.cpp/GGUF inference runtime.** Local model loading and generation are intentionally unavailable until native inference is implemented and validated.
+The CI run's APKs are downloadable as the [workflow artifact](https://github.com/Sharmapank-j/agentX-suite/actions/runs/42197108940). These are debug builds, not production-signed distribution packages. A successful CI run verifies the configured unit tests and APK assembly; it does not prove the apps have been exercised on a physical device or that a real GGUF model has generated tokens.
 
-| Capability | Current status |
+## Capability status
+
+| Capability | Status |
 |---|---|
-| App modules and shared Kotlin code | Present; build verification required |
-| GGUF metadata/model discovery | Partial; discovery is not proof of runtime compatibility |
-| Real local GGUF inference | Not implemented |
-| AgentX / Medical local generation | Disabled until native runtime integration |
-| AgentX Serve local generation | Disabled; returns an explicit unavailable error |
-| Mock embeddings / fake agent success | Disabled; unavailable endpoints return HTTP 501 |
-| Cloud providers | Separate code paths; require valid user configuration |
-| Medical calculators | Require individual reference-based validation; not represented as clinically validated |
-| Physical-device performance | Not yet verified |
-
-Do not interpret older APKs, screenshots, historical test reports, or feature descriptions as evidence that the current source has those capabilities.
+| Three Android application modules | Present |
+| Latest main source | Includes changes through commit `5ccef43` |
+| Gemini / gateway credential isolation | Merged in PR #6 |
+| llama.cpp / GGUF integration | Native runtime integration code merged in PR #5; real model load and generation still require device acceptance testing |
+| Android ABI / hardware acceleration | Build/runtime coverage must be confirmed on target devices; do not assume GPU acceleration |
+| CI unit tests and debug APK assembly | Passed in run #48 |
+| Physical-device smoke tests | Not certified by CI; see device test records before claiming completion |
+| Real GGUF inference on a phone | Not confirmed by CI alone |
+| Medical calculator clinical validation | Requires independent equation, boundary, and clinical review |
+| AgentX Serve exposure beyond trusted LAN | Security review and deployment hardening required |
 
 ## Architecture
 
@@ -33,10 +38,10 @@ AgentX Suite
 ├── :app       General assistant
 ├── :medical   Medical education / clinical-support app
 ├── :admin     Local server and API gateway app
-└── :core      Shared inference abstractions, GGUF utilities and provider code
+└── :core      Shared Kotlin and native inference components
 ```
 
-The intended local inference architecture is a single shared native llama.cpp runtime used by all three applications. The existing JNI bridge is currently a stub. A production implementation still needs upstream llama.cpp integration, Android ABI builds, GGUF loading, tokenization, evaluation, sampling, streaming, cancellation, resource release, and offline device tests.
+The intended local inference design uses a shared llama.cpp runtime. The implementation must be accepted on each target Android ABI/device with a real local GGUF file. Model discovery, a selected file, a successfully loaded runtime context, and actual generated tokens are distinct states and must be represented truthfully in the UI.
 
 ## Build and test
 
@@ -48,22 +53,17 @@ Requirements:
 Run:
 
 ```bash
-./gradlew testDebugUnitTest --no-daemon
-./gradlew :app:assembleDebug :medical:assembleDebug :admin:assembleDebug --no-daemon
+./gradlew testDebugUnitTest --no-daemon --stacktrace
+./gradlew assembleDebug --no-daemon
 ```
 
-CI runs unit tests and builds debug APKs. A green unit-test job does not prove local inference works; native runtime and physical-device acceptance tests are separate requirements.
+CI workflow: [`.github/workflows/android-ci.yml`](.github/workflows/android-ci.yml).
 
-## Local model support roadmap
+A green CI run confirms the workflow completed; it is not a substitute for on-device tests. Before calling a release device-verified, record the device model, Android version, ABI, installed APK version codes, launch/crash checks, actual model load, generated output, cancellation, memory use, thermals, and battery impact.
 
-1. Pin a reviewed upstream llama.cpp revision and preserve its license notices.
-2. Build and package supported Android ABIs (at minimum `arm64-v8a`; `x86_64` for emulator coverage).
-3. Implement JNI ownership for model/context lifecycles, prompt evaluation, sampling, cancellation and cleanup.
-4. Connect all three apps to the shared runtime and prevent duplicate model contexts.
-5. Add offline instrumentation tests using a small redistributable GGUF fixture.
-6. Measure actual memory, latency, tokens/second, thermals and battery on representative hardware.
+## Releasing
 
-Model discovery, downloaded files, validated GGUF files, and loaded runtime contexts must remain distinct states. Unknown memory use must be displayed as unknown—not as a fabricated estimate.
+Do not overwrite the old `v1.0.0` assets with APKs from a later commit. Create a new versioned release that points at the exact tested commit, attach the matching APKs, and provide SHA-256 checksums. Clearly identify debug vs. signed release builds and list device testing limitations. Release asset publication is a separate step from merging source and producing CI artifacts.
 
 ## Medical safety
 
