@@ -565,6 +565,7 @@ fun ChatScreen(
 private fun CyberTopAppBar(
     conversationTitle: String,
     activeModel: GGUFModel?,
+    modelStatus: ModelStatus? = null,
     onTitleClick: () -> Unit,
     onMenuClick: () -> Unit,
     onModelBadgeClick: () -> Unit,
@@ -636,11 +637,12 @@ private fun CyberTopAppBar(
         },
         actions = {
             // Model Pill Badge
+            val isLoadedPill = activeModel != null && (modelStatus?.state == ModelLifecycleState.LOADED || modelStatus?.state == ModelLifecycleState.GENERATING)
             Surface(
                 onClick = onModelBadgeClick,
                 shape = RoundedCornerShape(12.dp),
                 color = SurfaceGlass,
-                border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isLoadedPill) CyberMint.copy(alpha = 0.6f) else SurfaceBorder),
                 modifier = Modifier.padding(end = 4.dp)
             ) {
                 Row(
@@ -651,11 +653,12 @@ private fun CyberTopAppBar(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(CyberMint)
+                            .background(if (isLoadedPill) CyberMint else Color(0xFFFF9800))
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = activeModel?.name?.take(10) ?: "llama.cpp",
+                        text = if (isLoadedPill) "${activeModel?.name?.take(10) ?: "Engine"} (RAM)"
+                               else (activeModel?.name?.take(10) ?: "llama.cpp"),
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -761,7 +764,9 @@ private fun LiveMetricsHud(metrics: LiveInferenceMetrics) {
 fun ActiveModelStatusBanner(
     modelStatus: ModelStatus,
     activeModel: GGUFModel?,
-    onSwitchModelClick: () -> Unit
+    onSwitchModelClick: () -> Unit,
+    onLoadClick: () -> Unit = {},
+    onUnloadClick: () -> Unit = {}
 ) {
     val isLoaded = modelStatus.state == ModelLifecycleState.LOADED || modelStatus.state == ModelLifecycleState.GENERATING
     val memoryMb = modelStatus.memoryUsageBytes / (1024 * 1024)
@@ -769,18 +774,22 @@ fun ActiveModelStatusBanner(
     Surface(
         color = SurfaceGlass,
         shape = RoundedCornerShape(10.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isLoaded) CyberMint.copy(alpha = 0.5f) else SurfaceBorder),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable { onSwitchModelClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSwitchModelClick() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
@@ -788,23 +797,54 @@ fun ActiveModelStatusBanner(
                         .background(if (isLoaded) CyberMint else Color(0xFFFF9800))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (isLoaded) {
+                            "${activeModel?.name ?: "llama.cpp Engine"} • ${memoryMb} MB RAM"
+                        } else {
+                            "${activeModel?.name ?: "Local GGUF"} • Not in RAM"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = if (isLoaded) {
+                            "${activeModel?.threads ?: 4} Threads • ${activeModel?.contextLength ?: 2048} Context Tokens"
+                        } else {
+                            "Ready for On-Demand Offline Inference"
+                        },
+                        fontSize = 10.sp,
+                        color = TextMuted
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isLoaded) {
+                    TextButton(
+                        onClick = onUnloadClick,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Unload", fontSize = 11.sp, color = Color(0xFFFF5252), fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(
+                        onClick = onLoadClick,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Load", fontSize = 11.sp, color = CyberMint, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = if (isLoaded) {
-                        "${activeModel?.name ?: "llama.cpp Engine"} • ${memoryMb} MB RAM"
-                    } else {
-                        "Ready for On-Demand Streaming"
-                    },
+                    text = "Switch ▾",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextPrimary
+                    color = ElectricCyan,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onSwitchModelClick() }
                 )
             }
-            Text(
-                text = "Switch ▾",
-                style = MaterialTheme.typography.labelSmall,
-                color = ElectricCyan,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }

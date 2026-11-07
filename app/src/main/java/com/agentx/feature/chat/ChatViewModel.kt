@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.agentx.core.inference.model.ExtendedModelConfig
 import java.util.UUID
 
 data class LiveInferenceMetrics(
@@ -158,6 +159,23 @@ class ChatViewModel(
                 }
                 _modelStatus.value = inferenceEngine.getModelStatus()
             }
+        }
+    }
+
+    fun loadActiveModelIntoRam() {
+        viewModelScope.launch {
+            val activeModel = modelRepository.getActiveModel().first() ?: return@launch
+            ensureModelLoaded(activeModel)
+            _modelStatus.value = inferenceEngine.getModelStatus()
+        }
+    }
+
+    fun unloadActiveModelFromRam() {
+        viewModelScope.launch {
+            try {
+                inferenceEngine.unloadModel()
+                _modelStatus.value = inferenceEngine.getModelStatus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -470,15 +488,18 @@ class ChatViewModel(
             .filter { it.id != assistantMsg.id }
 
         val activeModelConfig = modelRepository.getActiveModel().first()
+        val extendedConfig = ExtendedModelConfig.parse(activeModelConfig?.capabilityProfile)
         val maxContext = activeModelConfig?.contextLength ?: 2048
+        val effectiveSystemPrompt = extendedConfig.systemPrompt ?: agent?.systemPrompt
+        val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 512)
 
         val contextualPrompt = ContextManager.buildPromptWithContext(
-            systemPrompt = agent?.systemPrompt,
+            systemPrompt = effectiveSystemPrompt,
             history = historyMessages,
             currentPrompt = userPrompt,
             budget = ContextBudget(
                 maxContextTokens = maxContext,
-                maxOutputTokens = agent?.maxTokens ?: 512
+                maxOutputTokens = maxOutputTokens
             )
         )
 
@@ -497,9 +518,14 @@ class ChatViewModel(
         inferenceEngine.generate(
             InferenceRequest(
                 prompt = contextualPrompt,
-                maxTokens = agent?.maxTokens ?: 512,
-                temperature = agent?.temperature ?: 0.7f,
-                topP = agent?.topP ?: 0.9f
+                systemPrompt = effectiveSystemPrompt,
+                maxTokens = maxOutputTokens,
+                temperature = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f,
+                topP = activeModelConfig?.topP ?: agent?.topP ?: 0.9f,
+                topK = extendedConfig.topK,
+                repeatPenalty = extendedConfig.repetitionPenalty,
+                seed = extendedConfig.seed,
+                stopSequences = extendedConfig.stopSequences
             )
         ).collect { event ->
             when (event) {

@@ -18,6 +18,74 @@ enum class ProfilePreset {
 }
 
 @Serializable
+data class ExtendedModelConfig(
+    val preset: ProfilePreset = ProfilePreset.BALANCED,
+    val maxTokens: Int = 1024,
+    val topK: Int = 40,
+    val repetitionPenalty: Float = 1.10f,
+    val seed: Int = 0,
+    val stopSequences: List<String> = emptyList(),
+    val outputFormat: OutputFormat = OutputFormat.TEXT,
+    val jsonSchema: String? = null,
+    val systemPrompt: String? = null,
+    val keepLoadedInRam: Boolean = true
+) {
+    fun serialize(): String {
+        return try {
+            kotlinx.serialization.json.Json.encodeToString(serializer(), this)
+        } catch (_: Exception) {
+            "preset=${preset.name};maxTokens=$maxTokens;topK=$topK;repPenalty=$repetitionPenalty;seed=$seed"
+        }
+    }
+
+    companion object {
+        private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }
+
+        fun parse(raw: String?): ExtendedModelConfig {
+            if (raw.isNullOrBlank()) return ExtendedModelConfig()
+            return try {
+                if (raw.trimStart().startsWith("{")) {
+                    json.decodeFromString(serializer(), raw)
+                } else {
+                    parseLegacyString(raw)
+                }
+            } catch (_: Exception) {
+                parseLegacyString(raw)
+            }
+        }
+
+        private fun parseLegacyString(raw: String): ExtendedModelConfig {
+            var preset = ProfilePreset.BALANCED
+            var maxTokens = 1024
+            var topK = 40
+            var repPenalty = 1.10f
+            var seed = 0
+            raw.split(";").forEach { part ->
+                val kv = part.split("=", limit = 2)
+                if (kv.size == 2) {
+                    val key = kv[0].trim().lowercase()
+                    val value = kv[1].trim()
+                    when (key) {
+                        "preset" -> try { preset = ProfilePreset.valueOf(value.uppercase()) } catch (_: Exception) {}
+                        "maxtokens" -> maxTokens = value.toIntOrNull() ?: 1024
+                        "topk" -> topK = value.toIntOrNull() ?: 40
+                        "reppenalty", "penalty" -> repPenalty = value.toFloatOrNull() ?: 1.10f
+                        "seed" -> seed = value.toIntOrNull() ?: 0
+                    }
+                }
+            }
+            return ExtendedModelConfig(
+                preset = preset,
+                maxTokens = maxTokens,
+                topK = topK,
+                repetitionPenalty = repPenalty,
+                seed = seed
+            )
+        }
+    }
+}
+
+@Serializable
 data class GenerationProfile(
     val name: String,
     val preset: ProfilePreset,

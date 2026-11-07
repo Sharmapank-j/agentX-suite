@@ -228,6 +228,35 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Model Pill Badge
+                        val isLoadedPill = state.activeModel != null && (state.modelStatus.state == ModelLifecycleState.LOADED || state.modelStatus.state == ModelLifecycleState.GENERATING)
+                        Surface(
+                            onClick = { showModelSwitcherSheet = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isLoadedPill) Color(0xFF10B981) else Color(0xFFFF9800))
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isLoadedPill) "${state.activeModel?.name?.take(10) ?: "Engine"} (RAM)"
+                                           else (state.activeModel?.name?.take(10) ?: "llama.cpp"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
                         Box {
                             IconButton(onClick = { showTopMenu = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "Options")
@@ -335,7 +364,9 @@ fun ChatScreen(
                 ActiveModelStatusBanner(
                     modelStatus = state.modelStatus,
                     activeModel = state.activeModel,
-                    onSwitchModelClick = { showModelSwitcherSheet = true }
+                    onSwitchModelClick = { showModelSwitcherSheet = true },
+                    onLoadClick = { viewModel.loadActiveModelIntoRam() },
+                    onUnloadClick = { viewModel.unloadActiveModelFromRam() }
                 )
 
                 if (state.messages.isEmpty()) {
@@ -521,49 +552,87 @@ fun ChatScreen(
 fun ActiveModelStatusBanner(
     modelStatus: com.agentx.medical.core.inference.ModelStatus,
     activeModel: GGUFModel?,
-    onSwitchModelClick: () -> Unit
+    onSwitchModelClick: () -> Unit,
+    onLoadClick: () -> Unit = {},
+    onUnloadClick: () -> Unit = {}
 ) {
     val isLoaded = modelStatus.state == ModelLifecycleState.LOADED || modelStatus.state == ModelLifecycleState.GENERATING
     val memoryMb = modelStatus.memoryUsageBytes / (1024 * 1024)
 
     Surface(
         color = if (isLoaded) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-        else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(8.dp),
+        else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isLoaded) Color(0xFF10B981) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clickable { onSwitchModelClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSwitchModelClick() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (isLoaded) Color(0xFF4CAF50) else Color(0xFFFF9800))
+                        .background(if (isLoaded) Color(0xFF10B981) else Color(0xFFFF9800))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (isLoaded) {
+                            "${activeModel?.name ?: "llama.cpp Engine"} • ${memoryMb} MB RAM"
+                        } else {
+                            "${activeModel?.name ?: "Local GGUF"} • Not in RAM"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (isLoaded) {
+                            "${activeModel?.threads ?: 4} Threads • ${activeModel?.contextLength ?: 2048} Context Tokens"
+                        } else {
+                            "Ready for On-Demand Offline Inference"
+                        },
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isLoaded) {
+                    TextButton(
+                        onClick = onUnloadClick,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Unload", fontSize = 11.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(
+                        onClick = onLoadClick,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Load", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = if (isLoaded) {
-                        "${activeModel?.name ?: "Loaded Model"} • ${memoryMb} MB RAM"
-                    } else {
-                        "No GGUF Model Loaded"
-                    },
+                    text = "Switch ▾",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { onSwitchModelClick() }
                 )
             }
-            Text(
-                text = "Switch ▾",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }

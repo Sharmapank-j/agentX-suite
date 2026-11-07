@@ -7,12 +7,15 @@ import androidx.lifecycle.viewModelScope
 import com.agentx.medical.core.device.DeviceHardwareInspector
 import com.agentx.medical.core.device.DeviceSpecs
 import com.agentx.medical.core.device.RecommendedModel
+import com.agentx.core.device.CpuTopology
+import com.agentx.core.device.CpuTopologyInspector
 import com.agentx.medical.core.inference.CuratedMedicalModel
 import com.agentx.medical.core.inference.DownloadProgress
 import com.agentx.medical.core.inference.GgufMetadataParser
 import com.agentx.medical.core.inference.HuggingFaceDownloader
 import com.agentx.medical.core.inference.InferenceEngine
 import com.agentx.medical.core.inference.ModelConfig
+import com.agentx.medical.core.inference.ModelLifecycleState
 import com.agentx.medical.data.local.ModelFileManager
 import com.agentx.medical.data.local.StagingProgress
 import com.agentx.medical.data.repository.ModelRepository
@@ -23,12 +26,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.UUID
 import java.io.File
-import kotlinx.coroutines.flow.first
+import java.util.UUID
 
 data class StagingUiState(
     val isStaging: Boolean = false,
@@ -60,7 +63,13 @@ data class ModelsUiState(
     val notificationMessage: String? = null,
     val curatedModels: List<CuratedMedicalModel> = HuggingFaceDownloader.CURATED_MODELS,
     val deviceSpecs: DeviceSpecs? = null,
-    val recommendedModels: List<RecommendedModel> = emptyList()
+    val recommendedModels: List<RecommendedModel> = emptyList(),
+    val isLoadedInRam: Boolean = false,
+    val loadedMemoryMb: Long = 0L,
+    val isScanningStorage: Boolean = false,
+    val activeFilter: String = "ALL", // "ALL", "INSTALLED", "FAVORITES"
+    val favoriteModelIds: Set<String> = emptySet(),
+    val cpuTopology: CpuTopology = CpuTopologyInspector.inspect()
 )
 
 class ModelsViewModel(
@@ -78,8 +87,21 @@ class ModelsViewModel(
     private val _notification = MutableStateFlow<String?>(null)
     private val _deviceSpecs = MutableStateFlow<DeviceSpecs?>(null)
     private val _recommendedModels = MutableStateFlow<List<RecommendedModel>>(emptyList())
+    private val _isLoadedInRam = MutableStateFlow(false)
+    private val _loadedMemoryMb = MutableStateFlow(0L)
+    private val _isScanningStorage = MutableStateFlow(false)
+    private val _activeFilter = MutableStateFlow("ALL")
+    private val _favoriteModelIds = MutableStateFlow<Set<String>>(emptySet())
 
     private var downloadJob: Job? = null
+
+    private data class RamUiStatus(
+        val isLoaded: Boolean,
+        val memoryMb: Long,
+        val isScanning: Boolean,
+        val filter: String,
+        val favorites: Set<String>
+    )
 
     private val progressFlow = combine(_stagingState, _downloadState) { staging, download ->
         Pair(staging, download)
@@ -89,24 +111,43 @@ class ModelsViewModel(
         Pair(specs, recs)
     }
 
+    private val ramStatusFlow = combine(
+        _isLoadedInRam,
+        _loadedMemoryMb,
+        _isScanningStorage,
+        _activeFilter,
+        _favoriteModelIds
+    ) { loaded, mem, scanning, filter, favs ->
+        RamUiStatus(loaded, mem, scanning, filter, favs)
+    }
+
     val uiState: StateFlow<ModelsUiState> = combine(
         modelRepository.getAllModels(),
         progressFlow,
         combine(_storageUsed, _storageAvailable, _notification) { used, avail, notif ->
             Triple(used, avail, notif)
         },
-        specsFlow
-    ) { models, (staging, download), (used, available, notification), (specs, recs) ->
+        specsFlow,
+        ramStatusFlow
+    ) { models, (staging, download), (used, available, notification), (specs, recs), ramStatus ->
+        val active = models.firstOrNull { it.isActive } ?: models.firstOrNull()
         ModelsUiState(
             models = models,
-            activeModel = models.firstOrNull { it.isActive } ?: models.firstOrNull(),
+            activeModel = active,
             stagingState = staging,
             downloadState = download,
             storageUsedBytes = used,
             storageAvailableBytes = available,
             notificationMessage = notification,
+            curatedModels = HuggingFaceDownloader.CURATED_MODELS,
             deviceSpecs = specs,
-            recommendedModels = recs
+            recommendedModels = recs,
+            isLoadedInRam = ramStatus.isLoaded,
+            loadedMemoryMb = ramStatus.memoryMb,
+            isScanningStorage = ramStatus.isScanning,
+            activeFilter = ramStatus.filter,
+            favoriteModelIds = ramStatus.favorites,
+            cpuTopology = CpuTopologyInspector.inspect()
         )
     }.stateIn(
         scope = viewModelScope,
@@ -117,7 +158,16 @@ class ModelsViewModel(
     init {
         refreshStorageMetrics()
         refreshDeviceSpecs()
+        syncRuntimeStatus()
         scanAndRegisterLocalModels()
+    }
+
+    fun syncRuntimeStatus() {
+        if (inferenceEngine != null) {
+            val status = inferenceEngine.getModelStatus()
+            _isLoadedInRam.value = (status.state == ModelLifecycleState.LOADED || status.state == ModelLifecycleState.GENERATING)
+            _loadedMemoryMb.value = status.memoryUsageBytes / (1024 * 1024)
+        }
     }
 
     fun refreshDeviceSpecs() {
@@ -141,12 +191,92 @@ class ModelsViewModel(
         _storageAvailable.value = modelFileManager.getAvailableStorageBytes()
     }
 
+    fun scanStorageNow() {
+        viewModelScope.launch {
+            _isScanningStorage.value = true
+            _notification.value = "Scanning phone storage for .gguf models..."
+            scanAndRegisterLocalModels()
+            _isScanningStorage.value = false
+            _notification.value = "Phone storage scan complete"
+        }
+    }
+
+    fun setFilter(filter: String) {
+        _activeFilter.value = filter
+    }
+
+    fun toggleFavorite(modelId: String) {
+        val current = _favoriteModelIds.value.toMutableSet()
+        if (current.contains(modelId)) {
+            current.remove(modelId)
+            _notification.value = "Removed from Favorites"
+        } else {
+            current.add(modelId)
+            _notification.value = "Added to Favorites"
+        }
+        _favoriteModelIds.value = current
+    }
+
+    fun loadModelIntoRam(modelId: String) {
+        viewModelScope.launch {
+            val model = modelRepository.getModelById(modelId) ?: return@launch
+            val file = File(model.filePath)
+            if (!file.exists() || !file.isFile) {
+                _notification.value = "Cannot load: Model file does not exist at ${model.filePath}"
+                return@launch
+            }
+            modelRepository.setActiveModel(modelId)
+            if (inferenceEngine != null) {
+                try {
+                    _notification.value = "Loading ${model.name} into RAM..."
+                    inferenceEngine.loadModel(
+                        ModelConfig(
+                            modelId = model.id,
+                            modelPath = model.filePath,
+                            contextLength = model.contextLength,
+                            threads = model.threads,
+                            temperature = model.temperature,
+                            topP = model.topP
+                        )
+                    )
+                    val status = inferenceEngine.getModelStatus()
+                    val memMb = status.memoryUsageBytes / (1024 * 1024)
+                    _isLoadedInRam.value = (status.state == ModelLifecycleState.LOADED)
+                    _loadedMemoryMb.value = memMb
+                    _notification.value = "Loaded ${model.name} into RAM (${memMb} MB in use, ${model.threads} CPU threads)"
+                } catch (e: Exception) {
+                    _isLoadedInRam.value = false
+                    _loadedMemoryMb.value = 0L
+                    _notification.value = "Model loading failed: ${e.message}"
+                }
+            } else {
+                _notification.value = "Active model updated (Engine unattached)"
+            }
+        }
+    }
+
+    fun unloadModelFromRam() {
+        viewModelScope.launch {
+            try {
+                inferenceEngine?.unloadModel()
+                _isLoadedInRam.value = false
+                _loadedMemoryMb.value = 0L
+                _notification.value = "Model unloaded from RAM. Memory freed."
+            } catch (e: Exception) {
+                _notification.value = "Failed to unload model: ${e.message}"
+            }
+        }
+    }
+
     fun scanAndRegisterLocalModels() {
         viewModelScope.launch(Dispatchers.IO) {
             val candidateDirs = listOfNotNull(
                 File(context.filesDir, "models"),
                 File(context.getExternalFilesDir(null), "models"),
-                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                File(android.os.Environment.getExternalStorageDirectory(), "Download"),
+                File(android.os.Environment.getExternalStorageDirectory(), "Models"),
+                File(android.os.Environment.getExternalStorageDirectory(), "Documents")
             )
             val currentModels = modelRepository.getAllModels().first()
             for (dir in candidateDirs) {
@@ -187,9 +317,10 @@ class ModelsViewModel(
                                         topP = newModel.topP
                                     )
                                 )
+                                syncRuntimeStatus()
                             } catch (_: Exception) {}
                         }
-                    } else if (existing.isActive && inferenceEngine != null && inferenceEngine.getModelStatus().state != com.agentx.medical.core.inference.ModelLifecycleState.LOADED) {
+                    } else if (existing.isActive && inferenceEngine != null && inferenceEngine.getModelStatus().state != ModelLifecycleState.LOADED) {
                         try {
                             inferenceEngine.loadModel(
                                 ModelConfig(
@@ -201,11 +332,13 @@ class ModelsViewModel(
                                     topP = existing.topP
                                 )
                             )
+                            syncRuntimeStatus()
                         } catch (_: Exception) {}
                     }
                 }
             }
             refreshStorageMetrics()
+            syncRuntimeStatus()
         }
     }
 
@@ -266,7 +399,7 @@ class ModelsViewModel(
                             tensorCount = metadata.tensorCount,
                             format = "GGUF v${metadata.version}",
                             quantization = metadata.quantization,
-                            capabilityProfile = "medical-clinical",
+                            capabilityProfile = "general-assistant",
                             isStaged = true,
                             isActive = uiState.value.models.isEmpty()
                         )
@@ -284,10 +417,11 @@ class ModelsViewModel(
                                         topP = newModel.topP
                                     )
                                 )
+                                syncRuntimeStatus()
                             } catch (_: Exception) {}
                         }
                         _stagingState.value = StagingUiState()
-                        _notification.value = "Successfully imported & loaded ${newModel.name} (${newModel.quantization})"
+                        _notification.value = "Successfully imported & staged ${newModel.name} (${newModel.quantization})"
                         refreshStorageMetrics()
                     }
                     is StagingProgress.Error -> {
@@ -337,7 +471,7 @@ class ModelsViewModel(
                             tensorCount = metadata.tensorCount,
                             format = "GGUF v${metadata.version}",
                             quantization = metadata.quantization,
-                            capabilityProfile = "medical-clinical",
+                            capabilityProfile = "general-assistant",
                             isStaged = true,
                             isActive = uiState.value.models.isEmpty()
                         )
@@ -381,6 +515,7 @@ class ModelsViewModel(
                             topP = model.topP
                         )
                     )
+                    syncRuntimeStatus()
                     _notification.value = "Active model loaded into native engine: ${model.name}"
                 } catch (e: Exception) {
                     _notification.value = "Model set active. Loading warning: ${e.message}"
@@ -409,6 +544,21 @@ class ModelsViewModel(
                 capabilityProfile = capabilityProfile
             )
             modelRepository.updateModel(updated)
+            if (updated.isActive && _isLoadedInRam.value && inferenceEngine != null) {
+                try {
+                    inferenceEngine.loadModel(
+                        ModelConfig(
+                            modelId = updated.id,
+                            modelPath = updated.filePath,
+                            contextLength = updated.contextLength,
+                            threads = updated.threads,
+                            temperature = updated.temperature,
+                            topP = updated.topP
+                        )
+                    )
+                    syncRuntimeStatus()
+                } catch (_: Exception) {}
+            }
             _notification.value = "Model configuration saved"
         }
     }
@@ -417,6 +567,9 @@ class ModelsViewModel(
         viewModelScope.launch {
             val model = modelRepository.getModelById(modelId)
             if (model != null) {
+                if (model.id == uiState.value.activeModel?.id && _isLoadedInRam.value) {
+                    unloadModelFromRam()
+                }
                 if (model.isStaged && model.filePath.isNotEmpty()) {
                     modelFileManager.deleteStagedFile(model.filePath)
                 }
