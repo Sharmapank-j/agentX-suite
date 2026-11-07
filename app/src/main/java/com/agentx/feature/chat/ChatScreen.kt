@@ -288,7 +288,7 @@ fun ChatScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Local inference unavailable",
+                                if (state.activeModel != null) "Local Engine Active" else "Local GGUF Runtime",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextSecondary,
                                 fontWeight = FontWeight.Medium
@@ -339,7 +339,7 @@ fun ChatScreen(
                         onSend = viewModel::sendMessage,
                         onStop = viewModel::stopGeneration,
                         isStreaming = state.isStreaming,
-                        activeModelName = state.activeModel?.quantization ?: "Local runtime unavailable"
+                        activeModelName = state.activeModel?.name ?: state.activeModel?.quantization ?: "Local GGUF (llama.cpp)"
                     )
                 }
             },
@@ -488,7 +488,7 @@ fun ChatScreen(
                     )
                 }
                 Text(
-                    text = "Select which local GGUF/AirLLM model executes on-device inference. High-capacity layer streaming supports models up to 2.0GB RAM budget.",
+                    text = "Select which local GGUF model executes on-device inference via native llama.cpp.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -655,7 +655,7 @@ private fun CyberTopAppBar(
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = activeModel?.name?.take(10) ?: "AirLLM",
+                        text = activeModel?.name?.take(10) ?: "llama.cpp",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -790,7 +790,7 @@ fun ActiveModelStatusBanner(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (isLoaded) {
-                        "${activeModel?.name ?: "AirLLM Engine"} • ${memoryMb} MB RAM"
+                        "${activeModel?.name ?: "llama.cpp Engine"} • ${memoryMb} MB RAM"
                     } else {
                         "Ready for On-Demand Streaming"
                     },
@@ -1214,7 +1214,7 @@ fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     isStreaming: Boolean,
-    activeModelName: String = "AirLLM"
+    activeModelName: String = "llama.cpp"
 ) {
     Surface(
         color = VoidDark,

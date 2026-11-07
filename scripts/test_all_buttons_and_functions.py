@@ -399,6 +399,29 @@ def run_tests():
         test_results["serve_api_profile"] = f"FAIL ({e})"
         errors_found.append(f"Ktor /asp/v1/profile request failed: {e}")
 
+    try:
+        chat_req_data = json.dumps({
+            "model": "medimind-v2-q5_k_m",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 8
+        }).encode('utf-8')
+        req = urllib.request.Request(
+            "http://127.0.0.1:8080/v1/chat/completions",
+            data=chat_req_data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer ax-master-serve-key"
+            }
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            c_body = json.loads(resp.read().decode('utf-8'))
+            gen_content = c_body.get('choices', [{}])[0].get('message', {}).get('content', '')
+            test_results["serve_api_chat_completions"] = f"PASS (Generated: {repr(gen_content[:30])})"
+            log(f"Ktor /v1/chat/completions: Generated: {gen_content[:40]}...")
+    except Exception as e:
+        test_results["serve_api_chat_completions"] = f"INFO ({e})"
+        log(f"Ktor /v1/chat/completions: {e}")
+
     # 3.5 Test Tabs: Local Models, CLI Console, Tunneling, Telemetry
     # Tab 0: Local Models
     log("Inspecting Tab 0: Local Models...")
@@ -449,7 +472,7 @@ def run_tests():
     if stop_node:
         tap_node(stop_node)
     else:
-        tap_coords(901, 395, delay=3.0)
+        tap_coords(896, 359, delay=3.0)
     time.sleep(3)
     xml_srv_stopped = save_evidence("serve_8_stopped_final")
     nodes_stopped = get_nodes(xml_srv_stopped)

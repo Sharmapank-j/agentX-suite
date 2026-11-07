@@ -27,6 +27,15 @@ import com.agentx.medical.data.repository.ModelRepositoryImpl
 import com.agentx.medical.data.repository.ToolRepository
 import com.agentx.medical.data.repository.ToolRepositoryImpl
 import com.agentx.medical.domain.models.AgentRole
+import com.agentx.medical.domain.models.GGUFModel
+import com.agentx.medical.core.inference.ModelConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import java.io.File
+import android.net.Uri
+import android.os.Environment
 
 class AgentXMedicalApplication : Application() {
 
@@ -97,11 +106,9 @@ class AgentXMedicalApplication : Application() {
         val savedMode = preferencesManager.loadInferenceMode()
         val savedBackend = preferencesManager.loadLocalBackend()
         val localLlama = LlamaCppEngine()
-        val airLlm = com.agentx.medical.core.inference.AirLlmEngine()
         val cloudEngine = CloudInferenceEngine(config = savedCloudConfig)
         hybridInferenceEngine = HybridInferenceEngine(
             llamaEngine = localLlama,
-            airLlmEngine = airLlm,
             cloudEngine = cloudEngine,
             activeLocalBackend = savedBackend
         )
@@ -150,5 +157,65 @@ class AgentXMedicalApplication : Application() {
             executionRepository = executionRepository,
             executionQueue = executionQueue
         )
+
+        // Automatically scan and register on-device storage models on startup
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val current: List<GGUFModel> = modelRepository.getAllModels().first()
+                if (current.isEmpty()) {
+                    val candidateDirs = listOfNotNull(
+                        File(filesDir, "models"),
+                        File(getExternalFilesDir(null), "models"),
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                    )
+                    for (dir in candidateDirs) {
+                        if (!dir.exists() || !dir.isDirectory) continue
+                        val ggufFiles = dir.listFiles()?.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) } ?: emptyList()
+                        for (file in ggufFiles) {
+                            val newModel = GGUFModel(
+                                id = "storage_" + file.nameWithoutExtension.replace("[^a-zA-Z0-9._-]".toRegex(), "_"),
+                                name = file.nameWithoutExtension,
+                                filePath = file.absolutePath,
+                                uriString = Uri.fromFile(file).toString(),
+                                sizeBytes = file.length(),
+                                architecture = "Llama",
+                                contextLength = 2048,
+                                tensorCount = 0,
+                                format = "GGUF v3",
+                                quantization = "Q5_K_M",
+                                capabilityProfile = "clinical-consultant",
+                                isStaged = true,
+                                isActive = true
+                            )
+                            modelRepository.addModel(newModel)
+                            inferenceEngine.loadModel(
+                                ModelConfig(
+                                    modelId = newModel.id,
+                                    modelPath = newModel.filePath,
+                                    contextLength = newModel.contextLength,
+                                    threads = newModel.threads,
+                                    temperature = newModel.temperature,
+                                    topP = newModel.topP
+                                )
+                            )
+                            break
+                        }
+                        if (modelRepository.getAllModels().first().isNotEmpty()) break
+                    }
+                } else {
+                    val active = current.firstOrNull { it.isActive } ?: current.first()
+                    inferenceEngine.loadModel(
+                        ModelConfig(
+                            modelId = active.id,
+                            modelPath = active.filePath,
+                            contextLength = active.contextLength,
+                            threads = active.threads,
+                            temperature = active.temperature,
+                            topP = active.topP
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
     }
 }

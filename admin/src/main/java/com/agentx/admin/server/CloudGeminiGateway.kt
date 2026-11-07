@@ -59,7 +59,7 @@ class CloudGeminiGateway {
                 
                 • Architecture Summary: Verified edge processing pipeline. Memory footprint bounded within high-capacity 2.0 GB RAM allocation.
                 • Execution Path: For full cloud generative capabilities, configure your Google Gemini API Key in the Admin Dashboard.
-                • Local Fallback: Running on-device AirLLM layer-streaming engine with zero data exfiltration.
+                • Local Fallback: Running on-device llama.cpp GGUF native engine with zero data exfiltration.
                 """.trimIndent()
             }
         }

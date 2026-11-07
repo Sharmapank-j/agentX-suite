@@ -25,7 +25,11 @@ enum class MemoryType {
     /** Semantic summaries of past conversations, decisions, and outcomes */
     EPISODIC,
     /** Scoped context for specific projects, domains, or workspaces */
-    PROJECT
+    PROJECT,
+    /** Procedural memory: Reusable skills, agent recipes, and verified workflow patterns */
+    PROCEDURAL,
+    /** Working memory: Short-term scratchpad buffer for active multi-agent reasoning */
+    WORKING
 }
 
 @Serializable

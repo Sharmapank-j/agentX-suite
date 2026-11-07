@@ -154,6 +154,13 @@ class LocalModelServerEngine(
         val candidateDirs = mutableListOf<File>()
 
         try {
+            val internalModels = File(context.filesDir, "models")
+            if (internalModels.exists() && internalModels.isDirectory) {
+                candidateDirs.add(internalModels)
+            }
+        } catch (_: Exception) {}
+
+        try {
             val appModels = File(context.getExternalFilesDir(null), "models")
             if (appModels.exists() && appModels.isDirectory) {
                 candidateDirs.add(appModels)
@@ -187,6 +194,10 @@ class LocalModelServerEngine(
             } catch (_: Exception) {}
         }
 
+        if (discovered.isNotEmpty() && (_activeModel.filePath == null || !_activeModel.isLoaded)) {
+            _activeModel = discovered.first().copy(isLoaded = false, isServing = false)
+        }
+
         return discovered
     }
 
@@ -195,7 +206,17 @@ class LocalModelServerEngine(
      */
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
         mutex.withLock {
-            val selected = allAvailableModels.firstOrNull { it.id == modelId } ?: return@withLock false
+            val selected = allAvailableModels.firstOrNull {
+                it.filePath != null && (
+                    it.id == modelId ||
+                    it.name.equals(modelId, ignoreCase = true) ||
+                    it.name.equals(modelId.removeSuffix(".gguf"), ignoreCase = true) ||
+                    it.id.endsWith(modelId, ignoreCase = true) ||
+                    it.filePath == modelId
+                )
+            } ?: allAvailableModels.firstOrNull { it.id == modelId }
+              ?: allAvailableModels.firstOrNull { it.filePath != null }
+              ?: return@withLock false
             val path = selected.filePath ?: return@withLock false
             _status = LocalModelStatus.LOADING
             val modelInfo = ModelInfo(

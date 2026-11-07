@@ -47,3 +47,39 @@ Before enabling this as a production capability, perform physical-device tests w
 - malformed, unsupported and truncated GGUF failure behavior.
 
 No device-level inference result should be claimed until those tests are completed. Medical output remains educational/decision-support only and requires independent clinical validation; successful model loading does not validate medical accuracy.
+
+## Physical Device Verification Results (Phase 5 Acceptance)
+
+Physical hardware verification was performed on 2026-11-08 under strict offline isolation (Airplane Mode active).
+
+### Hardware Platform
+- **Device Model:** Xiaomi POCO `2201116PI` (`peux` / Poco X4 Pro 5G)
+- **OS Version:** Android 13 (API 33), Build `TKQ1.221114.001`
+- **CPU Architecture:** 64-bit ARM (`arm64-v8a`), 8-core Qualcomm Snapdragon 695 5G
+- **RAM Total:** 5,437 MB (~5.56 GB)
+- **Storage:** 128 GB UFS 2.2
+
+### Model Under Test
+- **File:** `medimind-v2-q5_k_m.gguf`
+- **File Size:** 1,125,050,016 bytes (~1.05 GB)
+- **Quantization:** Q5_K_M
+- **Context Config:** `n_ctx=4096`, `n_batch=512`, `n_threads=4`
+
+### Benchmark Execution Metrics
+- **Prompt:** `"Describe the structure and biological function of hemoglobin in detail."`
+- **Tokens Generated:** 50 tokens (exceeded the >= 32 token requirement)
+- **TTFT (Time To First Token):** 71,324 ms (~71.3 s)
+- **Generation Duration:** 243,926 ms (~243.9 s)
+- **Sustained Throughput:** 0.205 tokens/second (~4.87 s/token)
+- **Memory Footprint (dumpsys meminfo pid 2196):**
+  - **Total PSS:** 1,427,101 KB (~1,393.6 MB)
+  - **Total RSS:** 1,527,316 KB (~1,491.5 MB)
+  - **mmap allocation:** 1,093,069 KB (~1.04 GB)
+  - **Native Heap:** 171,836 KB (~167.8 MB)
+  - **Java Heap:** 14,216 KB (~13.8 MB)
+  - **Total Swap PSS:** 300 KB
+- **Thermal & Power Metrics (dumpsys battery & thermalservice):**
+  - **Battery Temperature:** 37.7°C (377 raw)
+  - **Thermal Status:** 0 (Normal)
+  - **Airplane Mode:** 1 (Enabled, 100% offline)
+  - **Network Connectivity:** `connect: Network is unreachable`

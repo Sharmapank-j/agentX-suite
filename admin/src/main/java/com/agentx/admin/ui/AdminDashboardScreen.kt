@@ -503,7 +503,7 @@ private fun LocalModelsTab(
                             label = {
                                 Text(
                                     when (mode) {
-                                        ServingMode.LOCAL_MODEL -> "Local AirLLM"
+                                        ServingMode.LOCAL_MODEL -> "Local GGUF (llama.cpp)"
                                         ServingMode.CLOUD_GATEWAY -> "Cloud Gemini"
                                         ServingMode.HYBRID -> "Hybrid"
                                     },
@@ -1693,7 +1693,7 @@ client = OpenAI(
     api_key="$activeKey"
 )
 
-# Works directly with the on-device AirLLM layer-streaming engine
+# Works directly with the on-device llama.cpp native engine
 response = client.chat.completions.create(
     model="llama-3.2-3b",
     messages=[{"role": "user", "content": "Explain asynchronous programming in Kotlin."}]

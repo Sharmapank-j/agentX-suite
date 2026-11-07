@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The native library is built for each configured Android ABI by CMake/NDK.
  */
 class LlamaCppInferenceEngine(
-    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
     private val defaultContextLength: Int = 2048,
     private val gpuLayers: Int = 0
 ) : InferenceEngine {
@@ -35,8 +35,8 @@ class LlamaCppInferenceEngine(
                 "The native llama.cpp library is unavailable for this device ABI."
             }
             val path = File(model.modelPath ?: "")
-            require(path.isFile && path.canRead() && path.extension.equals("gguf", true)) {
-                "Select a readable local .gguf file before loading the model."
+            require(path.exists() && path.isFile && path.extension.equals("gguf", true)) {
+                "Select a readable local .gguf file before loading the model: ${model.modelPath}"
             }
             unloadModel().getOrThrow()
             val nativeHandle = LlamaCppNativeBridge.nativeLoadModel(

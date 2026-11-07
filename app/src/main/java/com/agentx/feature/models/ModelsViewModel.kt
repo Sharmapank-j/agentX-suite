@@ -11,6 +11,8 @@ import com.agentx.core.inference.CuratedModel
 import com.agentx.core.inference.DownloadProgress
 import com.agentx.core.inference.GgufMetadataParser
 import com.agentx.core.inference.HuggingFaceDownloader
+import com.agentx.core.inference.InferenceEngine
+import com.agentx.core.inference.ModelConfig
 import com.agentx.data.local.ModelFileManager
 import com.agentx.data.local.StagingProgress
 import com.agentx.data.repository.ModelRepository
@@ -25,6 +27,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.io.File
+import kotlinx.coroutines.flow.first
 
 data class StagingUiState(
     val isStaging: Boolean = false,
@@ -63,7 +67,8 @@ class ModelsViewModel(
     private val modelRepository: ModelRepository,
     private val modelFileManager: ModelFileManager,
     private val huggingFaceDownloader: HuggingFaceDownloader,
-    private val context: Context
+    private val context: Context,
+    private val inferenceEngine: InferenceEngine? = null
 ) : ViewModel() {
 
     private val _stagingState = MutableStateFlow(StagingUiState())
@@ -112,6 +117,7 @@ class ModelsViewModel(
     init {
         refreshStorageMetrics()
         refreshDeviceSpecs()
+        scanAndRegisterLocalModels()
     }
 
     fun refreshDeviceSpecs() {
@@ -133,6 +139,74 @@ class ModelsViewModel(
     fun refreshStorageMetrics() {
         _storageUsed.value = modelFileManager.getTotalStorageUsedBytes()
         _storageAvailable.value = modelFileManager.getAvailableStorageBytes()
+    }
+
+    fun scanAndRegisterLocalModels() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val candidateDirs = listOfNotNull(
+                File(context.filesDir, "models"),
+                File(context.getExternalFilesDir(null), "models"),
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            )
+            val currentModels = modelRepository.getAllModels().first()
+            for (dir in candidateDirs) {
+                if (!dir.exists() || !dir.isDirectory) continue
+                dir.listFiles()?.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) }?.forEach { file ->
+                    val existing = currentModels.find { it.filePath == file.absolutePath || it.name == file.nameWithoutExtension }
+                    if (existing == null) {
+                        val metadata = try {
+                            file.inputStream().use { GgufMetadataParser.parse(it) }
+                        } catch (_: Exception) { null }
+
+                        val isFirst = currentModels.isEmpty()
+                        val newModel = GGUFModel(
+                            id = "storage_" + file.nameWithoutExtension.replace("[^a-zA-Z0-9._-]".toRegex(), "_"),
+                            name = metadata?.name?.ifEmpty { file.nameWithoutExtension } ?: file.nameWithoutExtension,
+                            filePath = file.absolutePath,
+                            uriString = Uri.fromFile(file).toString(),
+                            sizeBytes = file.length(),
+                            architecture = metadata?.architecture ?: "Llama",
+                            contextLength = metadata?.contextLength ?: 2048,
+                            tensorCount = metadata?.tensorCount ?: 0,
+                            format = "GGUF v${metadata?.version ?: 3}",
+                            quantization = metadata?.quantization ?: "Q5_K_M",
+                            capabilityProfile = "general-assistant",
+                            isStaged = true,
+                            isActive = isFirst
+                        )
+                        modelRepository.addModel(newModel)
+                        if (isFirst && inferenceEngine != null) {
+                            try {
+                                inferenceEngine.loadModel(
+                                    ModelConfig(
+                                        modelId = newModel.id,
+                                        modelPath = newModel.filePath,
+                                        contextLength = newModel.contextLength,
+                                        threads = newModel.threads,
+                                        temperature = newModel.temperature,
+                                        topP = newModel.topP
+                                    )
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    } else if (existing.isActive && inferenceEngine != null && inferenceEngine.getModelStatus().state != com.agentx.core.inference.ModelLifecycleState.LOADED) {
+                        try {
+                            inferenceEngine.loadModel(
+                                ModelConfig(
+                                    modelId = existing.id,
+                                    modelPath = existing.filePath,
+                                    contextLength = existing.contextLength,
+                                    threads = existing.threads,
+                                    temperature = existing.temperature,
+                                    topP = existing.topP
+                                )
+                            )
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+            refreshStorageMetrics()
+        }
     }
 
     fun dismissNotification() {
@@ -198,8 +272,22 @@ class ModelsViewModel(
                         )
 
                         modelRepository.addModel(newModel)
+                        if (newModel.isActive && inferenceEngine != null && newModel.filePath.isNotEmpty()) {
+                            try {
+                                inferenceEngine.loadModel(
+                                    ModelConfig(
+                                        modelId = newModel.id,
+                                        modelPath = newModel.filePath,
+                                        contextLength = newModel.contextLength,
+                                        threads = newModel.threads,
+                                        temperature = newModel.temperature,
+                                        topP = newModel.topP
+                                    )
+                                )
+                            } catch (_: Exception) {}
+                        }
                         _stagingState.value = StagingUiState()
-                        _notification.value = "Successfully imported ${newModel.name} (${newModel.quantization})"
+                        _notification.value = "Successfully imported & loaded ${newModel.name} (${newModel.quantization})"
                         refreshStorageMetrics()
                     }
                     is StagingProgress.Error -> {
@@ -280,7 +368,26 @@ class ModelsViewModel(
     fun setActiveModel(modelId: String) {
         viewModelScope.launch {
             modelRepository.setActiveModel(modelId)
-            _notification.value = "Active inference model updated"
+            val model = modelRepository.getModelById(modelId)
+            if (model != null && model.filePath.isNotEmpty() && inferenceEngine != null) {
+                try {
+                    inferenceEngine.loadModel(
+                        ModelConfig(
+                            modelId = model.id,
+                            modelPath = model.filePath,
+                            contextLength = model.contextLength,
+                            threads = model.threads,
+                            temperature = model.temperature,
+                            topP = model.topP
+                        )
+                    )
+                    _notification.value = "Active model loaded into native engine: ${model.name}"
+                } catch (e: Exception) {
+                    _notification.value = "Model set active. Loading warning: ${e.message}"
+                }
+            } else {
+                _notification.value = "Active inference model updated"
+            }
         }
     }
 

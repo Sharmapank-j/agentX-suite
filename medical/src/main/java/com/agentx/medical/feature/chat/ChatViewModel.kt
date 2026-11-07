@@ -240,6 +240,10 @@ class ChatViewModel(
     }
 
     private suspend fun ensureModelLoaded(model: GGUFModel) {
+        val currentStatus = inferenceEngine.getModelStatus()
+        if (currentStatus.state == ModelLifecycleState.LOADED && currentStatus.activeModelId == model.id) {
+            return
+        }
         try {
             inferenceEngine.loadModel(
                 ModelConfig(
@@ -382,10 +386,9 @@ class ChatViewModel(
         // Ensure active model is loaded in memory
         try {
             val activeModel = modelRepository.getActiveModel().first()
+                ?: modelRepository.getAllModels().first().firstOrNull()
             if (activeModel != null && activeModel.filePath.isNotEmpty()) {
                 ensureModelLoaded(activeModel)
-            } else if (inferenceEngine.getModelStatus().state == ModelLifecycleState.NOT_LOADED) {
-                inferenceEngine.loadModel(ModelConfig(modelId = "model_default", modelPath = ""))
             }
         } catch (_: Throwable) { }
 
@@ -445,10 +448,9 @@ class ChatViewModel(
         // Ensure active model is loaded in memory
         try {
             val activeModel = modelRepository.getActiveModel().first()
+                ?: modelRepository.getAllModels().first().firstOrNull()
             if (activeModel != null && activeModel.filePath.isNotEmpty()) {
                 ensureModelLoaded(activeModel)
-            } else if (inferenceEngine.getModelStatus().state == ModelLifecycleState.NOT_LOADED) {
-                inferenceEngine.loadModel(ModelConfig(modelId = "model_default", modelPath = ""))
             }
         } catch (_: Throwable) { }
 
@@ -547,8 +549,8 @@ class ChatViewModel(
                             "Authentication failed (HTTP 401). Please check the API Key in Settings -> Cloud Models."
                         errorDetail.contains("connect", ignoreCase = true) || errorDetail.contains("refused", ignoreCase = true) ->
                             "Could not connect to model host ($errorDetail). Verify that AgentX Serve is active on your Wi-Fi network and check the IP in Settings."
-                        errorDetail.contains("No model loaded", ignoreCase = true) ->
-                            "No clinical model loaded. Switch to AirLLM in Settings or import a GGUF model in the Models tab."
+                        errorDetail.contains("No model loaded", ignoreCase = true) || errorDetail.contains("No GGUF model", ignoreCase = true) ->
+                            "No local GGUF model is loaded. Please import a .gguf model in the Models tab or select an active model."
                         else -> errorDetail.ifBlank { "Clinical inference generation encountered an error" }
                     }
                     assistantMsg = assistantMsg.copy(

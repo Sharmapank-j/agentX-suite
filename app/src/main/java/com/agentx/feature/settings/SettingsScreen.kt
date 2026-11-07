@@ -137,7 +137,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "AgentX uses the provider configured in Settings. Local GGUF inference is currently unavailable; requests sent to custom or cloud endpoints leave this device according to that provider's privacy policy.",
+                            "AgentX operates offline-first with an embedded llama.cpp runtime. When Local GGUF is selected, zero data leaves your device. When Cloud or Custom Gateway is enabled, requests route through your configured endpoint.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )

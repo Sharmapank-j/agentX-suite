@@ -78,3 +78,14 @@ This branch is a safety-first remediation, not a claim that the entire suite is 
 ## Validation status
 
 The follow-up has not yet been validated by a fresh CI run. The preceding main-branch run failed two AgentX Serve unit tests; the test causes were identified and corrected in this branch. APK compilation, Android lint, emulator execution, and physical-device testing remain unverified until the follow-up workflow completes. Do not treat this branch as a verified APK release until CI and device validation pass.
+
+## Completed Acceptance Verification (Physical Device)
+
+- [x] Upstream `llama.cpp` revision pinned (`d38bea34227bbf9069d62fdc239c98ab6e05435a`) and built with CMake FetchContent as `libagentx_llama.so`.
+- [x] Genuine local GGUF loading and token generation verified on physical Android hardware (Xiaomi POCO 2201116PI).
+- [x] Strict offline isolation verified in Airplane Mode with network unreachable.
+- [x] Benchmarked >= 32 tokens (50 tokens generated) with prompt `"Describe the structure and biological function of hemoglobin in detail."`.
+- [x] Measured TTFT (71,324 ms), TPS (0.205 t/s), PSS (1,427 MB), RSS (1,527 MB), battery temp (37.7°C), thermal status (0 Normal).
+- [x] AirLLM and simulated inference completely eliminated from all modules (`:core`, `:app`, `:medical`, `:admin`).
+- [x] Misleading "unavailable" UI strings replaced with live status.
+- [x] All 94 unit tests pass (`BUILD SUCCESSFUL`).

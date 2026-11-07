@@ -63,7 +63,8 @@ class MainActivity : ComponentActivity() {
                         app.modelRepository,
                         app.modelFileManager,
                         app.huggingFaceDownloader,
-                        applicationContext
+                        applicationContext,
+                        app.inferenceEngine
                     ) as T
                 }
             }

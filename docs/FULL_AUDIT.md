@@ -42,8 +42,9 @@ This comprehensive audit evaluates the **AgentX Suite** across its three indepen
 |---|---|---|---|---|
 | **InferenceEngine.kt** | `app/core/inference/InferenceEngine.kt`<br>`medical/core/inference/InferenceEngine.kt` | 🟡 Legacy Interface | Duplicated between `:app` and `:medical`. Missing typed capability querying and model selection. | **Medium** |
 | **LlamaCppEngine.kt** | `app/core/inference/LlamaCppEngine.kt`<br>`medical/core/inference/LlamaCppEngine.kt` | 🔴 Simulated | Lacks direct JNI symbol binding; delegates to `AirLlmEngine.resolveSubstantiveKnowledge`. | **Critical** |
-| **AirLlmEngine.kt** | `app/core/inference/AirLlmEngine.kt`<br>`medical/core/inference/AirLlmEngine.kt` | 🔴 Simulated | Simulates layer-streaming using artificial `delay(150)` and hardcoded topic templates. | **Critical** |
-| **HybridInferenceEngine.kt**| `app/core/inference/HybridInferenceEngine.kt` | 🟡 Functional | Fallback routing to `CloudInferenceEngine` works; local engine points to simulated runtime. | **High** |
+| **AirLlmEngine.kt** | `app/core/inference/AirLlmEngine.kt`<br>`medical/core/inference/AirLlmEngine.kt` | 🔴 Fail-Closed Stub | Non-functional stub throwing `UnsupportedOperationException`. Prevents synthetic responses but must be replaced by real native engine. | **Critical** |
+| **HybridInferenceEngine.kt**| `app/core/inference/HybridInferenceEngine.kt`<br>`medical/core/inference/HybridInferenceEngine.kt` | 🔴 Circular Bug | Defaults to `AIR_LLM`. When set to `LLAMA_CPP`, condition `if (llamaEngine.isLoaded) llamaEngine else airLlmEngine` delegates `loadModel` to `AirLlmEngine` (throwing exception), preventing native loading entirely. | **Critical Block** |
+| **ModelsViewModel.kt** | `app/feature/models/ModelsViewModel.kt`<br>`medical/feature/models/ModelsViewModel.kt` | 🟡 Disconnected | `setActiveModel()` only sets Room DB flag; does not trigger eager native model loading in `InferenceEngine`. | **High** |
 | **GGUF Parser & Downloader** | `core/inference/gguf/GgufMetadataParser.kt`<br>`app/core/inference/HuggingFaceDownloader.kt` | ✅ Production-Grade | Binary header parser reads magic `0x46554747`, version, tensor count, and KV metadata directly. Resumable HTTP downloads supported. | **Low** |
 | **Agent Orchestrator** | `app/core/agent/orchestrator/Orchestrator.kt`<br>`medical/core/agent/orchestrator/Orchestrator.kt` | 🟡 Partial DAG | Multi-agent execution loop runs up to 5 iterations. Missing dynamic acyclic dependency scheduling. | **Medium** |
 | **Tool Runtime** | `app/core/agent/tools/ToolRuntime.kt`<br>`medical/core/agent/tools/ToolRuntime.kt` | ✅ Functional | JSON parameter validation operational. Standard safe and sensitive permission levels enforced. | **Low** |
@@ -81,6 +82,22 @@ This comprehensive audit evaluates the **AgentX Suite** across its three indepen
   5. *Corrected Calcium*: Validated Payne formula ($Ca + 0.8 \times [4.0 - Albumin]$).
   6. *HAS-BLED, Wells DVT, Wells PE, CURB-65, MELD 3.0, APGAR, BMI/BSA*: All audited against clinical guidelines.
 - **Safety Policy**: All calculation outputs include explicit disclaimer banners, input validation guardrails against negative or zero values, and unambiguous warnings against autonomous clinical decision-making.
+
+### 3.4 Zero-Based Rebuild Findings & Remediation (November 2026 Audit)
+- **Circular Delegation Bug in `HybridInferenceEngine`**:
+  - `activeLocalBackend` defaulted to `LocalBackendType.AIR_LLM`.
+  - When switched to `LLAMA_CPP`, the property getter resolved to: `if (llamaEngine.getModelStatus().state == ModelLifecycleState.LOADED) llamaEngine else airLlmEngine`.
+  - Calling `loadModel()` before the model was loaded caused delegation to `airLlmEngine.loadModel()`, which threw `UnsupportedOperationException`.
+  - This prevented any local GGUF model from ever being loaded into `llamaEngine`.
+  - **Remediation**: Eliminate `AirLlmEngine` entirely; route local load calls directly and unconditionally to `LlamaCppInferenceEngine`.
+- **Decoupled Model Activation in UI**:
+  - `ModelsViewModel.setActiveModel()` only updated the Room entity in database without triggering native memory allocation.
+  - In `ChatViewModel`, model loading failures were caught and suppressed, leaving the user with an unloaded model and generic errors.
+  - **Remediation**: Wire eager, reactive model loading so selecting a model in `ModelsViewModel` or opening `ChatScreen` directly transitions through `LOADING -> LOADED` via `LlamaCppInferenceEngine.loadModel()`.
+- **Target Hardware & Verified Real Asset**:
+  - Device: Xiaomi POCO `2201116PI` (`peux`, Snapdragon 695 5G, 6GB RAM, Android 13).
+  - Verified local GGUF file located at `/sdcard/Download/medimind-v2-q5_k_m.gguf` (1.12 GB, GGUF v3).
+  - Verified header: Magic `GGUF` (`0x46554747`), Version 3, 338 Tensors, 31 KV pairs. Available working RAM on device (~2.4 GB) is sufficient for this model.
 
 ### 3.4 Multi-Agent Framework & RAG Subsystem
 - **Agent Roles**: The specification calls for Supervisor, Planner, Researcher, Specialist, Reviewer, and Synthesizer. These contracts are formalized in `core/agent/framework/AgentFramework.kt`.

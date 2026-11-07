@@ -9,6 +9,9 @@ import com.agentx.admin.server.LocalModelServerEngine
 import com.agentx.admin.server.LocalTlsManager
 import com.agentx.admin.server.ThermalBatteryManager
 import com.agentx.admin.server.TunnelManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class AgentXAdminApplication : Application() {
 
@@ -50,5 +53,15 @@ class AgentXAdminApplication : Application() {
         cloudGateway = CloudGeminiGateway()
         localEngine = LocalModelServerEngine(thermalManager)
         server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager)
+
+        // Automatically scan and register on-device storage models on startup
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val found = localEngine.scanStorageForModels(this@AgentXAdminApplication)
+                if (found.isNotEmpty()) {
+                    localEngine.loadModel(found.first().id)
+                }
+            } catch (_: Exception) {}
+        }
     }
 }

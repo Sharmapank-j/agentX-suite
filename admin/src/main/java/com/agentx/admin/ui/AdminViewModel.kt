@@ -377,7 +377,7 @@ class AdminViewModel(
             val isLocal = activeMode == ServingMode.LOCAL_MODEL || (activeMode == ServingMode.HYBRID && !cloudGateway.isConfigured)
 
             val modelName = if (isLocal) localEngine.activeModel.name else cloudGateway.activeModelName
-            val engineType = if (isLocal) "Local GGUF runtime unavailable" else "Google Gemini Gateway (Cloud)"
+            val engineType = if (isLocal) "Local GGUF Runtime (llama.cpp)" else "Google Gemini Gateway (Cloud)"
             val memFootprint = if (isLocal) localEngine.activeModel.memoryFootprintMb else 0L
 
             _liveTest.value = _liveTest.value.copy(
@@ -399,7 +399,7 @@ class AdminViewModel(
 
             try {
                 if (isLocal) {
-                    localEngine.generateCompletionStream(prompt = prompt).collect { token ->
+                    localEngine.generateCompletionStream(prompt = prompt, maxTokens = 40).collect { token ->
                         val now = System.currentTimeMillis()
                         if (firstTokenTime == null) {
                             firstTokenTime = now
@@ -582,7 +582,7 @@ class AdminViewModel(
   test <prompt>  - Run custom text completion through active serving engine
   tunnel         - Show remote tunneling provider, status, and public HTTPS URL
   models         - List available curated models and custom storage GGUFs
-  load <id>      - Switch active local model by ID into AirLLM layer-streamer
+  load <id>      - Switch active local model by ID into native llama.cpp runtime
   unload         - Unload active model from memory
   clients        - List connected client sessions and blocked IP addresses
   clear          - Clear terminal output
@@ -601,7 +601,7 @@ Status:         ${if (telem.isRunning) "ONLINE [PORT ${telem.port}]" else "STOPP
 Local IP:       ${telem.ipAddress}:${telem.port}
 Serving Mode:   ${telem.servingMode.label}
 Active Model:   ${telem.activeLocalModel ?: "None"}
-RAM Footprint:  ${telem.localMemoryUsageMb} MB (Layer-Streaming Allocated 1K-2K MB)
+RAM Footprint:  ${telem.localMemoryUsageMb} MB (Mapped via mmap)
 Requests Served:${telem.requestsServed}
 Tokens Emitted: ${telem.tokensEmitted}
 Uptime:         ${upHours}h ${upMin % 60}m ${upSec % 60}s
@@ -643,7 +643,7 @@ Parameters:     ${model.parameterCount}
 Quantization:   ${model.quantization}
 Context Window: ${model.contextWindow} tokens
 RAM Footprint:  ${model.memoryFootprintMb} MB (Strictly bounded 1000MB-2048MB)
-Execution:      AirLLM Layer-Streaming Mobile Engine
+Execution:      llama.cpp Native GGUF Mobile Engine
 Status:         ${localEngine.status.name}
 Is Loaded:      ${model.isLoaded}
 Is Serving:     ${model.isServing}
@@ -652,12 +652,12 @@ Description:    ${model.description}
             }
 
             "bench" -> {
-                val prompt = "Benchmark AgentX Serve layer streaming."
+                val prompt = "Describe the structure and biological function of hemoglobin in detail."
                 val start = System.currentTimeMillis()
                 var firstTokenTime: Long? = null
                 var count = 0
                 val sb = StringBuilder()
-                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 15).collect { token ->
+                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 50).collect { token ->
                     val now = System.currentTimeMillis()
                     if (firstTokenTime == null) firstTokenTime = now
                     count++
@@ -670,6 +670,10 @@ Description:    ${model.description}
                 """
 === INFERENCE BENCHMARK COMPLETE ===
 Target Engine:  ${localEngine.activeModel.name}
+Prompt:         $prompt
+Generated Text:
+${sb.toString().trim()}
+
 RAM Footprint:  ${localEngine.activeModel.memoryFootprintMb} MB
 Time To First Token (TTFT): ${ttft} ms
 Tokens Generated:           $count tokens
@@ -688,7 +692,7 @@ Health:                     200 OK (Engine fully operational)
                 var firstTokenTime: Long? = null
                 var count = 0
                 val sb = StringBuilder()
-                localEngine.generateCompletionStream(prompt = prompt).collect { token ->
+                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 40).collect { token ->
                     val now = System.currentTimeMillis()
                     if (firstTokenTime == null) firstTokenTime = now
                     count++

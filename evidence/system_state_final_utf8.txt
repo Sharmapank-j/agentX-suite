@@ -1,0 +1,47 @@
+﻿Current Battery Service state:
+  AC powered: false
+  USB powered: true
+  Wireless powered: false
+  Max charging current: 12200000
+  Max charging voltage: 4450000
+  Charge counter: 3966000
+  status: 2
+  health: 2
+  present: true
+  level: 100
+  scale: 100
+  voltage: 4433
+  temperature: 377
+  technology: Li-poly
+IsStatusOverride: false
+ThermalEventListeners:
+	callbacks: 2
+	killed: false
+	broadcasts count: -1
+ThermalStatusListeners:
+	callbacks: 5
+	killed: false
+	broadcasts count: -1
+Thermal Status: 0
+Cached temperatures:
+HAL Ready: true
+HAL connection:
+	ThermalHAL 2.0 connected: yes
+Current temperatures from HAL:
+Current cooling devices from HAL:
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate5}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate3}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate0}
+	CoolingDevice{mValue=0, mType=5, mName=cdsp_hw}
+	CoolingDevice{mValue=0, mType=2, mName=thermal-cpufreq-0}
+	CoolingDevice{mValue=0, mType=3, mName=thermal-devfreq-0}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate6}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate4}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate2}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate1}
+	CoolingDevice{mValue=0, mType=5, mName=cdsp}
+	CoolingDevice{mValue=0, mType=2, mName=thermal-cpufreq-6}
+	CoolingDevice{mValue=15, mType=1, mName=battery}
+	CoolingDevice{mValue=0, mType=2, mName=cpu-isolate7}
+Temperature static thresholds from HAL:
+1

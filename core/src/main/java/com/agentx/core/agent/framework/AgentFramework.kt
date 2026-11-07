@@ -13,7 +13,13 @@ enum class AgentRole(val displayName: String, val purpose: String) {
     SUPERVISOR("Supervisor", "Coordinates team milestones, monitors queue dependencies, and oversees execution."),
     PLANNER("Planner", "Decomposes complex requests into a directed acyclic graph (DAG) of subtasks."),
     RESEARCHER("Researcher", "Retrieves factual context, literature citations, and verified documentation."),
-    SPECIALIST("Specialist", "Domain-specialized worker (Coder, Pathologist, Cardiologist, Systems Architect)."),
+    PROGRAMMER("Programmer", "Specialized in software architecture, code generation, debugging, and refactoring."),
+    MEDICAL_ASSISTANT("Medical Assistant", "Clinical decision support, diagnostic references, and drug interaction analysis."),
+    DOCUMENT_ANALYST("Document Analyst", "Ingests, summarizes, and extracts key insights from local documents and PDFs."),
+    DATA_ANALYST("Data Analyst", "Performs quantitative data processing, statistical summaries, and structured outputs."),
+    PERSONAL_ASSISTANT("Personal Assistant", "General productivity, task tracking, calendaring, and contextual conversational help."),
+    SYSTEM_ADMINISTRATOR("System Administrator", "Monitors device health, server operations, hardware telemetry, and local security."),
+    SPECIALIST("Specialist", "Domain-specialized worker."),
     REVIEWER("Reviewer", "Quality, safety, and contraindication audit barrier before final synthesis."),
     SYNTHESIZER("Synthesizer", "Merges individual subtask findings into cohesive, beautifully styled responses.")
 }

@@ -1,0 +1,59 @@
+﻿Applications Memory Usage (in Kilobytes):
+Uptime: 32328538 Realtime: 32328538
+
+** MEMINFO in pid 2196 [com.agentx.admin.debug] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap   171836   171744        0       96   172912   325032   323156     1875
+  Dalvik Heap     6392     6336        0      121     6936    11743     5872     5871
+ Dalvik Other    13848     4684        0        3    23192                           
+        Stack     1608     1608        0        0     1612                           
+       Ashmem       51        0        0        0      772                           
+      Gfx dev     3044     3044        0        0     3048                           
+    Other dev       30        4       20        0      440                           
+     .so mmap     6579      272     1364        2    44508                           
+    .jar mmap     5043        0     1740        0    39776                           
+    .apk mmap    10426      212     9976        0    12172                           
+    .ttf mmap      377        0      240        0     3156                           
+    .dex mmap    60410    60400        0        0    61024                           
+    .oat mmap       96        0       44        0     1876                           
+    .art mmap     8757     7120      760       75    16024                           
+   Other mmap  1093069        8  1092976        0  1094196                           
+   EGL mtrack    41104    41104        0        0    41104                           
+    GL mtrack     2868     2868        0        0     2868                           
+      Unknown     1263     1108      124        3     1700                           
+        TOTAL  1427101   300512  1107244      300  1527316   336775   329028     7746
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    14216                          22960
+         Native Heap:   171744                         172912
+                Code:    74404                         181000
+               Stack:     1608                           1612
+            Graphics:    47016                          47020
+       Private Other:  1098768
+              System:    19345
+             Unknown:                                 1101812
+ 
+           TOTAL PSS:  1427101            TOTAL RSS:  1527316       TOTAL SWAP PSS:      300
+ 
+ Objects
+               Views:       12         ViewRootImpl:        1
+         AppContexts:        5           Activities:        1
+              Assets:       43        AssetManagers:        0
+       Local Binders:       24        Proxy Binders:       47
+       Parcel memory:        5         Parcel count:       22
+    Death Recipients:        1      OpenSSL Sockets:        0
+            WebViews:        0
+ 
+ SQL
+         MEMORY_USED:      195
+  PAGECACHE_OVERFLOW:       64          MALLOC_SIZE:       46
+ 
+ DATABASES
+      pgsz     dbsz   Lookaside(b)          cache  Dbname
+         4       40             23         0/20/2  /data/user/0/com.agentx.admin.debug/databases/agentx_admin.db
+         4        8                         0/0/0    (attached) temp
+         4       40             77         3/16/4  /data/user/0/com.agentx.admin.debug/databases/agentx_admin.db (2)

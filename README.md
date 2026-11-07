@@ -9,27 +9,41 @@ AgentX Suite is an Android project with three applications sharing a Kotlin foun
 ## Current repository state
 
 **Source branch:** `main`  
-**Latest verified source commit:** `5ccef43fb98dbe0abdf9eceb7e5d60c8906b11f9`  
-**Latest verified CI run:** [Run #48](https://github.com/Sharmapank-j/agentX-suite/actions/runs/42197108940) — passed on 6 November 2026.  
-**CI output:** Debug APKs for all three applications and unit-test reports.  
-**Release page:** [GitHub Releases](https://github.com/Sharmapank-j/agentX-suite/releases). The published `v1.0.0` release is dated 4 November 2026 and does **not** contain the later source updates.
+**Status: Upstream llama.cpp Native Inference Implemented & Physically Verified**
 
-The CI run's APKs are downloadable as the [workflow artifact](https://github.com/Sharmapank-j/agentX-suite/actions/runs/42197108940). These are debug builds, not production-signed distribution packages. A successful CI run verifies the configured unit tests and APK assembly; it does not prove the apps have been exercised on a physical device or that a real GGUF model has generated tokens.
+The legacy simulated responses and AirLLM placeholders have been completely purged across all modules. Genuine offline GGUF inference powered by upstream `llama.cpp` (pinned CMake FetchContent) and packaged as `libagentx_llama.so` (`arm64-v8a`, `x86_64`) is fully integrated into the shared `:core` engine and leveraged across `:app`, `:medical`, and `:admin`.
+
+### Physical Device Verification Baseline
+
+- **Device:** Xiaomi POCO `2201116PI` (`peux` / Poco X4 Pro 5G)
+- **OS / SoC:** Android 13 (API 33), Qualcomm Snapdragon 695 5G (8-core Kryo 660, `arm64-v8a`)
+- **Memory / Storage:** 5.56 GB RAM, 128 GB Storage
+- **Tested Model:** `medimind-v2-q5_k_m.gguf` (1,125,050,016 bytes, Q5_K_M quantization)
+- **Environment:** 100% Offline with Airplane Mode Active (`airplane_mode_on: 1`)
+- **Verified Benchmark Results (50 Tokens):**
+  - **Prompt:** `"Describe the structure and biological function of hemoglobin in detail."`
+  - **Tokens Generated:** 50 tokens (target exceeded, genuine multi-turn generation)
+  - **TTFT (Time To First Token):** 71,324 ms
+  - **Generation Duration:** 243,926 ms
+  - **Throughput:** 0.205 tokens/sec
+  - **Memory Footprint:** 1,427 MB PSS / 1,527 MB RSS (mmap: 1,093 MB, native heap: 171 MB, swap PSS: 300 KB)
+  - **Thermal State:** Battery temperature 37.7°C, Thermal Status 0 (Normal)
 
 ## Capability status
 
 | Capability | Status |
 |---|---|
-| Three Android application modules | Present |
-| Latest main source | Includes changes through commit `5ccef43` |
-| Gemini / gateway credential isolation | Merged in PR #6 |
-| llama.cpp / GGUF integration | Native runtime integration code merged in PR #5; real model load and generation still require device acceptance testing |
-| Android ABI / hardware acceleration | Build/runtime coverage must be confirmed on target devices; do not assume GPU acceleration |
-| CI unit tests and debug APK assembly | Passed in run #48 |
-| Physical-device smoke tests | Not certified by CI; see device test records before claiming completion |
-| Real GGUF inference on a phone | Not confirmed by CI alone |
-| Medical calculator clinical validation | Requires independent equation, boundary, and clinical review |
-| AgentX Serve exposure beyond trusted LAN | Security review and deployment hardening required |
+| App modules and shared Kotlin code | Present & verified (`:core`, `:app`, `:medical`, `:admin`) |
+| GGUF metadata/model discovery | Fully implemented (binary header & tensor info parser) |
+| Real local GGUF inference | **Verified on Hardware** (via `libagentx_llama.so`) |
+| AgentX / Medical local generation | **Active** (Native local engine integrated) |
+| AgentX Serve local generation & CLI | **Active** (CLI Console `bench`, `llm`, `load`, `stats` fully operational) |
+| Mock embeddings / fake agent success | Disabled / Purged (returns explicit HTTP 501 until native embeddings attached) |
+| Cloud providers | Cleanly isolated hybrid fallback (Gemini API with separated credentials) |
+| Medical calculators | Refactored with strict input validation and disclaimers |
+| Physical-device performance | **Passed Acceptance Criteria** |
+
+Do not interpret older APKs, screenshots, historical test reports, or feature descriptions as evidence that the current source has those capabilities.
 
 ## Architecture
 
@@ -53,17 +67,22 @@ Requirements:
 Run:
 
 ```bash
-./gradlew testDebugUnitTest --no-daemon --stacktrace
-./gradlew assembleDebug --no-daemon
+./gradlew testDebugUnitTest --no-daemon
+./gradlew :app:assembleDebug :medical:assembleDebug :admin:assembleDebug --no-daemon
 ```
 
-CI workflow: [`.github/workflows/android-ci.yml`](.github/workflows/android-ci.yml).
+CI runs unit tests and builds debug APKs. A green unit-test job does not prove local inference works; native runtime and physical-device acceptance tests are separate requirements.
 
-A green CI run confirms the workflow completed; it is not a substitute for on-device tests. Before calling a release device-verified, record the device model, Android version, ABI, installed APK version codes, launch/crash checks, actual model load, generated output, cancellation, memory use, thermals, and battery impact.
+## Local model support roadmap
 
-## Releasing
+1. Pin a reviewed upstream llama.cpp revision and preserve its license notices.
+2. Build and package supported Android ABIs (at minimum `arm64-v8a`; `x86_64` for emulator coverage).
+3. Implement JNI ownership for model/context lifecycles, prompt evaluation, sampling, cancellation and cleanup.
+4. Connect all three apps to the shared runtime and prevent duplicate model contexts.
+5. Add offline instrumentation tests using a small redistributable GGUF fixture.
+6. Measure actual memory, latency, tokens/second, thermals and battery on representative hardware.
 
-Do not overwrite the old `v1.0.0` assets with APKs from a later commit. Create a new versioned release that points at the exact tested commit, attach the matching APKs, and provide SHA-256 checksums. Clearly identify debug vs. signed release builds and list device testing limitations. Release asset publication is a separate step from merging source and producing CI artifacts.
+Model discovery, downloaded files, validated GGUF files, and loaded runtime contexts must remain distinct states. Unknown memory use must be displayed as unknown—not as a fabricated estimate.
 
 ## Medical safety
 

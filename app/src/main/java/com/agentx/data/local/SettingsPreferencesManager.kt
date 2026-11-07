@@ -93,11 +93,11 @@ class SettingsPreferencesManager(context: Context) {
     }
 
     fun loadLocalBackend(): LocalBackendType {
-        val backendStr = prefs.getString(KEY_LOCAL_BACKEND, LocalBackendType.AIR_LLM.name) ?: LocalBackendType.AIR_LLM.name
+        val backendStr = prefs.getString(KEY_LOCAL_BACKEND, LocalBackendType.LLAMA_CPP.name) ?: LocalBackendType.LLAMA_CPP.name
         return try {
             LocalBackendType.valueOf(backendStr)
         } catch (_: Exception) {
-            LocalBackendType.AIR_LLM
+            LocalBackendType.LLAMA_CPP
         }
     }
 

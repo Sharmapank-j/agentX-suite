@@ -4,37 +4,31 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 enum class LocalBackendType {
-    AIR_LLM,      // Ultra-lightweight layer-streaming block inference (<250 MB RAM, best for mobile)
-    LLAMA_CPP     // In-memory mapped GGUF engine
+    @Deprecated("Legacy alias, maps to LLAMA_CPP")
+    AIR_LLM,
+    LLAMA_CPP     // In-memory mapped GGUF engine via native llama.cpp
 }
 
 class HybridInferenceEngine(
     val llamaEngine: InferenceEngine = LlamaCppEngine(),
-    val airLlmEngine: InferenceEngine = AirLlmEngine(),
     val cloudEngine: CloudInferenceEngine = CloudInferenceEngine(),
-    var activeLocalBackend: LocalBackendType = LocalBackendType.AIR_LLM
+    var activeLocalBackend: LocalBackendType = LocalBackendType.LLAMA_CPP
 ) : InferenceEngine {
 
+    // Overload constructor for backwards compatibility with existing test suites
     constructor(
         localEngine: InferenceEngine,
         cloudEngine: CloudInferenceEngine = CloudInferenceEngine()
     ) : this(
         llamaEngine = localEngine,
-        airLlmEngine = AirLlmEngine(),
         cloudEngine = cloudEngine,
-        activeLocalBackend = LocalBackendType.AIR_LLM
+        activeLocalBackend = LocalBackendType.LLAMA_CPP
     )
 
     var inferenceMode: InferenceMode = InferenceMode.HYBRID_AUTO
 
     val localEngine: InferenceEngine
-        get() = when (activeLocalBackend) {
-            LocalBackendType.AIR_LLM -> airLlmEngine
-            LocalBackendType.LLAMA_CPP -> {
-                if (llamaEngine.getModelStatus().state == ModelLifecycleState.LOADED) llamaEngine
-                else airLlmEngine
-            }
-        }
+        get() = llamaEngine
 
     override suspend fun loadModel(config: ModelConfig) {
         localEngine.loadModel(config)

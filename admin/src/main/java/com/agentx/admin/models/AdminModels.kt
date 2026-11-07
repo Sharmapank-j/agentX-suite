@@ -5,9 +5,9 @@ import java.util.UUID
 
 @Serializable
 enum class ServingMode(val label: String, val description: String) {
-    LOCAL_MODEL("Local GGUF Runtime (Unavailable)", "Local inference is unavailable until a real GGUF runtime is installed and validated."),
+    LOCAL_MODEL("Local GGUF Runtime (llama.cpp)", "On-device native GGUF inference powered by upstream llama.cpp."),
     CLOUD_GATEWAY("Cloud Gateway (Gemini API)", "Relays requests to the configured Gemini cloud endpoint."),
-    HYBRID("Hybrid (Local Runtime Required)", "Uses a validated local runtime when available; cloud fallback requires explicit configuration.")
+    HYBRID("Hybrid (Local + Cloud)", "Uses on-device llama.cpp native runtime with optional cloud fallback.")
 }
 
 @Serializable

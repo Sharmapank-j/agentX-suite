@@ -217,6 +217,12 @@ class KtorAgentXServer(
             get("/v1/models") { handleModels(this) }
             get("/models") { handleModels(this) }
 
+            // Dynamic Model Loading & Unloading
+            post("/v1/models/load") { handleModelLoad(this) }
+            post("/models/load") { handleModelLoad(this) }
+            post("/v1/models/unload") { handleModelUnload(this) }
+            post("/models/unload") { handleModelUnload(this) }
+
             // ASP v1.0 Profile
             get("/asp/v1/profile") { handleAspProfile(this) }
 
@@ -356,6 +362,48 @@ class KtorAgentXServer(
         call.respondText(json, ContentType.Application.Json)
     }
 
+    private suspend fun handleModelLoad(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        val body = try { call.receiveText() } catch (e: Exception) { "" }
+        val modelId = try {
+            val json = Json.parseToJsonElement(body).jsonObject
+            json["model"]?.jsonPrimitive?.content ?: json["id"]?.jsonPrimitive?.content ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+        val target = if (modelId.isNotBlank()) modelId else localEngine.allAvailableModels.firstOrNull { it.filePath != null }?.id ?: ""
+        if (target.isBlank()) {
+            call.respondText(
+                "{\"error\":{\"message\":\"No model specified or available in storage\",\"type\":\"invalid_request_error\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.BadRequest
+            )
+            return
+        }
+        val ok = switchLocalModel(target)
+        if (ok) {
+            call.respondText(
+                "{\"status\":\"loaded\",\"model\":\"${localEngine.activeModel.name}\",\"id\":\"${localEngine.activeModel.id}\",\"memoryMb\":${localEngine.activeModel.memoryFootprintMb}}",
+                ContentType.Application.Json
+            )
+        } else {
+            call.respondText(
+                "{\"error\":{\"message\":\"Failed to load model '$target'. Check file accessibility, RAM, and model architecture.\",\"type\":\"server_error\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.InternalServerError
+            )
+        }
+    }
+
+    private suspend fun handleModelUnload(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        unloadLocalModel()
+        call.respondText(
+            "{\"status\":\"unloaded\",\"activeModel\":\"None\"}",
+            ContentType.Application.Json
+        )
+    }
+
     private suspend fun handleChatCompletions(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
         val startTime = System.currentTimeMillis()
@@ -399,6 +447,25 @@ class KtorAgentXServer(
             val content = msgObj["content"]?.jsonPrimitive?.content ?: ""
             if (role == "system") systemPrompt = content
             else if (role == "user") prompt = content
+        }
+
+        // Auto-load model on demand if not yet loaded
+        if (localEngine.status != LocalModelStatus.LOADED) {
+            val candidate = localEngine.allAvailableModels.firstOrNull {
+                it.filePath != null && (it.id == modelRequested || it.name == modelRequested || it.filePath == modelRequested)
+            } ?: localEngine.allAvailableModels.firstOrNull { it.filePath != null }
+            if (candidate != null) {
+                switchLocalModel(candidate.id)
+            }
+        }
+
+        if (localEngine.status != LocalModelStatus.LOADED) {
+            call.respondText(
+                "{\"error\":{\"message\":\"No local GGUF model is loaded. Load a model first via /v1/models/load or the dashboard.\",\"type\":\"server_error\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.BadRequest
+            )
+            return
         }
 
         val completionId = "chatcmpl-${UUID.randomUUID()}"

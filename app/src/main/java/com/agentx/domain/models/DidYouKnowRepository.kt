@@ -16,13 +16,13 @@ object DidYouKnowRepository {
 
     private val insights = listOf(
         DidYouKnowInsight(
-            id = "airllm_streaming",
+            id = "llamacpp_gguf",
             category = "Edge AI & Architecture",
             emoji = "⚡",
             headline = "Running 70B Models in 2.0 GB RAM",
-            fact = "While full 16-bit 70B LLMs require ~140 GB of VRAM, progressive layer-streaming (AirLLM) partitions weights into quantized block buffers on flash storage, streaming active transformer layers into memory one-by-one so even modest mobile hardware never crashes with Out-Of-Memory errors.",
-            suggestedPrompt = "Explain how AirLLM layer-streaming executes multi-billion parameter inference in 2.0 GB RAM without native crashes.",
-            relatedChips = listOf("AirLLM Mechanics", "Quantization Q4_K_M", "RAM Optimization")
+            fact = "GGUF quantization with native llama.cpp maps quantized weights (Q4_K_M, Q5_K_M) directly into memory via mmap, enabling low-latency mobile inference with zero cloud dependency and strict offline privacy.",
+            suggestedPrompt = "Explain how native llama.cpp GGUF inference executes multi-billion parameter models in mobile RAM without native crashes.",
+            relatedChips = listOf("llama.cpp Engine", "Quantization Q4_K_M", "RAM Optimization")
         ),
         DidYouKnowInsight(
             id = "transformers_attention",
