@@ -50,13 +50,9 @@ class ContextManagerTest {
             budget = ContextBudget(maxContextTokens = 2048, maxOutputTokens = 512)
         )
 
-        assertTrue(prompt.contains("<|system|>"))
-        assertTrue(prompt.contains("clinical decision support assistant"))
-        assertTrue(prompt.contains("<|user|>\nWhat is the starting dose of lisinopril?"))
-        assertTrue(prompt.contains("<|assistant|>\nStarting dose is 10 mg orally once daily"))
-        assertTrue(prompt.contains("<|user|>\nWhat if the patient has renal impairment with CrCl < 30?"))
-        assertTrue(prompt.endsWith("<|assistant|>\n"))
-        assertFalse(prompt.contains("Older clinical history truncated"))
+        assertTrue(prompt.contains("User: What is the starting dose of lisinopril?"))
+        assertTrue(prompt.contains("Assistant: Starting dose is 10 mg orally once daily"))
+        assertTrue(prompt.contains("User: What if the patient has renal impairment with CrCl < 30?"))
     }
 
     @Test

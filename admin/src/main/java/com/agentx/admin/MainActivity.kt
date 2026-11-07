@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             AgentXAdminTheme {
                 AdminDashboardScreen(viewModel = viewModel)
+                com.agentx.admin.ui.PermissionsDisclosureDialog(appName = "AgentX Serve") {}
             }
         }
     }

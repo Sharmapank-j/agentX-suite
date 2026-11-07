@@ -59,12 +59,6 @@ class ModelFileManager(private val context: Context) {
         fileName: String,
         totalBytes: Long
     ): Flow<StagingProgress> = flow {
-        val freeSpace = getAvailableStorageBytes()
-        if (totalBytes > 0 && freeSpace < totalBytes + (100 * 1024 * 1024)) { // 100MB safety buffer
-            emit(StagingProgress.Error("Insufficient storage space. Required: ${totalBytes / (1024 * 1024)}MB, Available: ${freeSpace / (1024 * 1024)}MB"))
-            return@flow
-        }
-
         val sanitizedName = fileName.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
         val destinationFile = File(modelsDir, "${modelId}_$sanitizedName")
 

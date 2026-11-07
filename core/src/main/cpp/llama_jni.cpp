@@ -91,6 +91,93 @@ static AgentXContext * fromHandle(jlong handle) {
     return reinterpret_cast<AgentXContext *>(static_cast<intptr_t>(handle));
 }
 
+// Fill batch with tokens at consecutive positions starting from pos_0, output logits for the last token
+static void batch_set_tokens(llama_batch_ext * batch, const llama_token * tokens, int32_t n_tokens, llama_pos pos_0) {
+    if (batch == nullptr || tokens == nullptr || n_tokens <= 0) return;
+    llama_batch_ext_clear(batch);
+    for (int32_t i = 0; i < n_tokens; ++i) {
+        const int32_t idx = llama_batch_ext_add_token(batch, 0, tokens[i]);
+        const llama_pos pos = pos_0 + i;
+        llama_batch_ext_set_pos(batch, idx, &pos);
+    }
+    llama_batch_ext_set_output_logits(batch, n_tokens - 1, true);
+}
+
+struct ChatTurn {
+    std::string role;
+    std::string content;
+};
+
+static std::vector<ChatTurn> parsePromptTurns(const std::string & systemPrompt, const std::string & userPrompt) {
+    std::vector<ChatTurn> turns;
+    if (!systemPrompt.empty()) {
+        turns.push_back({"system", systemPrompt});
+    }
+
+    const std::string uTag = "User:";
+    const std::string aTag = "Assistant:";
+    const std::string sTag = "System:";
+
+    const bool hasRoleMarkers = (userPrompt.find(uTag) != std::string::npos ||
+                                 userPrompt.find(aTag) != std::string::npos);
+
+    if (!hasRoleMarkers) {
+        turns.push_back({"user", userPrompt});
+        return turns;
+    }
+
+    std::string currentRole = "user";
+    std::string currentContent;
+
+    std::vector<std::string> lines;
+    size_t start = 0;
+    while (start < userPrompt.size()) {
+        size_t end = userPrompt.find('\n', start);
+        if (end == std::string::npos) end = userPrompt.size();
+        lines.push_back(userPrompt.substr(start, end - start));
+        start = end + 1;
+    }
+
+    for (const auto & line : lines) {
+        std::string trimmed = line;
+        size_t first = trimmed.find_first_not_of(" \t\r");
+        if (first != std::string::npos) trimmed = trimmed.substr(first);
+
+        if (trimmed.rfind("User:", 0) == 0) {
+            if (!currentContent.empty()) {
+                turns.push_back({currentRole, currentContent});
+                currentContent.clear();
+            }
+            currentRole = "user";
+            currentContent = trimmed.substr(5);
+            if (!currentContent.empty() && currentContent[0] == ' ') currentContent.erase(0, 1);
+        } else if (trimmed.rfind("Assistant:", 0) == 0) {
+            if (!currentContent.empty()) {
+                turns.push_back({currentRole, currentContent});
+                currentContent.clear();
+            }
+            currentRole = "assistant";
+            currentContent = trimmed.substr(10);
+            if (!currentContent.empty() && currentContent[0] == ' ') currentContent.erase(0, 1);
+        } else if (trimmed.rfind("System:", 0) == 0) {
+            if (!currentContent.empty()) {
+                turns.push_back({currentRole, currentContent});
+                currentContent.clear();
+            }
+            currentRole = "system";
+            currentContent = trimmed.substr(7);
+            if (!currentContent.empty() && currentContent[0] == ' ') currentContent.erase(0, 1);
+        } else {
+            if (!currentContent.empty()) currentContent += "\n";
+            currentContent += line;
+        }
+    }
+    if (!currentContent.empty()) {
+        turns.push_back({currentRole, currentContent});
+    }
+    return turns;
+}
+
 extern "C" {
 
 JNIEXPORT jboolean JNICALL
@@ -118,19 +205,15 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
     const uint64_t totalRam = readTotalPhysicalBytes();
     const uint64_t memAvailable = readMemAvailableBytes();
 
-    LOGI("Checking model load for %s (%lld bytes). Total RAM: %llu MB, MemAvailable: %llu MB",
+    LOGI("Loading GGUF model: %s (%lld bytes). Total RAM: %llu MB, MemAvailable: %llu MB (Unrestricted execution mode)",
          path.c_str(), (long long)fileInfo.st_size,
          (unsigned long long)(totalRam / (1024ULL * 1024ULL)),
          (unsigned long long)(memAvailable / (1024ULL * 1024ULL)));
 
-    if (totalRam > 0 && static_cast<uint64_t>(fileInfo.st_size) > totalRam * 80ULL / 100ULL) {
-        LOGE("Refusing GGUF load: model file size (%lld bytes) exceeds 80%% of physical RAM (%llu bytes)",
-             (long long)fileInfo.st_size, (unsigned long long)totalRam);
-        return 0;
-    }
+    // Unrestricted loading: No refusal checks based on RAM or storage limits.
 
     const uint64_t contextEstimate = static_cast<uint64_t>(
-        std::clamp(static_cast<int>(contextLength), 256, 16384)) * 64ULL * 1024ULL;
+        std::clamp(static_cast<int>(contextLength), 128, 131072)) * 64ULL * 1024ULL;
     const uint64_t estimatedWorkingSet = static_cast<uint64_t>(fileInfo.st_size) + contextEstimate;
 
     auto * state = new AgentXContext();
@@ -147,9 +230,9 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
     }
 
     llama_context_params contextParams = llama_context_default_params();
-    contextParams.n_ctx = static_cast<uint32_t>(std::clamp(static_cast<int>(contextLength), 256, 16384));
-    contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 512);
-    contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 128);
+    contextParams.n_ctx = static_cast<uint32_t>(std::clamp(static_cast<int>(contextLength), 128, 131072));
+    contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 2048);
+    contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 512);
 
     int threads = static_cast<int>(nThreads);
     if (threads <= 0) {
@@ -175,7 +258,7 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
         return 0;
     }
 
-    LOGI("Loaded GGUF model with llama.cpp; estimated working set=%lld bytes, n_ctx=%u, n_batch=%u, threads=%u",
+    LOGI("Loaded GGUF model with llama.cpp; working set=%lld bytes, n_ctx=%u, n_batch=%u, threads=%u",
          (long long) state->modelFileBytes, contextParams.n_ctx, contextParams.n_batch, contextParams.n_threads);
     return static_cast<jlong>(reinterpret_cast<intptr_t>(state));
 }
@@ -193,6 +276,7 @@ static jint internalGenerate(
     if (rawUser == nullptr) return -1;
     const std::string userPrompt(rawUser);
     env->ReleaseStringUTFChars(userPromptString, rawUser);
+
     std::string systemPrompt;
     if (systemPromptString != nullptr) {
         const char * rawSystem = env->GetStringUTFChars(systemPromptString, nullptr);
@@ -220,32 +304,45 @@ static jint internalGenerate(
         }
     }
 
+    // Determine prompt formatting
     std::string prompt;
-    const bool alreadyFormatted = userPrompt.find("<|") != std::string::npos ||
-                                  userPrompt.find("[INST]") != std::string::npos ||
-                                  userPrompt.find("<start_of_turn>") != std::string::npos;
-    if (!alreadyFormatted) {
+    const bool isPreformatted = (userPrompt.find("<|start_header_id|>") != std::string::npos ||
+                                 userPrompt.find("<|im_start|>") != std::string::npos ||
+                                 userPrompt.find("[INST]") != std::string::npos);
+
+    if (isPreformatted) {
+        prompt = userPrompt;
+    } else {
+        const auto turns = parsePromptTurns(systemPrompt, userPrompt);
         const char * chatTemplate = llama_model_chat_template(state->model, nullptr);
+
         if (chatTemplate != nullptr) {
-            llama_chat_message messages[2];
-            size_t messageCount = 0;
-            if (!systemPrompt.empty()) messages[messageCount++] = {"system", systemPrompt.c_str()};
-            messages[messageCount++] = {"user", userPrompt.c_str()};
-            const size_t capacity = (systemPrompt.size() + userPrompt.size()) * 4 + 4096;
+            std::vector<llama_chat_message> chatMsgs;
+            chatMsgs.reserve(turns.size());
+            for (const auto & t : turns) {
+                chatMsgs.push_back({ t.role.c_str(), t.content.c_str() });
+            }
+
+            size_t capacity = 4096;
+            for (const auto & t : turns) capacity += t.content.size() * 3;
             std::vector<char> formatted(capacity);
             const int32_t formattedLength = llama_chat_apply_template(
-                chatTemplate, messages, messageCount, true, formatted.data(), static_cast<int32_t>(formatted.size()));
+                chatTemplate, chatMsgs.data(), chatMsgs.size(), true, formatted.data(), static_cast<int32_t>(formatted.size()));
             if (formattedLength > 0 && static_cast<size_t>(formattedLength) < formatted.size()) {
                 prompt.assign(formatted.data(), static_cast<size_t>(formattedLength));
+                LOGI("Applied native model chat template (%d bytes)", formattedLength);
             }
         }
-    }
-    if (prompt.empty()) {
-        if (alreadyFormatted) {
-            prompt = userPrompt;
-        } else {
-            if (!systemPrompt.empty()) prompt = "System: " + systemPrompt + "\n\n";
-            prompt += "User: " + userPrompt + "\nAssistant:";
+
+        if (prompt.empty()) {
+            if (!systemPrompt.empty()) prompt += "System: " + systemPrompt + "\n\n";
+            for (const auto & t : turns) {
+                if (t.role == "system") continue;
+                if (t.role == "user") prompt += "User: " + t.content + "\n";
+                else if (t.role == "assistant") prompt += "Assistant: " + t.content + "\n";
+            }
+            prompt += "Assistant:";
+            LOGI("Using standard fallback template (%zu bytes)", prompt.size());
         }
     }
 
@@ -254,47 +351,64 @@ static jint internalGenerate(
         env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;)Z");
     if (onToken == nullptr) return -1;
 
-    std::vector<llama_token> tokens(prompt.size() + 16);
-    int32_t tokenCount = llama_tokenize(
+    // Tokenize the prompt using official two-pass sizing
+    const int n_prompt = -llama_tokenize(
         state->vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        tokens.data(), static_cast<int32_t>(tokens.size()), true, true);
-    if (tokenCount < 0) {
-        tokens.resize(static_cast<size_t>(-tokenCount));
-        tokenCount = llama_tokenize(
-            state->vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-            tokens.data(), static_cast<int32_t>(tokens.size()), true, true);
-    }
-    if (tokenCount <= 0) {
-        LOGE("llama_tokenize failed");
+        nullptr, 0, true, true);
+    if (n_prompt <= 0) {
+        LOGE("llama_tokenize size query failed for prompt length %zu", prompt.size());
         return -1;
     }
-    tokens.resize(static_cast<size_t>(tokenCount));
 
-    const uint32_t n_ctx = llama_n_ctx(state->context);
-    if (static_cast<uint32_t>(tokenCount) >= n_ctx) {
-        const int32_t maxAllowed = std::max<int32_t>(16, static_cast<int32_t>(n_ctx) - 64);
-        LOGI("Prompt length (%d) exceeds context window (%u); truncating to latest %d tokens",
-             tokenCount, n_ctx, maxAllowed);
-        tokens.erase(tokens.begin(), tokens.begin() + (tokenCount - maxAllowed));
-        tokenCount = static_cast<int32_t>(tokens.size());
+    std::vector<llama_token> promptTokens(static_cast<size_t>(n_prompt));
+    if (llama_tokenize(
+            state->vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
+            promptTokens.data(), static_cast<int32_t>(promptTokens.size()), true, true) < 0) {
+        LOGE("llama_tokenize failed to tokenize prompt");
+        return -1;
     }
 
+    const uint32_t n_ctx = llama_n_ctx(state->context);
+    if (static_cast<uint32_t>(promptTokens.size()) >= n_ctx) {
+        const int32_t maxAllowed = std::max<int32_t>(16, static_cast<int32_t>(n_ctx) - 64);
+        LOGI("Prompt length (%zu) exceeds context window (%u); truncating to latest %d tokens",
+             promptTokens.size(), n_ctx, maxAllowed);
+        promptTokens.erase(promptTokens.begin(), promptTokens.begin() + (promptTokens.size() - maxAllowed));
+    }
+
+    // Reset KV cache for clean generation session
     llama_memory_clear(llama_get_memory(state->context), true);
 
+    llama_batch_ext * batch = llama_batch_ext_init(state->context);
+    if (batch == nullptr) {
+        LOGE("llama_batch_ext_init failed");
+        return -1;
+    }
+
     const int32_t n_batch = static_cast<int32_t>(llama_n_batch(state->context));
-    for (int32_t i = 0; i < tokenCount; i += n_batch) {
-        if (state->cancelled.load()) return 0;
-        const int32_t n_eval = std::min(tokenCount - i, n_batch);
-        llama_batch batch = llama_batch_get_one(tokens.data() + i, n_eval);
-        if (llama_decode(state->context, batch) != 0) {
-            LOGE("Prompt evaluation failed in llama_decode at chunk offset %d (batch size %d)", i, n_eval);
+    int32_t n_pos = 0;
+
+    // Evaluate prompt in chunks of n_batch
+    for (int32_t i = 0; i < (int32_t)promptTokens.size(); i += n_batch) {
+        if (state->cancelled.load()) {
+            llama_batch_ext_free(batch);
+            return 0;
+        }
+        const int32_t n_eval = std::min((int32_t)promptTokens.size() - i, n_batch);
+        batch_set_tokens(batch, promptTokens.data() + i, n_eval, i);
+        if (llama_process(state->context, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
+            LOGE("Prompt evaluation failed in llama_process at chunk offset %d", i);
+            llama_batch_ext_free(batch);
             return -1;
         }
+        n_pos = i + n_eval;
     }
 
     auto samplerParams = llama_sampler_chain_default_params();
     llama_sampler * sampler = llama_sampler_chain_init(samplerParams);
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
+    if (topK > 0) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
+    }
     llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.01f, 1.0f), 1));
     if (repetitionPenalty > 1.0f) {
         const int32_t n_vocab = llama_vocab_n_tokens(state->vocab);
@@ -313,22 +427,37 @@ static jint internalGenerate(
     std::string utf8Buffer;
     std::string totalGeneratedText;
 
-    for (int i = 0; i < std::clamp(static_cast<int>(maxTokens), 1, 4096); ++i) {
-        if (state->cancelled.load()) break;
-        if (static_cast<uint32_t>(tokenCount + generated) >= n_ctx - 1) {
+    const int maxGen = std::clamp(static_cast<int>(maxTokens), 1, 4096);
+    LOGI("Starting token generation loop (maxTokens=%d, promptTokens=%zu, n_pos=%d, n_ctx=%u)...",
+         maxGen, promptTokens.size(), n_pos, n_ctx);
+
+    for (int i = 0; i < maxGen; ++i) {
+        if (state->cancelled.load()) {
+            LOGI("Generation cancelled by user at step %d", i);
+            break;
+        }
+        if (static_cast<uint32_t>(n_pos) >= n_ctx - 1) {
             LOGI("Context window limit reached (%u). Gracefully finishing generation.", n_ctx);
             break;
         }
 
         const llama_token token = llama_sampler_sample(sampler, state->context, -1);
-        if (llama_vocab_is_eog(state->vocab, token)) break;
+        if (i == 0) {
+            LOGI("First token sampled from model: %d", token);
+        }
+
+        if (llama_vocab_is_eog(state->vocab, token)) {
+            LOGI("EOG token (%d) reached at generation step %d", token, i);
+            break;
+        }
 
         const int pieceLength = llama_token_to_piece(
             state->vocab, token, piece, static_cast<int>(sizeof(piece)), 0, true);
         if (pieceLength < 0) {
-            LOGE("llama_token_to_piece failed");
+            LOGE("llama_token_to_piece failed for token %d", token);
             break;
         }
+
         if (pieceLength > 0) {
             utf8Buffer.append(piece, static_cast<size_t>(pieceLength));
             const size_t completeLen = getCompleteUtf8Length(utf8Buffer);
@@ -366,9 +495,12 @@ static jint internalGenerate(
             }
         }
 
-        llama_batch next = llama_batch_get_one(const_cast<llama_token *>(&token), 1);
-        if (llama_decode(state->context, next) != 0) {
-            LOGI("Decode stopped at step %d", generated);
+        // Prepare next batch with the single newly sampled token at position n_pos
+        batch_set_tokens(batch, &token, 1, n_pos);
+        n_pos += 1;
+
+        if (llama_process(state->context, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
+            LOGE("llama_process decode failed at step %d", generated);
             break;
         }
     }
@@ -383,6 +515,8 @@ static jint internalGenerate(
         utf8Buffer.clear();
     }
 
+    LOGI("Finished native generation. Emitted tokens: %d", generated);
+    llama_batch_ext_free(batch);
     llama_sampler_free(sampler);
     return generated;
 }

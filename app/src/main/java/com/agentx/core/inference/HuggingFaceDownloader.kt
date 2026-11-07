@@ -163,12 +163,6 @@ class HuggingFaceDownloader(
             }
 
             val contentLength = currentConnection.contentLengthLong
-            val freeSpace = modelFileManager.getAvailableStorageBytes()
-            if (contentLength > 0 && freeSpace < contentLength + (150 * 1024 * 1024)) {
-                emit(DownloadProgress.Error("Insufficient storage space. Need ${contentLength / (1024 * 1024)}MB, free space is ${freeSpace / (1024 * 1024)}MB"))
-                currentConnection.disconnect()
-                return@flow
-            }
 
             var bytesReadTotal = 0L
             val startTime = System.currentTimeMillis()

@@ -439,15 +439,20 @@ class KtorAgentXServer(
         val maxTokens = json["max_tokens"]?.jsonPrimitive?.intOrNull ?: 1024
         val messages = json["messages"]?.jsonArray
 
-        var prompt = ""
+        val promptBuilder = StringBuilder()
         var systemPrompt: String? = null
         messages?.forEach { elem ->
             val msgObj = elem.jsonObject
-            val role = msgObj["role"]?.jsonPrimitive?.content
+            val role = msgObj["role"]?.jsonPrimitive?.content ?: "user"
             val content = msgObj["content"]?.jsonPrimitive?.content ?: ""
-            if (role == "system") systemPrompt = content
-            else if (role == "user") prompt = content
+            if (role.equals("system", true)) {
+                systemPrompt = content
+            } else {
+                val label = if (role.equals("user", true)) "User" else "Assistant"
+                promptBuilder.append("$label: $content\n")
+            }
         }
+        val prompt = promptBuilder.toString().trim()
 
         // Auto-load model on demand if not yet loaded
         if (localEngine.status != LocalModelStatus.LOADED) {

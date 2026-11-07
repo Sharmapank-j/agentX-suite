@@ -214,8 +214,7 @@ class LocalModelServerEngine(
                     it.id.endsWith(modelId, ignoreCase = true) ||
                     it.filePath == modelId
                 )
-            } ?: allAvailableModels.firstOrNull { it.id == modelId }
-              ?: allAvailableModels.firstOrNull { it.filePath != null }
+            } ?: allAvailableModels.firstOrNull { it.filePath != null }
               ?: return@withLock false
             val path = selected.filePath ?: return@withLock false
             _status = LocalModelStatus.LOADING

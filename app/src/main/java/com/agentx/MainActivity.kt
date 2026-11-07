@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                     modelsViewModel = modelsViewModel,
                     settingsViewModel = settingsViewModel
                 )
+                com.agentx.ui.components.PermissionsDisclosureDialog(appName = "AgentX") {}
             }
         }
     }

@@ -318,13 +318,7 @@ class ChatViewModel(
             conversationRepository.sendMessage(userMsg)
             _inputText.value = ""
 
-            val isExplicitSupervisorTask = (agent != null && (agent.role == com.agentx.medical.domain.models.AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
-                    text.startsWith("/orchestrate", ignoreCase = true) ||
-                    text.startsWith("/plan", ignoreCase = true) ||
-                    text.startsWith("/specialist", ignoreCase = true) ||
-                    text.contains("clinical team", ignoreCase = true) ||
-                    text.contains("multi-agent", ignoreCase = true)
-            if (isExplicitSupervisorTask && clinicalSupervisor != null) {
+            if (agent != null && agent.role == com.agentx.medical.domain.models.AgentRole.SUPERVISOR && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
                     userPrompt = text,
@@ -335,7 +329,7 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = text,
                     agent = agent,
-                    agentName = "AgentX Medical"
+                    agentName = agentName
                 )
             }
         }
@@ -360,13 +354,7 @@ class ChatViewModel(
             // Delete the old assistant response
             conversationRepository.deleteMessage(assistantMessageId)
 
-            val isExplicitSupervisorTask = (agent != null && (agent.role == com.agentx.medical.domain.models.AgentRole.SUPERVISOR || agent.id == "agent_supervisor")) ||
-                    userQuery.startsWith("/orchestrate", ignoreCase = true) ||
-                    userQuery.startsWith("/plan", ignoreCase = true) ||
-                    userQuery.startsWith("/specialist", ignoreCase = true) ||
-                    userQuery.contains("clinical team", ignoreCase = true) ||
-                    userQuery.contains("multi-agent", ignoreCase = true)
-            if (isExplicitSupervisorTask && clinicalSupervisor != null) {
+            if (agent != null && agent.role == com.agentx.medical.domain.models.AgentRole.SUPERVISOR && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
                     userPrompt = userQuery,
@@ -377,7 +365,7 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = userQuery,
                     agent = agent,
-                    agentName = "AgentX Medical"
+                    agentName = agentName
                 )
             }
         }
@@ -401,15 +389,6 @@ class ChatViewModel(
         conversationRepository.sendMessage(assistantMsg)
         _isStreaming.value = true
 
-        // Ensure active model is loaded in memory
-        try {
-            val activeModel = modelRepository.getActiveModel().first()
-                ?: modelRepository.getAllModels().first().firstOrNull()
-            if (activeModel != null && activeModel.filePath.isNotEmpty()) {
-                ensureModelLoaded(activeModel)
-            }
-        } catch (_: Throwable) { }
-
         try {
             val coordResult = clinicalSupervisor?.coordinate(
                 userGoal = userPrompt,
@@ -429,12 +408,11 @@ class ChatViewModel(
                 streamInferenceIntoMessage(convId, userPrompt, null, assistantMsg)
             }
         } catch (_: Throwable) {
-            // Graceful zero-crash fallback to direct streaming inference on the same message
             try {
                 streamInferenceIntoMessage(convId, userPrompt, null, assistantMsg)
             } catch (t2: Throwable) {
                 assistantMsg = assistantMsg.copy(
-                    content = "⚠️ Unable to complete clinical consult: ${t2.message ?: "Unknown error"}. Check model connection in Settings.",
+                    content = "Unable to complete clinical consult: ${t2.message ?: "Unknown error"}.",
                     status = MessageStatus.ERROR
                 )
                 conversationRepository.updateMessage(assistantMsg)

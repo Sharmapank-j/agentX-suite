@@ -66,39 +66,26 @@ object ContextManager {
 
         val builder = StringBuilder()
 
-        // 1. System Prompt Header
-        if (!systemPrompt.isNullOrBlank()) {
-            builder.append("<|system|>\n")
-            builder.append(systemPrompt.trim())
-            builder.append("\n<|end|>\n")
-        }
-
-        // 2. Truncation notice for conversation continuity
         if (wasTruncated) {
-            builder.append("<|system|>\n")
-            builder.append("[Note: Older conversation history truncated to preserve on-device memory limits]\n")
-            builder.append("<|end|>\n")
+            builder.append("[Note: Older conversation history truncated]\n")
         }
 
-        // 3. Conversation History
+        // Conversation History (clean text turns)
         for (msg in includedMessages) {
-            val roleTag = when (msg.role) {
-                MessageRole.USER -> "user"
-                MessageRole.ASSISTANT, MessageRole.AGENT -> "assistant"
-                MessageRole.SYSTEM -> "system"
+            val roleLabel = when (msg.role) {
+                MessageRole.USER -> "User"
+                MessageRole.ASSISTANT, MessageRole.AGENT -> "Assistant"
+                MessageRole.SYSTEM -> "System"
             }
-            builder.append("<|$roleTag|>\n")
-            builder.append(msg.content.trim())
-            builder.append("\n<|end|>\n")
+            builder.append("$roleLabel: ").append(msg.content.trim()).append("\n")
         }
 
-        // 4. Current User Prompt
-        builder.append("<|user|>\n")
-        builder.append(currentPrompt.trim())
-        builder.append("\n<|end|>\n")
-
-        // 5. Assistant Generation Trigger
-        builder.append("<|assistant|>\n")
+        // Current User Prompt
+        if (includedMessages.isNotEmpty()) {
+            builder.append("User: ").append(currentPrompt.trim())
+        } else {
+            builder.append(currentPrompt.trim())
+        }
 
         return builder.toString()
     }

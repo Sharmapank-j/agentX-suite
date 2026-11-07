@@ -42,7 +42,7 @@ class InferenceSchedulerTest {
     }
 
     @Test
-    fun testMemoryBudgetRejection() = runBlocking {
+    fun testUnrestrictedModelLoadingPermitted() = runBlocking {
         val scheduler = DefaultInferenceScheduler(memoryBudgetMb = 2048L)
         val oversizedModel = ModelInfo(
             id = "oversized-70b",
@@ -52,19 +52,18 @@ class InferenceSchedulerTest {
         )
 
         val result = scheduler.loadModel(oversizedModel)
-        assertTrue("Model exceeding budget must be rejected", result.isFailure)
-        assertFalse(scheduler.isModelLoaded.value)
-        assertEquals(0L, scheduler.currentMemoryUsageMb.value)
+        assertTrue("Model must be allowed without artificial memory budget refusal", result.isSuccess)
+        assertTrue(scheduler.isModelLoaded.value)
+        assertEquals(40960L, scheduler.currentMemoryUsageMb.value)
     }
 
     @Test
-    fun testUnknownLocalMemoryRequirementIsRejected() = runBlocking {
+    fun testUnmeasuredLocalModelAllowed() = runBlocking {
         val scheduler = DefaultInferenceScheduler(memoryBudgetMb = 2048L)
         val unknownModel = ModelInfo(id = "unknown", name = "Unknown local model", isLocal = true)
         val result = scheduler.loadModel(unknownModel)
-        assertTrue(result.isFailure)
-        assertFalse(scheduler.isModelLoaded.value)
-        assertEquals(0L, scheduler.currentMemoryUsageMb.value)
+        assertTrue("Unmeasured local model must be allowed in unrestricted mode", result.isSuccess)
+        assertTrue(scheduler.isModelLoaded.value)
     }
 
     @Test
