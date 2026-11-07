@@ -4,6 +4,9 @@ concurrency:
   group: agentx-suite-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main, master ]
@@ -15,32 +18,25 @@ jobs:
   build-and-test:
     name: Build & Verify AgentX Suite (3 Applications)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-
       - name: Grant Execute Permission to Gradlew
         run: chmod +x gradlew
-
       - name: Run Unit Tests (All 3 Modules)
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
-
       - name: Build Debug APKs (All 3 Applications)
         if: always()
         run: ./gradlew assembleDebug --no-daemon
-
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -51,7 +47,6 @@ jobs:
             medical/build/reports/tests/testDebugUnitTest/
             admin/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
-
       - name: Upload Debug APKs
         if: always()
         uses: actions/upload-artifact@v4
@@ -61,3 +56,61 @@ jobs:
             app/build/outputs/apk/debug/app-debug.apk
             medical/build/outputs/apk/debug/medical-debug.apk
             admin/build/outputs/apk/debug/admin-debug.apk
+
+  publish-release:
+    name: Publish GitHub Release v1.1.0
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-and-test.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agentx-suite-debug-apks
+          path: dist
+      - name: Prepare release assets and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp dist/app/build/outputs/apk/debug/app-debug.apk release/AgentX-v1.1.0-debug.apk
+          cp dist/medical/build/outputs/apk/debug/medical-debug.apk release/AgentX-Medical-v1.1.0-debug.apk
+          cp dist/admin/build/outputs/apk/debug/admin-debug.apk release/AgentX-Serve-v1.1.0-debug.apk
+          cd release
+          sha256sum *.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create GitHub Release and upload APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.1.0
+          target_commitish: ${{ github.sha }}
+          name: AgentX Suite v1.1.0
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/AgentX-v1.1.0-debug.apk
+            release/AgentX-Medical-v1.1.0-debug.apk
+            release/AgentX-Serve-v1.1.0-debug.apk
+            release/SHA256SUMS.txt
+          body: |
+            ## AgentX Suite v1.1.0
+
+            This release packages the three Android applications built from the exact source commit shown above.
+
+            ### Included
+            - AgentX — general-purpose assistant.
+            - AgentX Medical — medical education and clinical-support tools.
+            - AgentX Serve — Android local API/server application.
+            - llama.cpp / GGUF native runtime integration (real model loading and generation still require target-device acceptance testing).
+            - Provider-specific Gemini and gateway credential isolation.
+
+            ### Build and verification
+            - Built by the repository's GitHub Actions CI workflow.
+            - Unit tests and all three debug APK assembly jobs must pass before this release is published.
+            - APKs in this release are debug builds, not production-signed distribution packages.
+            - SHA-256 checksums are attached in SHA256SUMS.txt.
+
+            ### Important limitations
+            - A green CI build does not establish successful real-device GGUF inference, GPU acceleration, or performance.
+            - Physical-device installation, model loading, generated-token, cancellation, memory, thermal, and battery tests must be recorded separately.
+            - AgentX Medical is not a validated medical device; outputs require clinician judgement and independent validation of calculators.
