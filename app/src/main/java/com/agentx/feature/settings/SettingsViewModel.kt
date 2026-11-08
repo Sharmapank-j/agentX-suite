@@ -33,6 +33,19 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.net.HttpURLConnection
 import java.net.URL
 
+import com.agentx.core.agent.tools.mcp.HttpMcpClient
+import com.agentx.core.agent.tools.mcp.McpServerDescriptor
+import com.agentx.core.agent.tools.mcp.McpServerRegistry
+import com.agentx.core.inference.InferenceEngine
+import com.agentx.core.inference.ModelConfig
+import com.agentx.core.inference.ModelLifecycleState
+import com.agentx.core.inference.ModelStatus
+import com.agentx.core.memory.DefaultLongTermMemoryManager
+import com.agentx.core.memory.MemoryEntry
+import com.agentx.data.repository.ModelRepository
+import com.agentx.domain.models.GGUFModel
+import kotlinx.coroutines.flow.first
+
 data class GatewayServerInfo(
     val status: String = "online",
     val servingMode: String = "LOCAL_MODEL",
@@ -57,7 +70,14 @@ data class SettingsUiState(
     val isFetchingModels: Boolean = false,
     val availableGatewayModels: List<String> = emptyList(),
     val serverDetails: GatewayServerInfo? = null,
-    val discoveredHubs: List<DiscoveredGatewayHub> = emptyList()
+    val discoveredHubs: List<DiscoveredGatewayHub> = emptyList(),
+    val activeModel: GGUFModel? = null,
+    val allModels: List<GGUFModel> = emptyList(),
+    val modelStatus: ModelStatus = ModelStatus(ModelLifecycleState.NOT_LOADED),
+    val multimodalQuality: String = "BALANCED",
+    val multimodalInputEnabled: Boolean = true,
+    val mcpServers: List<McpServerDescriptor> = emptyList(),
+    val storedMemories: List<MemoryEntry> = emptyList()
 )
 
 class SettingsViewModel(
@@ -66,13 +86,21 @@ class SettingsViewModel(
     private val executionQueue: ExecutionQueue? = null,
     private val hybridInferenceEngine: HybridInferenceEngine? = null,
     private val nsdDiscovery: GatewayNsdDiscovery? = null,
-    private val preferencesManager: com.agentx.data.local.SettingsPreferencesManager? = null
+    private val preferencesManager: com.agentx.data.local.SettingsPreferencesManager? = null,
+    private val modelRepository: ModelRepository? = null,
+    private val inferenceEngine: InferenceEngine? = null,
+    private val memoryManager: DefaultLongTermMemoryManager? = null,
+    private val mcpRegistry: McpServerRegistry? = null
 ) : ViewModel() {
 
     private val _darkTheme = MutableStateFlow(preferencesManager?.loadDarkTheme() ?: true)
     private val _hapticFeedback = MutableStateFlow(preferencesManager?.loadHapticFeedback() ?: true)
     private val _threads = MutableStateFlow(preferencesManager?.loadThreads() ?: 4)
     private val _mlock = MutableStateFlow(preferencesManager?.loadMlock() ?: false)
+    private val _multimodalQuality = MutableStateFlow(preferencesManager?.loadMultimodalQuality() ?: "BALANCED")
+    private val _multimodalInputEnabled = MutableStateFlow(preferencesManager?.loadMultimodalInputEnabled() ?: true)
+    private val _modelStatus = MutableStateFlow(inferenceEngine?.getModelStatus() ?: ModelStatus(ModelLifecycleState.NOT_LOADED))
+    private val _storedMemories = MutableStateFlow<List<MemoryEntry>>(emptyList())
     private val _cloudConfig = MutableStateFlow(
         preferencesManager?.loadCloudConfig() ?: hybridInferenceEngine?.cloudEngine?.config ?: CloudModelConfig()
     )
@@ -133,18 +161,68 @@ class SettingsViewModel(
     private val executionFlow: StateFlow<ExecutionState> =
         executionQueue?.state ?: MutableStateFlow(ExecutionState())
 
-    val uiState: StateFlow<SettingsUiState> = combine(
+    private data class CoreSettingsData(
+        val tools: List<Tool>,
+        val permissions: List<ToolPermission>,
+        val executions: List<ExecutionLog>,
+        val activeExecutionState: ExecutionState?
+    )
+
+    private val coreDataFlow = combine(
         toolRepository.getAllTools(),
         toolRepository.getAllPermissions(),
         executionRepository.getRecentExecutions(),
-        combine(preferencesFlow, gatewayFlow) { prefs, gw -> Pair(prefs, gw) },
         executionFlow
-    ) { tools, permissions, executions, (prefs, gw), execState ->
-        SettingsUiState(
+    ) { tools, permissions, executions, execState ->
+        CoreSettingsData(
             tools = tools,
             permissions = permissions,
             executions = executions,
-            activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null,
+            activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null
+        )
+    }
+
+    private data class RuntimeSubsystemState(
+        val activeModel: GGUFModel?,
+        val allModels: List<GGUFModel>,
+        val modelStatus: ModelStatus,
+        val multimodalQuality: String,
+        val multimodalInputEnabled: Boolean,
+        val mcpServers: List<McpServerDescriptor>,
+        val memories: List<MemoryEntry>
+    )
+
+    private val runtimeSubsystemFlow = combine(
+        modelRepository?.getActiveModel() ?: kotlinx.coroutines.flow.flowOf(null),
+        modelRepository?.getAllModels() ?: kotlinx.coroutines.flow.flowOf(emptyList()),
+        _modelStatus,
+        _multimodalQuality,
+        _multimodalInputEnabled
+    ) { activeModel, allModels, modelStatus, quality, inputEnabled ->
+        val mcpList = mcpRegistry?.serverDescriptors?.value ?: emptyList()
+        val memList = _storedMemories.value
+        RuntimeSubsystemState(
+            activeModel = activeModel,
+            allModels = allModels,
+            modelStatus = modelStatus,
+            multimodalQuality = quality,
+            multimodalInputEnabled = inputEnabled,
+            mcpServers = mcpList,
+            memories = memList
+        )
+    }
+
+    val uiState: StateFlow<SettingsUiState> = combine(
+        coreDataFlow,
+        preferencesFlow,
+        gatewayFlow,
+        runtimeSubsystemFlow
+    ) { core, prefs, gw, runtime ->
+        SettingsUiState(
+            tools = core.tools,
+            permissions = core.permissions,
+            executions = core.executions,
+            activeExecutionState = core.activeExecutionState,
             darkTheme = prefs.darkTheme,
             hapticFeedback = prefs.hapticFeedback,
             maxCpuThreads = prefs.threads,
@@ -155,7 +233,14 @@ class SettingsViewModel(
             isFetchingModels = gw.isFetching,
             availableGatewayModels = gw.models,
             serverDetails = gw.serverInfo,
-            discoveredHubs = gw.discoveredHubs
+            discoveredHubs = gw.discoveredHubs,
+            activeModel = runtime.activeModel,
+            allModels = runtime.allModels,
+            modelStatus = runtime.modelStatus,
+            multimodalQuality = runtime.multimodalQuality,
+            multimodalInputEnabled = runtime.multimodalInputEnabled,
+            mcpServers = runtime.mcpServers,
+            storedMemories = runtime.memories
         )
     }.stateIn(
         scope = viewModelScope,
@@ -163,9 +248,80 @@ class SettingsViewModel(
         initialValue = SettingsUiState()
     )
 
-
     init {
         nsdDiscovery?.startDiscovery()
+        refreshMemories()
+    }
+
+    fun refreshMemories() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val list = memoryManager?.getAll() ?: emptyList()
+            _storedMemories.value = list
+        }
+    }
+
+    fun clearAllMemories() {
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryManager?.clearAll()
+            _storedMemories.value = emptyList()
+        }
+    }
+
+    fun deleteMemory(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryManager?.delete(id)
+            refreshMemories()
+        }
+    }
+
+    fun setMultimodalQuality(quality: String) {
+        _multimodalQuality.value = quality
+        preferencesManager?.saveMultimodalQuality(quality)
+    }
+
+    fun setMultimodalInputEnabled(enabled: Boolean) {
+        _multimodalInputEnabled.value = enabled
+        preferencesManager?.saveMultimodalInputEnabled(enabled)
+    }
+
+    fun loadActiveModelIntoRam() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val model = modelRepository?.getActiveModel()?.first() ?: return@launch
+            try {
+                inferenceEngine?.loadModel(
+                    ModelConfig(
+                        modelId = model.id,
+                        modelPath = model.filePath,
+                        contextLength = model.contextLength,
+                        threads = _threads.value
+                    )
+                )
+            } catch (_: Exception) {}
+            _modelStatus.value = inferenceEngine?.getModelStatus() ?: ModelStatus(ModelLifecycleState.LOADED)
+        }
+    }
+
+    fun unloadActiveModelFromRam() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                inferenceEngine?.unloadModel()
+            } catch (_: Exception) {}
+            _modelStatus.value = inferenceEngine?.getModelStatus() ?: ModelStatus(ModelLifecycleState.NOT_LOADED)
+        }
+    }
+
+    fun switchActiveModel(modelId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            modelRepository?.setActiveModel(modelId)
+            loadActiveModelIntoRam()
+        }
+    }
+
+    fun registerRemoteMcpServer(serverName: String, endpointUrl: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val client = HttpMcpClient(serverName = serverName, endpointUrl = endpointUrl)
+            mcpRegistry?.registerServer(client, endpointUrl = endpointUrl, isLocal = false)
+        }
     }
 
     fun startLanDiscovery() {

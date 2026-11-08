@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -479,15 +480,6 @@ fun ChatScreen(
                 Column(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Active Model Status Banner
-                    ActiveModelStatusBanner(
-                        modelStatus = state.modelStatus,
-                        activeModel = state.activeModel,
-                        onSwitchModelClick = { showModelSwitcherSheet = true },
-                        onLoadClick = { viewModel.loadActiveModelIntoRam() },
-                        onUnloadClick = { viewModel.unloadActiveModelFromRam() }
-                    )
-
                     if (state.messages.isEmpty()) {
                         EmptyChatPlaceholder(
                             activeModel = state.activeModel,
@@ -1018,188 +1010,60 @@ private fun EmptyChatPlaceholder(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(20.dp))
         Text(
-            "AgentX Multimodal AI",
+            "AgentX Intelligence",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.ExtraBold,
             color = TextPrimary
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
-            if (inferenceMode == InferenceMode.CLOUD_ONLY) "Cloud Generative AI • Google Gemini 3.8 Flash Vision"
-            else if (inferenceMode == InferenceMode.HYBRID_AUTO) "Hybrid Multimodal Reasoning • Cloud Vision + Offline GGUF"
-            else "100% Offline On-Device LLM Inference • Upstream llama.cpp",
-            style = MaterialTheme.typography.bodyMedium,
+            "What can I help you explore today?",
+            style = MaterialTheme.typography.bodyLarge,
             color = TextSecondary
         )
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-        // Hardware & Architecture Diagnostics Card
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = SurfaceGlassElevated,
-            border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
-            modifier = Modifier.fillMaxWidth(0.92f)
+        // Open Spacious Quick Prompt Suggestions
+        Column(
+            modifier = Modifier.fillMaxWidth(0.92f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Engine Status Pill
-                val isLoaded = modelStatus.state == ModelLifecycleState.LOADED
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isLoaded) CyberMint.copy(alpha = 0.15f) else AlertRose.copy(alpha = 0.15f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (isLoaded) CyberMint else AlertRose)
-                    )
-                    Text(
-                        text = if (isLoaded) "Native Engine Online & Ready" else "Model Not Staged In RAM",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isLoaded) CyberMint else AlertRose
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = if (inferenceMode == InferenceMode.CLOUD_ONLY) "Google Gemini 3.8 Flash" else (activeModel?.name ?: "No model selected"),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (activeModel != null && inferenceMode == InferenceMode.LOCAL_ONLY) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} Tokens Context",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ElectricCyan
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Hardware Topology Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = SpaceDark,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("MULTIMODAL", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
-                            Text("Vision & Photos", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ElectricCyan)
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = SpaceDark,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("SOVEREIGNTY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
-                            Text("Air-Gapped Ready", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CyberMint)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Multimodal Action Shortcuts
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(top = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Surface(
-                onClick = onPickImage,
-                shape = RoundedCornerShape(12.dp),
-                color = SurfaceGlass,
-                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.45f)),
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Default.Image, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Attach Image", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                }
-            }
-            Surface(
-                onClick = onCaptureCamera,
-                shape = RoundedCornerShape(12.dp),
-                color = SurfaceGlass,
-                border = androidx.compose.foundation.BorderStroke(1.dp, CyberMint.copy(alpha = 0.45f)),
-                modifier = Modifier.weight(1f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, tint = CyberMint, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Snap Camera", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                }
-            }
-        }
-
-        // Generative AI Quick Prompts
-        Row(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val quickPrompts = listOf(
-                "🔍 Explain image" to "Analyze and describe key insights from this visual data in detail.",
-                "📝 Extract text" to "Extract and transcribe all text, labels, and numbers from this document.",
-                "💻 Code solution" to "Write clean, production-grade code that implements this feature or design."
+            val quickSuggestions = listOf(
+                "💡 Brainstorm creative ideas" to "Brainstorm 5 innovative and high-impact ideas for my project.",
+                "💻 Write & analyze code" to "Write a clean, performant, and production-ready solution with clear explanations.",
+                "📊 Analyze documents & insights" to "Analyze the key insights, findings, and actionable takeaways from this data.",
+                "🔍 Deep reasoning & exploration" to "Walk me step-by-step through the core principles and architecture of this topic."
             )
-            quickPrompts.forEach { (label, prompt) ->
+            quickSuggestions.forEach { (label, prompt) ->
                 Surface(
                     onClick = { onQuickPrompt(prompt) },
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF0E2A47),
-                    modifier = Modifier.weight(1f)
+                    shape = RoundedCornerShape(14.dp),
+                    color = SurfaceGlassElevated,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder)
                 ) {
-                    Text(
-                        text = label,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ElectricCyan,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = ElectricCyan.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

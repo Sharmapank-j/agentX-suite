@@ -94,6 +94,12 @@ class AgentXApplication : Application() {
     lateinit var clinicalSupervisor: ClinicalSupervisor
         private set
 
+    lateinit var memoryManager: com.agentx.core.memory.DefaultLongTermMemoryManager
+        private set
+
+    lateinit var mcpServerRegistry: com.agentx.core.agent.tools.mcp.McpServerRegistry
+        private set
+
     override fun onCreate() {
         super.onCreate()
 
@@ -162,6 +168,22 @@ class AgentXApplication : Application() {
             executionRepository = executionRepository,
             executionQueue = executionQueue
         )
+
+        // ── Upgraded Attention, Memory & Model Context Protocol (MCP) ───────
+        memoryManager = com.agentx.core.memory.DefaultLongTermMemoryManager()
+        val coreToolRegistry = com.agentx.core.agent.tools.ToolRegistry()
+        val localMcpClient = com.agentx.core.agent.tools.LocalMcpClient(
+            serverName = "AgentX-Embedded-MCP",
+            initialTools = listOf(
+                com.agentx.core.agent.tools.CalculatorTool(),
+                com.agentx.core.agent.tools.SystemTimeTool(),
+                com.agentx.core.agent.tools.MemoryStatusTool()
+            )
+        )
+        mcpServerRegistry = com.agentx.core.agent.tools.mcp.McpServerRegistry(toolRegistry = coreToolRegistry)
+        CoroutineScope(Dispatchers.IO).launch {
+            mcpServerRegistry.registerServer(localMcpClient)
+        }
 
         // Automatically scan and register on-device storage models on startup
         CoroutineScope(Dispatchers.IO).launch {

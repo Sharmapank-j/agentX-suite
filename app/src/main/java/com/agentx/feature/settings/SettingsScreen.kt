@@ -45,6 +45,19 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.agentx.core.inference.ModelLifecycleState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -178,6 +191,241 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
+                }
+            }
+
+            // ── Active Model Engine & Runtime Load Panel ───────────────────
+            Text("Active Model Engine & Hardware Runtime", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            val isModelLoaded = state.modelStatus.state == ModelLifecycleState.LOADED || state.modelStatus.state == ModelLifecycleState.GENERATING
+            val memoryMb = state.modelStatus.memoryUsageBytes / (1024 * 1024)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, if (isModelLoaded) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isModelLoaded) Color(0xFF00E676) else Color(0xFFFF9800))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                if (isModelLoaded) "Engine Online in RAM" else "Model Staged (Not in RAM)",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isModelLoaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                if (isModelLoaded) "$memoryMb MB RAM" else "0 MB RAM",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = state.activeModel?.name ?: "No Local GGUF Model Selected",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    state.activeModel?.let { model ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${model.architecture} • ${model.quantization} • ${model.contextLength} Tokens Context • ${model.threads} Threads",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Load / Unload Controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (isModelLoaded) {
+                            OutlinedButton(
+                                onClick = { viewModel.unloadActiveModelFromRam() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Unload from RAM", color = MaterialTheme.colorScheme.error)
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.loadActiveModelIntoRam() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Load into RAM")
+                            }
+                        }
+
+                        if (state.allModels.size > 1) {
+                            var showModelDropdown by remember { mutableStateOf(false) }
+                            Box {
+                                OutlinedButton(onClick = { showModelDropdown = true }) {
+                                    Text("Switch ▾")
+                                }
+                                DropdownMenu(
+                                    expanded = showModelDropdown,
+                                    onDismissRequest = { showModelDropdown = false }
+                                ) {
+                                    state.allModels.forEach { model ->
+                                        DropdownMenuItem(
+                                            text = { Text(model.name) },
+                                            onClick = {
+                                                viewModel.switchActiveModel(model.id)
+                                                showModelDropdown = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Hardware Telemetry & Safety Diagnostics ──────────────────────
+            Text("Hardware Telemetry & Safety Diagnostics", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Thermostat, contentDescription = null, tint = Color(0xFF00E676))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Thermal State", fontWeight = FontWeight.SemiBold)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                "Nominal • No Throttling",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("RAM Memory Headroom", fontWeight = FontWeight.SemiBold)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                "Sufficient • Safe Headroom",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, contentDescription = null, tint = Color(0xFF00E676))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Air-Gapped Isolation", fontWeight = FontWeight.SemiBold)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF00E676).copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                "100% Offline Ready",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF00E676),
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Multimodal Input & Vision AI Configuration ───────────────────
+            Text("Multimodal Input & Vision AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Multimodal Attachments", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Enable camera and image picker in chat input bar",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        Switch(
+                            checked = state.multimodalInputEnabled,
+                            onCheckedChange = { viewModel.setMultimodalInputEnabled(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Image Downsampling & Vision Resolution", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("HIGH" to "1024px", "BALANCED" to "512px", "FAST" to "256px").forEach { (qual, desc) ->
+                            FilterChip(
+                                selected = state.multimodalQuality == qual,
+                                onClick = { viewModel.setMultimodalQuality(qual) },
+                                label = { Text("$qual ($desc)") }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -647,6 +895,204 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+
+            // ── Model Context Protocol (MCP) Subsystem ───────────────────────
+            Text("Model Context Protocol (MCP)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            var showAddMcpDialog by remember { mutableStateOf(false) }
+            var newMcpName by remember { mutableStateOf("") }
+            var newMcpUrl by remember { mutableStateOf("") }
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Hub, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Connected MCP Servers", fontWeight = FontWeight.SemiBold)
+                                Text("Standard JSON-RPC 2.0 tool endpoints", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        IconButton(onClick = { showAddMcpDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Add MCP Server")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Embedded Standard Server
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("AgentX-Embedded-MCP", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                Text("In-Process • Calculator, System Time, System Memory", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF00E676).copy(alpha = 0.2f)
+                            ) {
+                                Text("Active", fontSize = 10.sp, color = Color(0xFF00E676), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                    }
+
+                    state.mcpServers.filter { !it.isLocal }.forEach { srv ->
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(srv.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                    Text(srv.endpointUrl, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = if (srv.isConnected) Color(0xFF00E676).copy(alpha = 0.2f) else MaterialTheme.colorScheme.errorContainer
+                                ) {
+                                    Text(
+                                        if (srv.isConnected) "Connected (${srv.toolCount} tools)" else "Offline",
+                                        fontSize = 10.sp,
+                                        color = if (srv.isConnected) Color(0xFF00E676) else MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Context Attention & Long-Term Memory ────────────────────────
+            Text("Context Attention & Long-Term Memory", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Bookmark, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Durable Profile & Episodic Facts", fontWeight = FontWeight.SemiBold)
+                                Text("${state.storedMemories.size} facts currently remembered", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        if (state.storedMemories.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearAllMemories() }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Clear Memories", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+
+                    if (state.storedMemories.isEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "No facts stored yet. AgentX automatically extracts your preferences, goals, and technical focus as you chat.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        state.storedMemories.take(6).forEach { mem ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        mem.content,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.deleteMemory(mem.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (showAddMcpDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAddMcpDialog = false },
+                    title = { Text("Add External MCP Server") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Connect a local or remote JSON-RPC 2.0 Model Context Protocol server:", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(
+                                value = newMcpName,
+                                onValueChange = { newMcpName = it },
+                                label = { Text("Server Name") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            OutlinedTextField(
+                                value = newMcpUrl,
+                                onValueChange = { newMcpUrl = it },
+                                label = { Text("Endpoint URL") },
+                                placeholder = { Text("http://192.168.1.100:3000/mcp") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (newMcpName.isNotBlank() && newMcpUrl.isNotBlank()) {
+                                    viewModel.registerRemoteMcpServer(newMcpName.trim(), newMcpUrl.trim())
+                                    newMcpName = ""
+                                    newMcpUrl = ""
+                                    showAddMcpDialog = false
+                                }
+                            }
+                        ) {
+                            Text("Connect")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showAddMcpDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             // ── Security & Navigation ───────────────────────────────────────────

@@ -65,6 +65,7 @@ interface LongTermMemoryStore {
     suspend fun findByKey(key: String, type: MemoryType): MemoryEntry?
     suspend fun search(query: MemoryQuery): List<MemoryEntry>
     suspend fun listByType(type: MemoryType): List<MemoryEntry>
+    suspend fun getAll(): List<MemoryEntry>
     suspend fun delete(id: String): Boolean
     suspend fun deleteByType(type: MemoryType): Int
     suspend fun clearAll(): Int
@@ -150,6 +151,10 @@ class DefaultLongTermMemoryManager(
 
     override suspend fun listByType(type: MemoryType): List<MemoryEntry> = synchronized(lock) {
         memoryMap.values.filter { it.type == type && !it.isExpired }
+    }
+
+    override suspend fun getAll(): List<MemoryEntry> = synchronized(lock) {
+        memoryMap.values.filter { !it.isExpired }.sortedByDescending { it.importance }
     }
 
     override suspend fun delete(id: String): Boolean = synchronized(lock) {
@@ -267,7 +272,43 @@ class DefaultLongTermMemoryManager(
             )
         }
 
+        val goalRegex = Regex("(?i)my goal is (?:to\\s+)?([a-zA-Z0-9\\s]+?)(?:\\.|,|!|$)")
+        goalRegex.find(text)?.let {
+            val goal = it.groupValues[1].trim()
+            facts.add(
+                MemoryEntry(
+                    type = MemoryType.PROFILE,
+                    key = "goal_${goal.take(15).replace(" ", "_")}",
+                    content = "User goal: $goal.",
+                    tags = listOf("goal"),
+                    importance = 0.85f
+                )
+            )
+        }
+
+        val techRegex = Regex("(?i)i (?:code|program|develop|write)\\s+(?:in|using)\\s+([a-zA-Z0-9\\s+#]+?)(?:\\.|,|!|$)")
+        techRegex.find(text)?.let {
+            val tech = it.groupValues[1].trim()
+            facts.add(
+                MemoryEntry(
+                    type = MemoryType.PROFILE,
+                    key = "tech_stack_${tech.take(15).replace(" ", "_")}",
+                    content = "User development stack: $tech.",
+                    tags = listOf("technology", "stack"),
+                    importance = 0.8f
+                )
+            )
+        }
+
         return facts
+    }
+
+    /**
+     * Helper to render memories formatted for inclusion in the attention prompt context.
+     */
+    fun formatForPrompt(memories: List<MemoryEntry>): String {
+        if (memories.isEmpty()) return ""
+        return memories.joinToString("\n") { "- ${it.content}" }
     }
 
     private fun computeRelevanceScore(entry: MemoryEntry, queryTokens: List<String>, nowMs: Long): Float {

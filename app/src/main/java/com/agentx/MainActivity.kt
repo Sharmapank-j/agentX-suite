@@ -31,7 +31,8 @@ class MainActivity : ComponentActivity() {
                         app.modelRepository,
                         app.inferenceEngine,
                         app.clinicalSupervisor,
-                        app.executionQueue
+                        app.executionQueue,
+                        app.memoryManager
                     ) as T
                 }
             }
@@ -79,7 +80,11 @@ class MainActivity : ComponentActivity() {
                         app.executionRepository,
                         app.executionQueue,
                         app.hybridInferenceEngine,
-                        preferencesManager = app.preferencesManager
+                        preferencesManager = app.preferencesManager,
+                        modelRepository = app.modelRepository,
+                        inferenceEngine = app.inferenceEngine,
+                        memoryManager = app.memoryManager,
+                        mcpRegistry = app.mcpServerRegistry
                     ) as T
                 }
             }

@@ -29,6 +29,7 @@ import com.agentx.core.inference.CloudProvider
 import com.agentx.core.inference.HybridInferenceEngine
 import com.agentx.core.inference.InferenceMode
 import com.agentx.core.multimodal.ImageUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -75,7 +76,8 @@ class ChatViewModel(
     private val modelRepository: ModelRepository,
     private val inferenceEngine: InferenceEngine,
     private val clinicalSupervisor: ClinicalSupervisor? = null,
-    private val executionQueue: ExecutionQueue? = null
+    private val executionQueue: ExecutionQueue? = null,
+    private val memoryManager: com.agentx.core.memory.DefaultLongTermMemoryManager? = null
 ) : ViewModel() {
 
     private val _currentConversationId = MutableStateFlow<String?>(null)
@@ -604,7 +606,7 @@ class ChatViewModel(
     ) {
         var assistantMsg = initialMsg
 
-        // Context Budgeting & Sliding Window Construction: only feed completed non-empty messages
+        // Context Attention & Memory Management: Multi-layer attention allocation
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
             .filter { it.id != assistantMsg.id && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
 
@@ -614,15 +616,33 @@ class ChatViewModel(
         val effectiveSystemPrompt = extendedConfig.systemPrompt ?: agent?.systemPrompt
         val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 512)
 
-        val contextualPrompt = ContextManager.buildPromptWithContext(
-            systemPrompt = null,
-            history = historyMessages,
+        val contextMessages = historyMessages.map { msg ->
+            com.agentx.core.context.ContextMessage(
+                id = msg.id,
+                role = if (msg.role == MessageRole.USER) "user" else "assistant",
+                senderName = msg.senderName,
+                content = msg.content
+            )
+        }
+
+        val relevantMemories = try {
+            memoryManager?.search(com.agentx.core.memory.MemoryQuery(query = userPrompt, limit = 3)) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val optimizedContext = com.agentx.core.context.ContextAttentionManager.buildOptimizedPrompt(
+            systemPrompt = effectiveSystemPrompt,
+            userProfileMemories = relevantMemories,
+            history = contextMessages,
             currentPrompt = userPrompt,
-            budget = ContextBudget(
+            budget = com.agentx.core.context.AttentionBudget(
                 maxContextTokens = maxContext,
-                maxOutputTokens = maxOutputTokens
+                maxOutputTokens = maxOutputTokens,
+                safetyMarginTokens = 48
             )
         )
+        val contextualPrompt = optimizedContext.fullPrompt
 
         // Multimodal Image Base64 Encoding
         var imageBase64: String? = null
@@ -711,6 +731,16 @@ class ChatViewModel(
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false
                         _modelStatus.value = inferenceEngine.getModelStatus()
+
+                        // Asynchronously extract and store learned facts in long-term memory
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val extractedFacts = memoryManager?.extractFactsFromUserStatement(userPrompt) ?: emptyList()
+                                for (fact in extractedFacts) {
+                                    memoryManager?.store(fact)
+                                }
+                            } catch (_: Exception) {}
+                        }
                     }
                     is GenerationEvent.Error -> {
                         _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
@@ -735,6 +765,16 @@ class ChatViewModel(
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false
                         _modelStatus.value = inferenceEngine.getModelStatus()
+
+                        // Asynchronously extract and store learned facts in long-term memory
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                val extractedFacts = memoryManager?.extractFactsFromUserStatement(userPrompt) ?: emptyList()
+                                for (fact in extractedFacts) {
+                                    memoryManager?.store(fact)
+                                }
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }

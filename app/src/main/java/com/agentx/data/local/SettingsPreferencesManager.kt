@@ -31,6 +31,8 @@ class SettingsPreferencesManager(context: Context) {
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
         private const val KEY_THREADS = "cpu_threads"
         private const val KEY_MLOCK = "enable_mlock"
+        private const val KEY_MULTIMODAL_QUALITY = "multimodal_quality"
+        private const val KEY_MULTIMODAL_ENABLED = "multimodal_enabled"
     }
 
     fun loadCloudConfig(): CloudModelConfig {
@@ -120,4 +122,10 @@ class SettingsPreferencesManager(context: Context) {
 
     fun loadMlock(): Boolean = prefs.getBoolean(KEY_MLOCK, false)
     fun saveMlock(enabled: Boolean) = prefs.edit().putBoolean(KEY_MLOCK, enabled).apply()
+
+    fun loadMultimodalQuality(): String = prefs.getString(KEY_MULTIMODAL_QUALITY, "BALANCED") ?: "BALANCED"
+    fun saveMultimodalQuality(quality: String) = prefs.edit().putString(KEY_MULTIMODAL_QUALITY, quality).apply()
+
+    fun loadMultimodalInputEnabled(): Boolean = prefs.getBoolean(KEY_MULTIMODAL_ENABLED, true)
+    fun saveMultimodalInputEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_MULTIMODAL_ENABLED, enabled).apply()
 }

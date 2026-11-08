@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -426,19 +427,11 @@ fun ChatScreen(
                 Column(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Active Model Status Banner
-                    ActiveModelStatusBanner(
-                        modelStatus = state.modelStatus,
-                        activeModel = state.activeModel,
-                        onSwitchModelClick = { showModelSwitcherSheet = true },
-                        onLoadClick = { viewModel.loadActiveModelIntoRam() },
-                        onUnloadClick = { viewModel.unloadActiveModelFromRam() }
-                    )
-
                     if (state.messages.isEmpty()) {
                         EmptyMedicalChatPlaceholder(
                             activeModel = state.activeModel,
                             modelStatus = state.modelStatus,
+                            onQuickPrompt = { prompt -> viewModel.onInputTextChanged(prompt) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
@@ -1053,6 +1046,7 @@ fun ChatInputBar(
 private fun EmptyMedicalChatPlaceholder(
     activeModel: com.agentx.medical.domain.models.GGUFModel?,
     modelStatus: com.agentx.medical.core.inference.ModelStatus,
+    onQuickPrompt: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "medicalPulse")
@@ -1111,133 +1105,52 @@ private fun EmptyMedicalChatPlaceholder(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            "Evidence-Based Clinical Decision Support • 100% Offline",
+            "Evidence-Based Clinical Decision Support",
             style = MaterialTheme.typography.bodyMedium,
             color = ClinicalTextSecondary
         )
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
-        // Clinical Notice Banner
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xFF042F2E).copy(alpha = 0.7f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, ClinicalTealBright.copy(alpha = 0.4f)),
-            modifier = Modifier.fillMaxWidth(0.92f)
+        // Open Spacious Clinical Suggestion Cards
+        Column(
+            modifier = Modifier.fillMaxWidth(0.92f),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("⚕️", fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Clinical Notice: For education, research, and assistive reasoning only. Non-diagnostic. Verify all outputs with licensed physician.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClinicalTealBright,
-                    lineHeight = 16.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // Status Card
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MedicalSurfaceElevated,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
-            modifier = Modifier.fillMaxWidth(0.92f)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val isLoaded = modelStatus.state == com.agentx.medical.core.inference.ModelLifecycleState.LOADED
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isLoaded) BioEmerald.copy(alpha = 0.15f) else ClinicalAlert.copy(alpha = 0.15f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+            val suggestions = listOf(
+                "📋 Review Clinical Guidelines" to "Summarize the latest evidence-based clinical guidelines for managing this condition.",
+                "💊 Check Drug Interactions" to "Analyze potential pharmacokinetic and pharmacodynamic interactions and contraindications.",
+                "🔬 Differential Diagnosis Reasoning" to "Provide structured differential diagnoses considering patient age and symptoms.",
+                "🩺 Laboratory & Biomarker Review" to "Interpret these lab values, abnormal flags, and relevant diagnostic indicators."
+            )
+            suggestions.forEach { (label, prompt) ->
+                Surface(
+                    onClick = { onQuickPrompt(prompt) },
+                    shape = RoundedCornerShape(14.dp),
+                    color = MedicalSurfaceElevated,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(if (isLoaded) BioEmerald else ClinicalAlert)
-                    )
-                    Text(
-                        text = if (isLoaded) "Biomedical Engine Ready" else "Model Not Staged In RAM",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isLoaded) BioEmerald else ClinicalAlert
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = activeModel?.name ?: "No model selected",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = ClinicalTextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (activeModel != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} ctx",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ClinicalTealBright
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Clinical Guarantee Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MedicalSurface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
-                        modifier = Modifier.weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("HIPAA / GDPR", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ClinicalTextMuted)
-                            Text("100% On-Device", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = BioEmerald)
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MedicalSurface,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("AIR-GAPPED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = ClinicalTextMuted)
-                            Text("Zero Hospital Leak", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = ClinicalTealBright)
-                        }
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ClinicalTextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = ClinicalTealBright.copy(alpha = 0.7f),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = "Enter clinical question or case notes below to begin.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ClinicalTextSecondary
-                )
             }
         }
     }
