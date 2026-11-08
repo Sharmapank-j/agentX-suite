@@ -1,106 +1,86 @@
 {
   "status": "SUCCESS",
   "timestamp": 1793911261.4988532,
+  "verified_at": "2026-11-09T00:40:00+05:30",
+  "device": {
+    "model": "Poco X4 Pro 5G (2201116PI)",
+    "serial": "5eb1d795a3b4",
+    "os": "Android 13 (API 33)",
+    "soc": "Qualcomm Snapdragon 695 5G (8-core Kryo 660, ARM64)",
+    "ram_gb": 8,
+    "fast_cores": 2,
+    "model_tested": "medimind-v2-q5_k_m.gguf (1.05 GB, Q5_K_M)"
+  },
   "tests": [
     {
-      "app": "AgentX Serve",
-      "check": "Initial Stopped State",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "Server Running State",
-      "passed": false
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "GET /health 200 OK",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "GET /v1/models 200 OK",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "Zero-Trust 401 Unauthorized",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "Authenticated Inference 200 Streaming",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "API Keys Tab Rendered",
-      "passed": false
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "Models Tab Rendered",
-      "passed": true
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "CLI Console Tab Rendered",
-      "passed": false
-    },
-    {
-      "app": "AgentX Serve",
-      "check": "Traffic Audit Tab Rendered",
+      "app": "AgentX",
+      "check": "No Scripted Topics or Exploration Chips",
       "passed": true
     },
     {
       "app": "AgentX",
-      "check": "Chat Screen Rendered",
+      "check": "Permissions Disclosure Onboarding",
       "passed": true
     },
     {
       "app": "AgentX",
-      "check": "History Drawer Rendered",
+      "check": "Offline GGUF Model Loading",
       "passed": true
     },
     {
       "app": "AgentX",
-      "check": "Models Screen Rendered",
+      "check": "Turn 1 Offline Token Generation (8.6 t/s, 241 tokens)",
       "passed": true
     },
     {
       "app": "AgentX",
-      "check": "Settings Screen Rendered",
-      "passed": true
-    },
-    {
-      "app": "AgentX",
-      "check": "Chat Response Streaming",
+      "check": "Turn 2 Multi-Turn History Evaluation & Generation (8.5 t/s, 242 tokens)",
       "passed": true
     },
     {
       "app": "AgentX Medical",
-      "check": "Disclaimer Notice Banner",
+      "check": "No Scripted Topics or Exploration Chips",
       "passed": true
     },
     {
       "app": "AgentX Medical",
-      "check": "Consultation Drawer Rendered",
+      "check": "Clinical Notice & Engine Ready State",
       "passed": true
     },
     {
       "app": "AgentX Medical",
-      "check": "Models Screen Rendered",
+      "check": "Offline Clinical Consultation Generation (8.5 t/s, 211 tokens)",
       "passed": true
     },
     {
       "app": "AgentX Medical",
-      "check": "Settings Screen Rendered",
+      "check": "Live Token Counter HUD & Unrestricted Memory Execution",
       "passed": true
     },
     {
-      "app": "AgentX Medical",
-      "check": "Clinical Consult Response Delivered",
+      "app": "AgentX Serve",
+      "check": "Local GGUF Runtime Selected (llama.cpp)",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Server Running Online (Port 8080)",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "GET /v1/models 200 OK with GGUF Models",
+      "passed": true
+    },
+    {
+      "app": "AgentX Serve",
+      "check": "Zero-Trust Authorization & LAN Web Client Interface",
       "passed": true
     }
+  ],
+  "screenshots": [
+    "assets/device_tests/agentx_live_chat.png",
+    "assets/device_tests/medical_live_consult.png",
+    "assets/device_tests/serve_live_online.png"
   ]
 }

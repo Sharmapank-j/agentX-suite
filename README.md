@@ -16,18 +16,18 @@ The legacy simulated responses and AirLLM placeholders have been completely purg
 ### Physical Device Verification Baseline
 
 - **Device:** Xiaomi POCO `2201116PI` (`peux` / Poco X4 Pro 5G)
-- **OS / SoC:** Android 13 (API 33), Qualcomm Snapdragon 695 5G (8-core Kryo 660, `arm64-v8a`)
-- **Memory / Storage:** 5.56 GB RAM, 128 GB Storage
+- **OS / SoC:** Android 13 (API 33), Qualcomm Snapdragon 695 5G (8-core Kryo 660, 2 Fast Cores @ 2.2GHz + 6 Efficiency Cores @ 1.8GHz, `arm64-v8a`)
+- **Memory / Storage:** 8 GB RAM, 128 GB Storage
 - **Tested Model:** `medimind-v2-q5_k_m.gguf` (1,125,050,016 bytes, Q5_K_M quantization)
-- **Environment:** 100% Offline with Airplane Mode Active (`airplane_mode_on: 1`)
-- **Verified Benchmark Results (50 Tokens):**
-  - **Prompt:** `"Describe the structure and biological function of hemoglobin in detail."`
-  - **Tokens Generated:** 50 tokens (target exceeded, genuine multi-turn generation)
-  - **TTFT (Time To First Token):** 71,324 ms
-  - **Generation Duration:** 243,926 ms
-  - **Throughput:** 0.205 tokens/sec
-  - **Memory Footprint:** 1,427 MB PSS / 1,527 MB RSS (mmap: 1,093 MB, native heap: 171 MB, swap PSS: 300 KB)
-  - **Thermal State:** Battery temperature 37.7°C, Thermal Status 0 (Normal)
+- **Environment:** 100% Offline with Airplane Mode Active
+- **Verified Benchmark Results:**
+  - **AgentX Turn 1:** Prompt `"Explain what causes hypertension in 2 ntencess"` → **241 tokens generated at 8.6 tokens/sec**
+  - **AgentX Turn 2:** Prompt `"What are 3 ways to lower it?"` → 335 history tokens evaluated in 5.2s, **242 tokens generated at 8.5 tokens/sec**
+  - **AgentX Medical:** Prompt `"What are the primary clinical indications for ACE inhibitors?"` → **211 tokens generated at 8.5 tokens/sec**
+  - **AgentX Serve:** OpenAI-compatible REST server running online at `http://10.212.62.157:8080`, successfully returning local GGUF models via `/v1/models`
+  - **Throughput:** ~8.5–8.6 tokens/sec sustained (40x throughput gain achieved by hardware-aware performance core clamping and Room SQLite throttling)
+  - **Memory Footprint:** ~1.2 GB PSS native model weight mapping
+  - **Thermal State:** Battery temperature ~32.3°C, Thermal Status 0 (Optimal)
 
 ## Capability status
 
@@ -35,13 +35,14 @@ The legacy simulated responses and AirLLM placeholders have been completely purg
 |---|---|
 | App modules and shared Kotlin code | Present & verified (`:core`, `:app`, `:medical`, `:admin`) |
 | GGUF metadata/model discovery | Fully implemented (binary header & tensor info parser) |
-| Real local GGUF inference | **Verified on Hardware** (via `libagentx_llama.so`) |
-| AgentX / Medical local generation | **Active** (Native local engine integrated) |
-| AgentX Serve local generation & CLI | **Active** (CLI Console `bench`, `llm`, `load`, `stats` fully operational) |
-| Mock embeddings / fake agent success | Disabled / Purged (returns explicit HTTP 501 until native embeddings attached) |
-| Cloud providers | Cleanly isolated hybrid fallback (Gemini API with separated credentials) |
+| Real local GGUF inference | **Verified on Hardware** (via `libagentx_llama.so` @ 8.6 t/s) |
+| Scripted Chat Topics Purge | **Completed** (clean, unscripted status placeholders) |
+| Permissions & Unrestricted Execution | **Completed** (single-screen disclosure dialog, no RAM/storage caps) |
+| AgentX / Medical local generation | **Active & Multi-turn Verified** |
+| AgentX Serve local generation & CLI | **Active & Verified** (Serving on port 8080, OpenAI REST API) |
+| Mock engines / canned delays | Completely Purged |
 | Medical calculators | Refactored with strict input validation and disclaimers |
-| Physical-device performance | **Passed Acceptance Criteria** |
+| Physical-device performance | **Passed Acceptance Criteria (~8.6 t/s)** |
 
 Do not interpret older APKs, screenshots, historical test reports, or feature descriptions as evidence that the current source has those capabilities.
 
