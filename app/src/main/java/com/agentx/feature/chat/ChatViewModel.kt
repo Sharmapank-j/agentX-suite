@@ -24,6 +24,11 @@ import com.agentx.domain.models.GGUFModel
 import com.agentx.domain.models.Message
 import com.agentx.domain.models.MessageRole
 import com.agentx.domain.models.MessageStatus
+import com.agentx.core.inference.CloudModelConfig
+import com.agentx.core.inference.CloudProvider
+import com.agentx.core.inference.HybridInferenceEngine
+import com.agentx.core.inference.InferenceMode
+import com.agentx.core.multimodal.ImageUtils
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -57,7 +62,11 @@ data class ChatUiState(
     val allModels: List<GGUFModel> = emptyList(),
     val modelStatus: ModelStatus = ModelStatus(ModelLifecycleState.NOT_LOADED),
     val activeExecutionState: ExecutionState? = null,
-    val liveMetrics: LiveInferenceMetrics = LiveInferenceMetrics()
+    val liveMetrics: LiveInferenceMetrics = LiveInferenceMetrics(),
+    val attachedImagePath: String? = null,
+    val attachedImageMimeType: String? = null,
+    val inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
+    val cloudConfig: CloudModelConfig = CloudModelConfig()
 )
 
 class ChatViewModel(
@@ -76,6 +85,10 @@ class ChatViewModel(
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     private val _modelStatus = MutableStateFlow(inferenceEngine.getModelStatus())
     private val _liveMetrics = MutableStateFlow(LiveInferenceMetrics())
+    private val _attachedImagePath = MutableStateFlow<String?>(null)
+    private val _attachedImageMimeType = MutableStateFlow<String?>(null)
+    private val _inferenceMode = MutableStateFlow((inferenceEngine as? HybridInferenceEngine)?.inferenceMode ?: InferenceMode.LOCAL_ONLY)
+    private val _cloudConfig = MutableStateFlow((inferenceEngine as? HybridInferenceEngine)?.cloudEngine?.config ?: CloudModelConfig())
     private var generationJob: Job? = null
 
     private val executionFlow: StateFlow<ExecutionState> =
@@ -100,23 +113,41 @@ class ChatViewModel(
         Triple(active, all, status)
     }
 
-    private val inputFlow = combine(_messages, _inputText, _isStreaming, _liveMetrics) { messages, inputText, isStreaming, metrics ->
-        InputState(messages, inputText, isStreaming, metrics)
+    private val inputFlow = combine(
+        _messages,
+        _inputText,
+        _isStreaming,
+        _liveMetrics,
+        _attachedImagePath,
+        _attachedImageMimeType
+    ) { args ->
+        @Suppress("UNCHECKED_CAST")
+        InputState(
+            messages = args[0] as List<Message>,
+            inputText = args[1] as String,
+            isStreaming = args[2] as Boolean,
+            metrics = args[3] as LiveInferenceMetrics,
+            attachedImagePath = args[4] as? String,
+            attachedImageMimeType = args[5] as? String
+        )
     }
 
     private data class InputState(
         val messages: List<Message>,
         val inputText: String,
         val isStreaming: Boolean,
-        val metrics: LiveInferenceMetrics
+        val metrics: LiveInferenceMetrics,
+        val attachedImagePath: String?,
+        val attachedImageMimeType: String?
     )
 
     val uiState: StateFlow<ChatUiState> = combine(
         conversationFlow,
         modelFlow,
         inputFlow,
-        executionFlow
-    ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState ->
+        executionFlow,
+        _inferenceMode
+    ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState, infMode ->
         ChatUiState(
             conversations = conversations,
             currentConversation = activeConv,
@@ -130,7 +161,11 @@ class ChatViewModel(
             allModels = allModels,
             modelStatus = modelStatus,
             activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null,
-            liveMetrics = inputState.metrics
+            liveMetrics = inputState.metrics,
+            attachedImagePath = inputState.attachedImagePath,
+            attachedImageMimeType = inputState.attachedImageMimeType,
+            inferenceMode = infMode,
+            cloudConfig = _cloudConfig.value
         )
     }.stateIn(
         scope = viewModelScope,
@@ -295,11 +330,43 @@ class ChatViewModel(
         sendMessage()
     }
 
+    fun attachImage(path: String, mimeType: String = "image/jpeg") {
+        _attachedImagePath.value = path
+        _attachedImageMimeType.value = mimeType
+    }
+
+    fun removeAttachment() {
+        _attachedImagePath.value = null
+        _attachedImageMimeType.value = null
+    }
+
+    fun setInferenceMode(mode: InferenceMode) {
+        _inferenceMode.value = mode
+        (inferenceEngine as? HybridInferenceEngine)?.inferenceMode = mode
+    }
+
+    fun updateCloudConfig(config: CloudModelConfig) {
+        _cloudConfig.value = config
+        (inferenceEngine as? HybridInferenceEngine)?.cloudEngine?.config = config
+    }
+
     fun sendMessage() {
         val text = _inputText.value.trim()
-        if (text.isEmpty()) return
+        val attachmentPath = _attachedImagePath.value
+        val attachmentMime = _attachedImageMimeType.value
+
+        if (text.isEmpty() && attachmentPath == null) return
         if (_isStreaming.value) {
             stopGeneration()
+        }
+
+        _attachedImagePath.value = null
+        _attachedImageMimeType.value = null
+
+        val promptText = if (text.isBlank() && !attachmentPath.isNullOrBlank()) {
+            "Analyze and describe this image in detail."
+        } else {
+            text
         }
 
         val state = uiState.value
@@ -314,7 +381,7 @@ class ChatViewModel(
                 conversationRepository.createConversation(
                     Conversation(
                         id = convId,
-                        title = text.take(30),
+                        title = promptText.take(30),
                         activeAgentId = agent?.id
                     )
                 )
@@ -337,8 +404,10 @@ class ChatViewModel(
                 conversationId = convId,
                 role = MessageRole.USER,
                 senderName = "User",
-                content = text,
-                status = MessageStatus.COMPLETED
+                content = promptText,
+                status = MessageStatus.COMPLETED,
+                attachmentUri = attachmentPath,
+                attachmentMimeType = attachmentMime
             )
             conversationRepository.sendMessage(userMsg)
             _messages.value = _messages.value.filter { it.status != MessageStatus.STREAMING || it.content.isNotBlank() } + userMsg
@@ -347,15 +416,17 @@ class ChatViewModel(
             if (agent != null && agent.role == AgentRole.SUPERVISOR && clinicalSupervisor != null) {
                 executeMultiAgentSupervisor(
                     convId = convId,
-                    userPrompt = text,
+                    userPrompt = promptText,
                     agentName = agentName
                 )
             } else {
                 executeInference(
                     convId = convId,
-                    userPrompt = text,
+                    userPrompt = promptText,
                     agent = agent,
-                    agentName = agentName
+                    agentName = agentName,
+                    attachmentPath = attachmentPath,
+                    attachmentMime = attachmentMime
                 )
             }
         }
@@ -367,9 +438,11 @@ class ChatViewModel(
         val targetIndex = currentMessages.indexOfFirst { it.id == assistantMessageId }
         if (targetIndex == -1) return
 
-        // Find the preceding user query
-        val userQuery = currentMessages.take(targetIndex).lastOrNull { it.role == MessageRole.USER }?.content
-            ?: return
+        // Find the preceding user query and attachment
+        val userMsg = currentMessages.take(targetIndex).lastOrNull { it.role == MessageRole.USER }
+        val userQuery = userMsg?.content ?: return
+        val attachmentPath = userMsg.attachmentUri
+        val attachmentMime = userMsg.attachmentMimeType
 
         val convId = _currentConversationId.value ?: return
         val agent = uiState.value.selectedAgent
@@ -391,7 +464,9 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = userQuery,
                     agent = agent,
-                    agentName = agentName
+                    agentName = agentName,
+                    attachmentPath = attachmentPath,
+                    attachmentMime = attachmentMime
                 )
             }
         }
@@ -452,7 +527,9 @@ class ChatViewModel(
         convId: String,
         userPrompt: String,
         agent: Agent?,
-        agentName: String
+        agentName: String,
+        attachmentPath: String? = null,
+        attachmentMime: String? = null
     ) {
         val assistantMsgId = UUID.randomUUID().toString()
         val assistantMsg = Message(
@@ -514,14 +591,16 @@ class ChatViewModel(
             }
         } catch (_: Throwable) { }
 
-        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg)
+        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg, attachmentPath, attachmentMime)
     }
 
     private suspend fun streamInferenceIntoMessage(
         convId: String,
         userPrompt: String,
         agent: Agent?,
-        initialMsg: Message
+        initialMsg: Message,
+        attachmentPath: String? = null,
+        attachmentMime: String? = null
     ) {
         var assistantMsg = initialMsg
 
@@ -544,6 +623,17 @@ class ChatViewModel(
                 maxOutputTokens = maxOutputTokens
             )
         )
+
+        // Multimodal Image Base64 Encoding
+        var imageBase64: String? = null
+        if (!attachmentPath.isNullOrBlank()) {
+            try {
+                val bitmap = ImageUtils.decodeSampledBitmap(attachmentPath, 1024, 1024)
+                if (bitmap != null) {
+                    imageBase64 = ImageUtils.encodeToBase64(bitmap, quality = 80)
+                }
+            } catch (_: Throwable) { }
+        }
 
         val buffer = StringBuilder()
         val startTime = System.currentTimeMillis()
@@ -569,7 +659,9 @@ class ChatViewModel(
                     topK = extendedConfig.topK,
                     repeatPenalty = extendedConfig.repetitionPenalty,
                     seed = extendedConfig.seed,
-                    stopSequences = extendedConfig.stopSequences
+                    stopSequences = extendedConfig.stopSequences,
+                    imageBase64 = imageBase64,
+                    imageMimeType = attachmentMime ?: "image/jpeg"
                 )
             ).collect { event ->
                 when (event) {

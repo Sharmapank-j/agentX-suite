@@ -204,7 +204,9 @@ class ConversationRepositoryImpl(
         timestamp = timestamp,
         agentId = agentId,
         tokenCount = tokenCount,
-        status = try { MessageStatus.valueOf(status) } catch (_: Exception) { MessageStatus.COMPLETED }
+        status = try { MessageStatus.valueOf(status) } catch (_: Exception) { MessageStatus.COMPLETED },
+        attachmentUri = attachmentUri,
+        attachmentMimeType = attachmentMimeType
     )
 
     private fun Message.toEntity() = MessageEntity(
@@ -216,7 +218,9 @@ class ConversationRepositoryImpl(
         timestamp = timestamp,
         agentId = agentId,
         tokenCount = tokenCount,
-        status = status.name
+        status = status.name,
+        attachmentUri = attachmentUri,
+        attachmentMimeType = attachmentMimeType
     )
 }
 

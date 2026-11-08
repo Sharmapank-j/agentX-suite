@@ -27,6 +27,7 @@ class SettingsPreferencesManager(context: Context) {
         private const val KEY_CUSTOM_BASE_URL = "custom_base_url"
         private const val KEY_LOCAL_BACKEND = "local_backend"
         private const val KEY_DARK_THEME = "dark_theme"
+        private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
         private const val KEY_THREADS = "cpu_threads"
         private const val KEY_MLOCK = "enable_mlock"
     }
@@ -106,6 +107,12 @@ class SettingsPreferencesManager(context: Context) {
 
     fun loadDarkTheme(): Boolean = prefs.getBoolean(KEY_DARK_THEME, true)
     fun saveDarkTheme(enabled: Boolean) = prefs.edit().putBoolean(KEY_DARK_THEME, enabled).apply()
+
+    fun loadHapticFeedback(): Boolean = prefs.getBoolean(KEY_HAPTIC_FEEDBACK, true)
+    fun saveHapticFeedback(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_HAPTIC_FEEDBACK, enabled).apply()
+        com.agentx.core.device.HapticFeedbackHelper.isEnabled = enabled
+    }
 
     fun loadThreads(): Int = prefs.getInt(KEY_THREADS, 4)
     fun saveThreads(threads: Int) = prefs.edit().putInt(KEY_THREADS, threads).apply()

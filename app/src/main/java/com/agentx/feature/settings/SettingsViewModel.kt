@@ -48,6 +48,7 @@ data class SettingsUiState(
     val executions: List<ExecutionLog> = emptyList(),
     val activeExecutionState: ExecutionState? = null,
     val darkTheme: Boolean = true,
+    val hapticFeedback: Boolean = true,
     val maxCpuThreads: Int = 4,
     val enableMlock: Boolean = false,
     val cloudConfig: CloudModelConfig = CloudModelConfig(),
@@ -69,6 +70,7 @@ class SettingsViewModel(
 ) : ViewModel() {
 
     private val _darkTheme = MutableStateFlow(preferencesManager?.loadDarkTheme() ?: true)
+    private val _hapticFeedback = MutableStateFlow(preferencesManager?.loadHapticFeedback() ?: true)
     private val _threads = MutableStateFlow(preferencesManager?.loadThreads() ?: 4)
     private val _mlock = MutableStateFlow(preferencesManager?.loadMlock() ?: false)
     private val _cloudConfig = MutableStateFlow(
@@ -103,16 +105,25 @@ class SettingsViewModel(
 
     private val preferencesFlow = combine(
         _darkTheme,
+        _hapticFeedback,
         _threads,
         _mlock,
         _cloudConfig,
         _cloudTestResult
-    ) { darkTheme, threads, mlock, cloudConfig, cloudTest ->
-        SettingsPreferences(darkTheme, threads, mlock, cloudConfig, cloudTest)
+    ) { args ->
+        SettingsPreferences(
+            darkTheme = args[0] as Boolean,
+            hapticFeedback = args[1] as Boolean,
+            threads = args[2] as Int,
+            mlock = args[3] as Boolean,
+            cloudConfig = args[4] as CloudModelConfig,
+            cloudTestResult = args[5] as? String
+        )
     }
 
     private data class SettingsPreferences(
         val darkTheme: Boolean,
+        val hapticFeedback: Boolean,
         val threads: Int,
         val mlock: Boolean,
         val cloudConfig: CloudModelConfig,
@@ -135,6 +146,7 @@ class SettingsViewModel(
             executions = executions,
             activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null,
             darkTheme = prefs.darkTheme,
+            hapticFeedback = prefs.hapticFeedback,
             maxCpuThreads = prefs.threads,
             enableMlock = prefs.mlock,
             cloudConfig = prefs.cloudConfig,
@@ -380,6 +392,11 @@ class SettingsViewModel(
     fun setDarkTheme(enabled: Boolean) {
         _darkTheme.value = enabled
         preferencesManager?.saveDarkTheme(enabled)
+    }
+
+    fun setHapticFeedback(enabled: Boolean) {
+        _hapticFeedback.value = enabled
+        preferencesManager?.saveHapticFeedback(enabled)
     }
 
     fun setCpuThreads(threads: Int) {

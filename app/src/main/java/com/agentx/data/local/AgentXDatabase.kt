@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
         ExecutionEntity::class,
         MemoryEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AgentXDatabase : RoomDatabase() {

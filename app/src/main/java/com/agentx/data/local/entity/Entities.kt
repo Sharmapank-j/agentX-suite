@@ -68,7 +68,9 @@ data class MessageEntity(
     val timestamp: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "agent_id") val agentId: String? = null,
     @ColumnInfo(name = "token_count") val tokenCount: Int = 0,
-    val status: String = "COMPLETED" // PENDING, STREAMING, COMPLETED, ERROR
+    val status: String = "COMPLETED", // PENDING, STREAMING, COMPLETED, ERROR
+    @ColumnInfo(name = "attachment_uri") val attachmentUri: String? = null,
+    @ColumnInfo(name = "attachment_mime_type") val attachmentMimeType: String? = null
 )
 
 @Entity(tableName = "agents")

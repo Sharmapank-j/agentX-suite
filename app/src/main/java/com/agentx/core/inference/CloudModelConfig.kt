@@ -21,7 +21,7 @@ data class CloudModelConfig(
     val geminiApiKey: String = "",
     val gatewayApiKey: String = "",
     val apiKey: String = "",
-    val modelName: String = "gemini-2.5-flash",
+    val modelName: String = "gemini-3.8-flash",
     val customBaseUrl: String = "http://192.168.1.100:8080/v1",
     val inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
     val temperature: Float = 0.7f,
@@ -37,9 +37,9 @@ data class CloudModelConfig(
 
     companion object {
         val AVAILABLE_GEMINI_MODELS = listOf(
-            "gemini-2.5-flash" to "Gemini 2.5 Flash (Ultra-fast coding & multimodal intelligence)",
-            "gemini-2.5-pro" to "Gemini 2.5 Pro (Deep multi-step reasoning, systems architecture & math)",
-            "gemini-2.0-flash" to "Gemini 2.0 Flash (Balanced conversational speed & comprehension)"
+            "gemini-3.8-flash" to "Gemini 3.8 Flash (State-of-the-Art Multimodal Vision & Reasoning)",
+            "gemini-3.5-flash-lite" to "Gemini 3.5 Flash-Lite (High-Throughput Multimodal Execution)",
+            "gemini-4-argon" to "Gemini 4 Argon (Maximum Reasoning, Architecture & Coding)"
         )
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     var showHipaaDialog by remember { mutableStateOf(false) }
     var showApiKey by remember { mutableStateOf(false) }
     val providerApiKey = state.cloudConfig.apiKeyFor(state.cloudConfig.provider)
@@ -241,6 +243,39 @@ fun SettingsScreen(
                     Switch(
                         checked = state.darkTheme,
                         onCheckedChange = { viewModel.setDarkTheme(it) }
+                    )
+                }
+            }
+
+            // Haptic Feedback
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Haptic Feedback", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Tactile vibration pulses on streaming tokens, messages & touch interactions",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = state.hapticFeedback,
+                        onCheckedChange = { isEnabled ->
+                            viewModel.setHapticFeedback(isEnabled)
+                            if (isEnabled) {
+                                com.agentx.core.device.HapticFeedbackHelper.performHaptic(
+                                    context,
+                                    com.agentx.core.device.HapticFeedbackType.SUCCESS
+                                )
+                            }
+                        }
                     )
                 }
             }

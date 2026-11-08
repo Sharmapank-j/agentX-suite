@@ -101,6 +101,7 @@ class AgentXMedicalApplication : Application() {
         modelFileManager = ModelFileManager(this)
         huggingFaceDownloader = HuggingFaceDownloader(this, modelFileManager)
         preferencesManager = com.agentx.medical.data.local.SettingsPreferencesManager(this)
+        com.agentx.core.device.HapticFeedbackHelper.isEnabled = preferencesManager.loadHapticFeedback()
 
         val savedCloudConfig = preferencesManager.loadCloudConfig()
         val savedMode = preferencesManager.loadInferenceMode()

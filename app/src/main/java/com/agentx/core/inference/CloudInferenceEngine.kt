@@ -106,7 +106,7 @@ class CloudInferenceEngine(
         }
         activeConnection = conn
 
-        // Build Gemini JSON Request payload
+        // Build Gemini JSON Request payload (Multimodal support)
         val escapedPrompt = escapeJson(request.prompt)
         val escapedSystem = request.systemPrompt?.let { escapeJson(it) }
 
@@ -118,13 +118,25 @@ class CloudInferenceEngine(
             """.trimIndent()
         } else ""
 
+        val imagePart = if (!request.imageBase64.isNullOrBlank() && !request.imageMimeType.isNullOrBlank()) {
+            """,
+            {
+                "inlineData": {
+                    "mimeType": "${request.imageMimeType}",
+                    "data": "${request.imageBase64}"
+                }
+            }"""
+        } else ""
+
         val payload = """
             {
                 $systemBlock
                 "contents": [
                     {
                         "role": "user",
-                        "parts": [{"text": "$escapedPrompt"}]
+                        "parts": [
+                            {"text": "$escapedPrompt"}$imagePart
+                        ]
                     }
                 ],
                 "generationConfig": {
@@ -201,12 +213,21 @@ class CloudInferenceEngine(
         val escapedPrompt = escapeJson(request.prompt)
         val escapedSystem = request.systemPrompt?.let { escapeJson(it) } ?: "You are AgentX, an advanced autonomous AI personal assistant."
 
+        val userContent = if (!request.imageBase64.isNullOrBlank() && !request.imageMimeType.isNullOrBlank()) {
+            """[
+                {"type": "text", "text": "$escapedPrompt"},
+                {"type": "image_url", "image_url": {"url": "data:${request.imageMimeType};base64,${request.imageBase64}"}}
+            ]""".trimIndent()
+        } else {
+            "\"$escapedPrompt\""
+        }
+
         val payload = """
             {
                 "model": "${config.modelName}",
                 "messages": [
                     {"role": "system", "content": "$escapedSystem"},
-                    {"role": "user", "content": "$escapedPrompt"}
+                    {"role": "user", "content": $userContent}
                 ],
                 "stream": true,
                 "temperature": ${request.temperature},

@@ -28,7 +28,9 @@ data class Message(
     val timestamp: Long = System.currentTimeMillis(),
     val agentId: String? = null,
     val tokenCount: Int = 0,
-    val status: MessageStatus = MessageStatus.COMPLETED
+    val status: MessageStatus = MessageStatus.COMPLETED,
+    val attachmentUri: String? = null,
+    val attachmentMimeType: String? = null
 )
 
 @Serializable

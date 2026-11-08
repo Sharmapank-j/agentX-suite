@@ -28,7 +28,9 @@ data class InferenceRequest(
     val topK: Int = 40,
     val repeatPenalty: Float = 1.1f,
     val seed: Int = 0,
-    val stopSequences: List<String> = emptyList()
+    val stopSequences: List<String> = emptyList(),
+    val imageBase64: String? = null,
+    val imageMimeType: String? = null
 )
 
 sealed interface GenerationEvent {
