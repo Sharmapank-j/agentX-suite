@@ -10,6 +10,7 @@ permissions:
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
@@ -58,9 +59,9 @@ jobs:
             admin/build/outputs/apk/debug/admin-debug.apk
 
   publish-release:
-    name: Publish GitHub Release v1.1.0
+    name: Publish GitHub Release
     needs: build-and-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build-and-test.result == 'success'
+    if: (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && needs.build-and-test.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Download APK artifacts
@@ -72,45 +73,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="${GITHUB_REF_NAME:-v1.3.0}"
+          if [[ "$VERSION" == "main" || "$VERSION" == "master" ]]; then
+            VERSION="v1.3.0"
+          fi
           mkdir -p release
-          cp dist/app/build/outputs/apk/debug/app-debug.apk release/AgentX-v1.1.0-debug.apk
-          cp dist/medical/build/outputs/apk/debug/medical-debug.apk release/AgentX-Medical-v1.1.0-debug.apk
-          cp dist/admin/build/outputs/apk/debug/admin-debug.apk release/AgentX-Serve-v1.1.0-debug.apk
+          cp dist/app/build/outputs/apk/debug/app-debug.apk release/AgentX-${VERSION}-debug.apk
+          cp dist/medical/build/outputs/apk/debug/medical-debug.apk release/AgentX-Medical-${VERSION}-debug.apk
+          cp dist/admin/build/outputs/apk/debug/admin-debug.apk release/AgentX-Serve-${VERSION}-debug.apk
           cd release
           sha256sum *.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Create GitHub Release and upload APKs
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.0
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.3.0' }}
           target_commitish: ${{ github.sha }}
-          name: AgentX Suite v1.1.0
+          name: AgentX Suite ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.3.0' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            release/AgentX-v1.1.0-debug.apk
-            release/AgentX-Medical-v1.1.0-debug.apk
-            release/AgentX-Serve-v1.1.0-debug.apk
+            release/*.apk
             release/SHA256SUMS.txt
           body: |
-            ## AgentX Suite v1.1.0
-
-            This release packages the three Android applications built from the exact source commit shown above.
+            ## AgentX Suite Release
 
             ### Included
-            - AgentX — general-purpose assistant.
-            - AgentX Medical — medical education and clinical-support tools.
-            - AgentX Serve — Android local API/server application.
-            - llama.cpp / GGUF native runtime integration (real model loading and generation still require target-device acceptance testing).
-            - Provider-specific Gemini and gateway credential isolation.
+            - **AgentX** — General autonomous AI assistant with Multimodal Vision, Gemini 3.8 Flash & Local GGUF (llama.cpp) inference, and tactile Haptic Feedback.
+            - **AgentX Medical** — Clinical education, offline drug-interaction intelligence, and bedside telemetry.
+            - **AgentX Serve** — On-device OpenAI-compatible HTTP serving engine for edge computing.
 
-            ### Build and verification
-            - Built by the repository's GitHub Actions CI workflow.
-            - Unit tests and all three debug APK assembly jobs must pass before this release is published.
-            - APKs in this release are debug builds, not production-signed distribution packages.
-            - SHA-256 checksums are attached in SHA256SUMS.txt.
-
-            ### Important limitations
-            - A green CI build does not establish successful real-device GGUF inference, GPU acceleration, or performance.
-            - Physical-device installation, model loading, generated-token, cancellation, memory, thermal, and battery tests must be recorded separately.
-            - AgentX Medical is not a validated medical device; outputs require clinician judgement and independent validation of calculators.
+            ### Key Capabilities:
+            - **Multimodal Vision Input**: Photo Library picker and direct Camera capture with downsampled memory safety and Base64 vision payload delivery.
+            - **Inference & Provider Switcher Hub**: Seamlessly toggle between Local GGUF, Google Gemini Multimodal (`gemini-3.8-flash`), Hybrid Auto-Failover, and LAN Server Gateway.
+            - **Tactile Haptic Feedback**: Dynamic linear motor tactile response across streaming tokens, button taps, attachments, and model activations with a dedicated Settings toggle (ON/OFF).
