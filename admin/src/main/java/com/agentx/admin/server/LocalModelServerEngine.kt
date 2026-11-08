@@ -181,6 +181,20 @@ class LocalModelServerEngine(
             }
         } catch (_: Exception) {}
 
+        try {
+            val rawDownload = File(Environment.getExternalStorageDirectory(), "Download")
+            if (rawDownload.exists() && rawDownload.isDirectory) {
+                candidateDirs.add(rawDownload)
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val sdcardDownload = File("/sdcard/Download")
+            if (sdcardDownload.exists() && sdcardDownload.isDirectory) {
+                candidateDirs.add(sdcardDownload)
+            }
+        } catch (_: Exception) {}
+
         for (dir in candidateDirs) {
             try {
                 dir.walkTopDown().maxDepth(2).forEach { file ->

@@ -233,8 +233,8 @@ class ModelsViewModel(
                         ModelConfig(
                             modelId = model.id,
                             modelPath = model.filePath,
-                            contextLength = model.contextLength,
-                            threads = model.threads,
+                            contextLength = model.contextLength.coerceIn(512, 3840),
+                            threads = model.threads.coerceIn(1, 4),
                             temperature = model.temperature,
                             topP = model.topP
                         )
@@ -279,6 +279,7 @@ class ModelsViewModel(
                 File(android.os.Environment.getExternalStorageDirectory(), "Documents")
             )
             val currentModels = modelRepository.getAllModels().first()
+            var hasActive = currentModels.any { it.isActive }
             for (dir in candidateDirs) {
                 if (!dir.exists() || !dir.isDirectory) continue
                 dir.listFiles()?.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) }?.forEach { file ->
@@ -288,7 +289,7 @@ class ModelsViewModel(
                             file.inputStream().use { GgufMetadataParser.parse(it) }
                         } catch (_: Exception) { null }
 
-                        val isFirst = currentModels.isEmpty()
+                        val shouldActivate = !hasActive
                         val newModel = GGUFModel(
                             id = "storage_" + file.nameWithoutExtension.replace("[^a-zA-Z0-9._-]".toRegex(), "_"),
                             name = metadata?.name?.ifEmpty { file.nameWithoutExtension } ?: file.nameWithoutExtension,
@@ -302,23 +303,27 @@ class ModelsViewModel(
                             quantization = metadata?.quantization ?: "Q5_K_M",
                             capabilityProfile = "general-assistant",
                             isStaged = true,
-                            isActive = isFirst
+                            isActive = shouldActivate
                         )
                         modelRepository.addModel(newModel)
-                        if (isFirst && inferenceEngine != null) {
-                            try {
-                                inferenceEngine.loadModel(
-                                    ModelConfig(
-                                        modelId = newModel.id,
-                                        modelPath = newModel.filePath,
-                                        contextLength = newModel.contextLength,
-                                        threads = newModel.threads,
-                                        temperature = newModel.temperature,
-                                        topP = newModel.topP
+                        if (shouldActivate) {
+                            hasActive = true
+                            modelRepository.setActiveModel(newModel.id)
+                            if (inferenceEngine != null) {
+                                try {
+                                    inferenceEngine.loadModel(
+                                        ModelConfig(
+                                            modelId = newModel.id,
+                                            modelPath = newModel.filePath,
+                                            contextLength = newModel.contextLength.coerceIn(512, 3840),
+                                            threads = newModel.threads.coerceIn(1, 4),
+                                            temperature = newModel.temperature,
+                                            topP = newModel.topP
+                                        )
                                     )
-                                )
-                                syncRuntimeStatus()
-                            } catch (_: Exception) {}
+                                    syncRuntimeStatus()
+                                } catch (_: Exception) {}
+                            }
                         }
                     } else if (existing.isActive && inferenceEngine != null && inferenceEngine.getModelStatus().state != ModelLifecycleState.LOADED) {
                         try {
@@ -326,8 +331,8 @@ class ModelsViewModel(
                                 ModelConfig(
                                     modelId = existing.id,
                                     modelPath = existing.filePath,
-                                    contextLength = existing.contextLength,
-                                    threads = existing.threads,
+                                    contextLength = existing.contextLength.coerceIn(512, 3840),
+                                    threads = existing.threads.coerceIn(1, 4),
                                     temperature = existing.temperature,
                                     topP = existing.topP
                                 )
@@ -335,6 +340,26 @@ class ModelsViewModel(
                             syncRuntimeStatus()
                         } catch (_: Exception) {}
                     }
+                }
+            }
+            val allModelsNow = modelRepository.getAllModels().first()
+            if (allModelsNow.none { it.isActive } && allModelsNow.isNotEmpty()) {
+                val firstValid = allModelsNow.firstOrNull { File(it.filePath).exists() } ?: allModelsNow.first()
+                modelRepository.setActiveModel(firstValid.id)
+                if (inferenceEngine != null && File(firstValid.filePath).exists()) {
+                    try {
+                        inferenceEngine.loadModel(
+                            ModelConfig(
+                                modelId = firstValid.id,
+                                modelPath = firstValid.filePath,
+                                contextLength = firstValid.contextLength,
+                                threads = firstValid.threads,
+                                temperature = firstValid.temperature,
+                                topP = firstValid.topP
+                            )
+                        )
+                        syncRuntimeStatus()
+                    } catch (_: Exception) {}
                 }
             }
             refreshStorageMetrics()
@@ -509,8 +534,8 @@ class ModelsViewModel(
                         ModelConfig(
                             modelId = model.id,
                             modelPath = model.filePath,
-                            contextLength = model.contextLength,
-                            threads = model.threads,
+                            contextLength = model.contextLength.coerceIn(512, 3840),
+                            threads = model.threads.coerceIn(1, 4),
                             temperature = model.temperature,
                             topP = model.topP
                         )

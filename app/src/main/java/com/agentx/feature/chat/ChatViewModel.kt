@@ -140,6 +140,14 @@ class ChatViewModel(
 
     init {
         viewModelScope.launch {
+            conversationRepository.getAllConversations().collect { convs ->
+                if (_currentConversationId.value == null && convs.isNotEmpty()) {
+                    _currentConversationId.value = convs.first().id
+                }
+            }
+        }
+
+        viewModelScope.launch {
             _currentConversationId.collect { convId ->
                 if (convId != null) {
                     conversationRepository.getMessagesForConversation(convId).collect {
@@ -259,7 +267,10 @@ class ChatViewModel(
 
     private suspend fun ensureModelLoaded(model: GGUFModel) {
         val currentStatus = inferenceEngine.getModelStatus()
-        if (currentStatus.state == ModelLifecycleState.LOADED && currentStatus.activeModelId == model.id) {
+        if ((currentStatus.state == ModelLifecycleState.LOADED ||
+             currentStatus.state == ModelLifecycleState.GENERATING ||
+             currentStatus.state == ModelLifecycleState.LOADING) &&
+            currentStatus.activeModelId == model.id) {
             return
         }
         try {
@@ -267,8 +278,8 @@ class ChatViewModel(
                 ModelConfig(
                     modelId = model.id,
                     modelPath = model.filePath,
-                    contextLength = model.contextLength,
-                    threads = model.threads,
+                    contextLength = model.contextLength.coerceIn(512, 3840),
+                    threads = model.threads.coerceIn(1, 4),
                     temperature = model.temperature,
                     topP = model.topP
                 )
@@ -286,7 +297,10 @@ class ChatViewModel(
 
     fun sendMessage() {
         val text = _inputText.value.trim()
-        if (text.isEmpty() || _isStreaming.value) return
+        if (text.isEmpty()) return
+        if (_isStreaming.value) {
+            stopGeneration()
+        }
 
         val state = uiState.value
         val agent = state.selectedAgent
@@ -294,7 +308,7 @@ class ChatViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            var convId = state.currentConversation?.id
+            var convId = _currentConversationId.value ?: state.currentConversation?.id
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
                 conversationRepository.createConversation(
@@ -304,7 +318,18 @@ class ChatViewModel(
                         activeAgentId = agent?.id
                     )
                 )
-                _currentConversationId.value = convId
+            }
+            _currentConversationId.value = convId
+
+            // Clean up any stale incomplete streaming messages
+            val dirtyMessages = conversationRepository.getMessagesForConversation(convId).first()
+                .filter { it.status == MessageStatus.STREAMING }
+            for (dirty in dirtyMessages) {
+                if (dirty.content.isBlank()) {
+                    conversationRepository.deleteMessage(dirty.id)
+                } else {
+                    conversationRepository.updateMessage(dirty.copy(status = MessageStatus.COMPLETED))
+                }
             }
 
             val userMsg = Message(
@@ -316,6 +341,7 @@ class ChatViewModel(
                 status = MessageStatus.COMPLETED
             )
             conversationRepository.sendMessage(userMsg)
+            _messages.value = _messages.value.filter { it.status != MessageStatus.STREAMING || it.content.isNotBlank() } + userMsg
             _inputText.value = ""
 
             if (agent != null && agent.role == AgentRole.SUPERVISOR && clinicalSupervisor != null) {
@@ -439,13 +465,51 @@ class ChatViewModel(
             status = MessageStatus.STREAMING
         )
         conversationRepository.sendMessage(assistantMsg)
+        _messages.value = _messages.value + assistantMsg
         _isStreaming.value = true
 
         // Ensure active model is loaded in memory
         try {
-            val activeModel = modelRepository.getActiveModel().first()
-                ?: modelRepository.getAllModels().first().firstOrNull()
-            if (activeModel != null && activeModel.filePath.isNotEmpty()) {
+            var activeModel = modelRepository.getActiveModel().first()
+            if (activeModel == null || !java.io.File(activeModel.filePath).exists()) {
+                val candidate = modelRepository.getAllModels().first().firstOrNull { java.io.File(it.filePath).exists() }
+                if (candidate != null) {
+                    modelRepository.setActiveModel(candidate.id)
+                    activeModel = candidate
+                } else {
+                    val scanDirs = listOf(
+                        java.io.File("/data/user/0/com.agentx/files/models"),
+                        java.io.File("/sdcard/Download"),
+                        java.io.File(android.os.Environment.getExternalStorageDirectory(), "Download"),
+                        java.io.File("/sdcard/Android/data/com.agentx/files/models")
+                    )
+                    for (dir in scanDirs) {
+                        val found = dir.listFiles()?.firstOrNull { it.isFile && it.name.endsWith(".gguf", true) }
+                        if (found != null && found.exists()) {
+                            val autoModel = GGUFModel(
+                                id = "storage_" + found.nameWithoutExtension.replace("[^a-zA-Z0-9._-]".toRegex(), "_"),
+                                name = found.nameWithoutExtension,
+                                filePath = found.absolutePath,
+                                uriString = android.net.Uri.fromFile(found).toString(),
+                                sizeBytes = found.length(),
+                                architecture = "Llama",
+                                contextLength = 2048,
+                                tensorCount = 0,
+                                format = "GGUF v3",
+                                quantization = "Q5_K_M",
+                                capabilityProfile = "general-assistant",
+                                isStaged = true,
+                                isActive = true
+                            )
+                            modelRepository.addModel(autoModel)
+                            modelRepository.setActiveModel(autoModel.id)
+                            activeModel = autoModel
+                            break
+                        }
+                    }
+                }
+            }
+            if (activeModel != null && activeModel.filePath.isNotEmpty() && java.io.File(activeModel.filePath).exists()) {
                 ensureModelLoaded(activeModel)
             }
         } catch (_: Throwable) { }
@@ -461,18 +525,18 @@ class ChatViewModel(
     ) {
         var assistantMsg = initialMsg
 
-        // Context Budgeting & Sliding Window Construction
+        // Context Budgeting & Sliding Window Construction: only feed completed non-empty messages
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
-            .filter { it.id != assistantMsg.id }
+            .filter { it.id != assistantMsg.id && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
 
         val activeModelConfig = modelRepository.getActiveModel().first()
         val extendedConfig = ExtendedModelConfig.parse(activeModelConfig?.capabilityProfile)
-        val maxContext = activeModelConfig?.contextLength ?: 2048
+        val maxContext = (activeModelConfig?.contextLength ?: 2048).coerceIn(512, 3840)
         val effectiveSystemPrompt = extendedConfig.systemPrompt ?: agent?.systemPrompt
         val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 512)
 
         val contextualPrompt = ContextManager.buildPromptWithContext(
-            systemPrompt = effectiveSystemPrompt,
+            systemPrompt = null,
             history = historyMessages,
             currentPrompt = userPrompt,
             budget = ContextBudget(
@@ -484,6 +548,7 @@ class ChatViewModel(
         val buffer = StringBuilder()
         val startTime = System.currentTimeMillis()
         var tokenCount = 0
+        var lastDbUpdateTime = System.currentTimeMillis()
 
         _liveMetrics.value = LiveInferenceMetrics(
             isLive = true,
@@ -493,77 +558,114 @@ class ChatViewModel(
             memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
         )
 
-        inferenceEngine.generate(
-            InferenceRequest(
-                prompt = contextualPrompt,
-                systemPrompt = effectiveSystemPrompt,
-                maxTokens = maxOutputTokens,
-                temperature = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f,
-                topP = activeModelConfig?.topP ?: agent?.topP ?: 0.9f,
-                topK = extendedConfig.topK,
-                repeatPenalty = extendedConfig.repetitionPenalty,
-                seed = extendedConfig.seed,
-                stopSequences = extendedConfig.stopSequences
-            )
-        ).collect { event ->
-            when (event) {
-                is GenerationEvent.Token -> {
-                    buffer.append(event.text)
-                    tokenCount++
-                    val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                    val tps = (tokenCount * 1000f) / elapsedMs
-                    _liveMetrics.value = LiveInferenceMetrics(
-                        isLive = true,
-                        tokensGenerated = tokenCount,
-                        tokensPerSecond = tps,
-                        elapsedSeconds = elapsedMs / 1000f,
-                        memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
-                    )
-                    assistantMsg = assistantMsg.copy(
-                        content = buffer.toString(),
-                        tokenCount = tokenCount,
-                        status = MessageStatus.STREAMING
-                    )
-                    conversationRepository.updateMessage(assistantMsg)
+        try {
+            inferenceEngine.generate(
+                InferenceRequest(
+                    prompt = contextualPrompt,
+                    systemPrompt = effectiveSystemPrompt,
+                    maxTokens = maxOutputTokens,
+                    temperature = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f,
+                    topP = activeModelConfig?.topP ?: agent?.topP ?: 0.9f,
+                    topK = extendedConfig.topK,
+                    repeatPenalty = extendedConfig.repetitionPenalty,
+                    seed = extendedConfig.seed,
+                    stopSequences = extendedConfig.stopSequences
+                )
+            ).collect { event ->
+                when (event) {
+                    is GenerationEvent.Token -> {
+                        buffer.append(event.text)
+                        tokenCount++
+                        val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                        val tps = (tokenCount * 1000f) / elapsedMs
+                        _liveMetrics.value = LiveInferenceMetrics(
+                            isLive = true,
+                            tokensGenerated = tokenCount,
+                            tokensPerSecond = tps,
+                            elapsedSeconds = elapsedMs / 1000f,
+                            memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
+                        )
+                        assistantMsg = assistantMsg.copy(
+                            content = buffer.toString(),
+                            tokenCount = tokenCount,
+                            status = MessageStatus.STREAMING
+                        )
+                        _messages.value = _messages.value.map {
+                            if (it.id == assistantMsg.id) assistantMsg else it
+                        }
+                        val now = System.currentTimeMillis()
+                        if (now - lastDbUpdateTime >= 250L || tokenCount % 15 == 0) {
+                            lastDbUpdateTime = now
+                            conversationRepository.updateMessage(assistantMsg)
+                        }
+                    }
+                    is GenerationEvent.Finished -> {
+                        val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                        val finalTps = (event.completionTokens.coerceAtLeast(tokenCount) * 1000f) / elapsedMs
+                        _liveMetrics.value = _liveMetrics.value.copy(
+                            isLive = false,
+                            tokensGenerated = event.totalTokens,
+                            tokensPerSecond = finalTps,
+                            elapsedSeconds = elapsedMs / 1000f
+                        )
+                        assistantMsg = assistantMsg.copy(
+                            content = buffer.toString(),
+                            tokenCount = event.totalTokens,
+                            status = MessageStatus.COMPLETED
+                        )
+                        _messages.value = _messages.value.map {
+                            if (it.id == assistantMsg.id) assistantMsg else it
+                        }
+                        conversationRepository.updateMessage(assistantMsg)
+                        _isStreaming.value = false
+                        _modelStatus.value = inferenceEngine.getModelStatus()
+                    }
+                    is GenerationEvent.Error -> {
+                        _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
+                        val currentText = buffer.toString()
+                        val errorDetail = event.message.orEmpty()
+                        val diagnostic = when {
+                            errorDetail.contains("unauthorized", ignoreCase = true) || errorDetail.contains("401") ->
+                                "Authentication failed (HTTP 401). Please check the API Key in Settings -> Cloud Models."
+                            errorDetail.contains("connect", ignoreCase = true) || errorDetail.contains("refused", ignoreCase = true) ->
+                                "Could not connect to model host ($errorDetail). Verify that AgentX Serve is active on your Wi-Fi network and check the IP in Settings."
+                            errorDetail.contains("No model loaded", ignoreCase = true) || errorDetail.contains("No GGUF model", ignoreCase = true) ->
+                                "No local GGUF model is loaded. Please import a .gguf model in the Models tab or select an active model."
+                            else -> errorDetail.ifBlank { "Inference generation encountered an error" }
+                        }
+                        assistantMsg = assistantMsg.copy(
+                            content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
+                            status = MessageStatus.ERROR
+                        )
+                        _messages.value = _messages.value.map {
+                            if (it.id == assistantMsg.id) assistantMsg else it
+                        }
+                        conversationRepository.updateMessage(assistantMsg)
+                        _isStreaming.value = false
+                        _modelStatus.value = inferenceEngine.getModelStatus()
+                    }
                 }
-                is GenerationEvent.Finished -> {
-                    val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                    val finalTps = (event.completionTokens.coerceAtLeast(tokenCount) * 1000f) / elapsedMs
-                    _liveMetrics.value = _liveMetrics.value.copy(
-                        isLive = false,
-                        tokensGenerated = event.totalTokens,
-                        tokensPerSecond = finalTps,
-                        elapsedSeconds = elapsedMs / 1000f
-                    )
-                    assistantMsg = assistantMsg.copy(
-                        content = buffer.toString(),
-                        tokenCount = event.totalTokens,
+            }
+        } finally {
+            _isStreaming.value = false
+            _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
+            _modelStatus.value = inferenceEngine.getModelStatus()
+            // If message remained in STREAMING state due to cancellation, finalize it
+            if (assistantMsg.status == MessageStatus.STREAMING) {
+                val finalContent = buffer.toString()
+                if (finalContent.isNotBlank()) {
+                    val finalized = assistantMsg.copy(
+                        content = finalContent,
+                        tokenCount = tokenCount,
                         status = MessageStatus.COMPLETED
                     )
-                    conversationRepository.updateMessage(assistantMsg)
-                    _isStreaming.value = false
-                    _modelStatus.value = inferenceEngine.getModelStatus()
-                }
-                is GenerationEvent.Error -> {
-                    _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
-                    val currentText = buffer.toString()
-                    val errorDetail = event.message.orEmpty()
-                    val diagnostic = when {
-                        errorDetail.contains("unauthorized", ignoreCase = true) || errorDetail.contains("401") ->
-                            "Authentication failed (HTTP 401). Please check the API Key in Settings -> Cloud Models."
-                        errorDetail.contains("connect", ignoreCase = true) || errorDetail.contains("refused", ignoreCase = true) ->
-                            "Could not connect to model host ($errorDetail). Verify that AgentX Serve is active on your Wi-Fi network and check the IP in Settings."
-                        errorDetail.contains("No model loaded", ignoreCase = true) || errorDetail.contains("No GGUF model", ignoreCase = true) ->
-                            "No local GGUF model is loaded. Please import a .gguf model in the Models tab or select an active model."
-                        else -> errorDetail.ifBlank { "Inference generation encountered an error" }
+                    _messages.value = _messages.value.map {
+                        if (it.id == assistantMsg.id) finalized else it
                     }
-                    assistantMsg = assistantMsg.copy(
-                        content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
-                        status = MessageStatus.ERROR
-                    )
-                    conversationRepository.updateMessage(assistantMsg)
-                    _isStreaming.value = false
-                    _modelStatus.value = inferenceEngine.getModelStatus()
+                    conversationRepository.updateMessage(finalized)
+                } else {
+                    _messages.value = _messages.value.filter { it.id != assistantMsg.id }
+                    conversationRepository.deleteMessage(assistantMsg.id)
                 }
             }
         }

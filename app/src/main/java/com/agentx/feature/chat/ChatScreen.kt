@@ -359,10 +359,10 @@ fun ChatScreen(
                 )
 
                 if (state.messages.isEmpty()) {
-                    // Dynamic "Did You Know?" Welcoming Insight (disappears when messages are present)
-                    DidYouKnowWelcomeCard(
-                        conversationId = state.currentConversation?.id,
-                        onSelectPrompt = { prompt -> viewModel.sendPrompt(prompt) },
+                    EmptyChatPlaceholder(
+                        activeModel = state.activeModel,
+                        modelStatus = state.modelStatus,
+                        onSwitchModelClick = { showModelSwitcherSheet = true },
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 20.dp, vertical = 12.dp)
@@ -850,18 +850,15 @@ fun ActiveModelStatusBanner(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dynamic "Did You Know?" Welcoming Insight Card (Empty State)
+// Minimalist Unscripted Empty State
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun DidYouKnowWelcomeCard(
-    conversationId: String?,
-    onSelectPrompt: (String) -> Unit,
+private fun EmptyChatPlaceholder(
+    activeModel: GGUFModel?,
+    modelStatus: ModelStatus,
+    onSwitchModelClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var insight by remember(conversationId) {
-        mutableStateOf(DidYouKnowRepository.getRandomInsight())
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -870,181 +867,88 @@ private fun DidYouKnowWelcomeCard(
         // Glowing Hero Icon
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(64.dp)
                 .clip(CircleShape)
                 .background(Brush.linearGradient(listOf(ElectricCyan, NeonIndigo))),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Default.Lightbulb,
+                Icons.Default.Psychology,
                 contentDescription = null,
                 tint = VoidDark,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(36.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             "AgentX",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
         )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
-            "Personal AI Assistant • Local & Cloud Intelligence",
-            style = MaterialTheme.typography.labelSmall,
+            "100% Offline On-Device LLM Inference",
+            style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary
         )
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // Glassmorphic "Did You Know?" Card
+        // Status Card
         Surface(
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(16.dp),
             color = SurfaceGlassElevated,
-            border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.4f)),
-            modifier = Modifier.fillMaxWidth()
+            border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+            modifier = Modifier.fillMaxWidth(0.88f)
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
-                // Top Tag Row: Badge + Category + Shuffle Button
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = ElectricCyan.copy(alpha = 0.15f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                text = "💡 DID YOU KNOW?",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black,
-                                color = ElectricCyan,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                letterSpacing = 0.5.sp
-                            )
-                        }
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (modelStatus.state == ModelLifecycleState.LOADED) CyberMint else AlertRose)
+                    )
+                    Text(
+                        text = if (modelStatus.state == ModelLifecycleState.LOADED) "Engine Ready" else "Model Not Loaded",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (modelStatus.state == ModelLifecycleState.LOADED) CyberMint else AlertRose
+                    )
+                }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = NeonIndigo.copy(alpha = 0.2f)
-                        ) {
-                            Text(
-                                text = "${insight.emoji} ${insight.category}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFC7D2FE),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = activeModel?.name ?: "No model selected",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                    IconButton(
-                        onClick = {
-                            insight = DidYouKnowRepository.getRandomInsight(excludeId = insight.id)
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Shuffle Insight",
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                if (activeModel != null) {
+                    Text(
+                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} ctx",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // Headline
                 Text(
-                    text = insight.headline,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    text = "Type your query below to begin inference.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
                 )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Fact Content
-                Text(
-                    text = insight.fact,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    lineHeight = 19.sp
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 1-Tap Discussion Starter Button
-                Surface(
-                    onClick = { onSelectPrompt(insight.suggestedPrompt) },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF0E2A47),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.6f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Ask: \"${insight.suggestedPrompt.take(45)}...\"",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricCyan,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                // Related Exploration Chips
-                if (insight.relatedChips.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "EXPLORE TOPICS",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        insight.relatedChips.forEach { chip ->
-                            Surface(
-                                onClick = { onSelectPrompt("Explain the core technical principles of $chip in detail.") },
-                                shape = RoundedCornerShape(8.dp),
-                                color = SpaceDark,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder)
-                            ) {
-                                Text(
-                                    text = chip,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = TextSecondary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
     }

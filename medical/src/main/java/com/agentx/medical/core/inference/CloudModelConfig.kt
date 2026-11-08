@@ -23,7 +23,7 @@ data class CloudModelConfig(
     val apiKey: String = "",
     val modelName: String = "gemini-2.5-flash",
     val customBaseUrl: String = "http://192.168.1.100:8080/v1",
-    val inferenceMode: InferenceMode = InferenceMode.HYBRID_AUTO,
+    val inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
     val temperature: Float = 0.7f,
     val maxOutputTokens: Int = 1024,
     val isEnabled: Boolean = false

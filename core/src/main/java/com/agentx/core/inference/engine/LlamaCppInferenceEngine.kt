@@ -1,12 +1,16 @@
 package com.agentx.core.inference.engine
 
+import com.agentx.core.device.CpuTopologyInspector
 import com.agentx.core.inference.llamacpp.LlamaCppNativeBridge
 import com.agentx.core.inference.model.GenerationEvent
 import com.agentx.core.inference.model.GenerationRequest
 import com.agentx.core.inference.model.ModelInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -17,39 +21,47 @@ import java.util.concurrent.atomic.AtomicLong
  * The native library is built for each configured Android ABI by CMake/NDK.
  */
 class LlamaCppInferenceEngine(
-    private val nThreads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 8),
+    private val nThreads: Int = CpuTopologyInspector.inspect().recommendedInferenceThreads.coerceIn(1, 4),
     private val defaultContextLength: Int = 2048,
     private val gpuLayers: Int = 0
 ) : InferenceEngine {
     override val engineName = "llama.cpp"
     private val handle = AtomicLong(0L)
     private val cancelled = AtomicBoolean(false)
+    private val loadMutex = Mutex()
     @Volatile private var currentModel: ModelInfo? = null
 
     override val isModelLoaded: Boolean get() = handle.get() != 0L
     override val loadedModel: ModelInfo? get() = currentModel
 
     override suspend fun loadModel(model: ModelInfo): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            require(LlamaCppNativeBridge.isNativeLoaded) {
-                "The native llama.cpp library is unavailable for this device ABI."
+        loadMutex.withLock {
+            runCatching {
+                if (handle.get() != 0L && currentModel?.modelPath == model.modelPath) {
+                    return@runCatching
+                }
+                require(LlamaCppNativeBridge.isNativeLoaded) {
+                    "The native llama.cpp library is unavailable for this device ABI."
+                }
+                val path = File(model.modelPath ?: "")
+                require(path.exists() && path.isFile && path.extension.equals("gguf", true)) {
+                    "Select a readable local .gguf file before loading the model: ${model.modelPath}"
+                }
+                unloadModelInternal()
+                val targetContext = minOf(model.contextWindow.takeIf { it > 0 } ?: defaultContextLength, 3840).coerceAtLeast(512)
+                val targetThreads = nThreads.coerceIn(1, 4)
+                val nativeHandle = LlamaCppNativeBridge.nativeLoadModel(
+                    path.absolutePath,
+                    targetContext,
+                    targetThreads,
+                    gpuLayers.coerceAtLeast(0)
+                )
+                check(nativeHandle != 0L) {
+                    "llama.cpp could not load this GGUF model. Check model integrity, RAM, and supported architecture."
+                }
+                handle.set(nativeHandle)
+                currentModel = model
             }
-            val path = File(model.modelPath ?: "")
-            require(path.exists() && path.isFile && path.extension.equals("gguf", true)) {
-                "Select a readable local .gguf file before loading the model: ${model.modelPath}"
-            }
-            unloadModel().getOrThrow()
-            val nativeHandle = LlamaCppNativeBridge.nativeLoadModel(
-                path.absolutePath,
-                model.contextWindow.takeIf { it > 0 } ?: defaultContextLength,
-                nThreads.coerceIn(1, 16),
-                gpuLayers.coerceAtLeast(0)
-            )
-            check(nativeHandle != 0L) {
-                "llama.cpp could not load this GGUF model. Check model integrity, RAM, and supported architecture."
-            }
-            handle.set(nativeHandle)
-            currentModel = model
         }
     }
 
@@ -76,8 +88,12 @@ class LlamaCppInferenceEngine(
                     seed = request.seed,
                     stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
                     callback = LlamaCppNativeBridge.TokenCallback { token ->
-                        if (cancelled.get()) false
-                        else trySend(GenerationEvent.Token(token)).isSuccess
+                        if (cancelled.get()) {
+                            false
+                        } else {
+                            trySend(GenerationEvent.Token(token))
+                            !cancelled.get()
+                        }
                     }
                 )
             }
@@ -95,22 +111,28 @@ class LlamaCppInferenceEngine(
         } catch (error: Throwable) {
             send(GenerationEvent.Error(error, error.message ?: "llama.cpp generation failed"))
         }
-    }
+    }.buffer(kotlinx.coroutines.channels.Channel.UNLIMITED)
 
     override suspend fun cancel(requestId: String) {
         cancelled.set(true)
         handle.get().takeIf { it != 0L }?.let(LlamaCppNativeBridge::nativeCancel)
     }
 
+    private fun unloadModelInternal() {
+        cancelled.set(true)
+        val old = handle.getAndSet(0L)
+        if (old != 0L) {
+            LlamaCppNativeBridge.nativeCancel(old)
+            LlamaCppNativeBridge.nativeFree(old)
+        }
+        currentModel = null
+    }
+
     override suspend fun unloadModel(): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            cancelled.set(true)
-            val old = handle.getAndSet(0L)
-            if (old != 0L) {
-                LlamaCppNativeBridge.nativeCancel(old)
-                check(LlamaCppNativeBridge.nativeFree(old)) { "Native model release failed" }
+        loadMutex.withLock {
+            runCatching {
+                unloadModelInternal()
             }
-            currentModel = null
         }
     }
 }

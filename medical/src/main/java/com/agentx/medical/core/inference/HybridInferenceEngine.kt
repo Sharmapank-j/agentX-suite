@@ -25,7 +25,7 @@ class HybridInferenceEngine(
         activeLocalBackend = LocalBackendType.LLAMA_CPP
     )
 
-    var inferenceMode: InferenceMode = InferenceMode.HYBRID_AUTO
+    var inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY
 
     val localEngine: InferenceEngine
         get() = llamaEngine

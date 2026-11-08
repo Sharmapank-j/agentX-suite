@@ -91,16 +91,49 @@ static AgentXContext * fromHandle(jlong handle) {
     return reinterpret_cast<AgentXContext *>(static_cast<intptr_t>(handle));
 }
 
+static int detectPerformanceCores() {
+    long maxFreq = 0;
+    const long numCpus = sysconf(_SC_NPROCESSORS_CONF);
+    if (numCpus <= 0) return 2;
+    std::vector<long> freqs(numCpus, 0);
+    for (int i = 0; i < numCpus; ++i) {
+        char path[128];
+        snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", i);
+        FILE * f = fopen(path, "r");
+        if (f) {
+            long freq = 0;
+            if (fscanf(f, "%ld", &freq) == 1) {
+                freqs[i] = freq;
+                if (freq > maxFreq) maxFreq = freq;
+            }
+            fclose(f);
+        }
+    }
+    if (maxFreq > 0) {
+        int perfCount = 0;
+        const long threshold = static_cast<long>(maxFreq * 0.85);
+        for (int i = 0; i < numCpus; ++i) {
+            if (freqs[i] >= threshold) perfCount++;
+        }
+        if (perfCount >= 1 && perfCount <= 4) return perfCount;
+    }
+    return (numCpus >= 8) ? 2 : std::min<int>(4, std::max<int>(1, static_cast<int>(numCpus)));
+}
+
 // Fill batch with tokens at consecutive positions starting from pos_0, output logits for the last token
 static void batch_set_tokens(llama_batch_ext * batch, const llama_token * tokens, int32_t n_tokens, llama_pos pos_0) {
     if (batch == nullptr || tokens == nullptr || n_tokens <= 0) return;
     llama_batch_ext_clear(batch);
+    int32_t last_idx = -1;
     for (int32_t i = 0; i < n_tokens; ++i) {
         const int32_t idx = llama_batch_ext_add_token(batch, 0, tokens[i]);
         const llama_pos pos = pos_0 + i;
         llama_batch_ext_set_pos(batch, idx, &pos);
+        last_idx = idx;
     }
-    llama_batch_ext_set_output_logits(batch, n_tokens - 1, true);
+    if (last_idx >= 0) {
+        llama_batch_ext_set_output_logits(batch, last_idx, true);
+    }
 }
 
 struct ChatTurn {
@@ -164,9 +197,13 @@ static std::vector<ChatTurn> parsePromptTurns(const std::string & systemPrompt, 
                 turns.push_back({currentRole, currentContent});
                 currentContent.clear();
             }
-            currentRole = "system";
-            currentContent = trimmed.substr(7);
-            if (!currentContent.empty() && currentContent[0] == ' ') currentContent.erase(0, 1);
+            std::string sysContent = trimmed.substr(7);
+            if (!sysContent.empty() && sysContent[0] == ' ') sysContent.erase(0, 1);
+            // Avoid duplicating system instructions if already inserted
+            if (turns.empty() || turns.front().role != "system") {
+                currentRole = "system";
+                currentContent = sysContent;
+            }
         } else {
             if (!currentContent.empty()) currentContent += "\n";
             currentContent += line;
@@ -230,16 +267,22 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
     }
 
     llama_context_params contextParams = llama_context_default_params();
-    contextParams.n_ctx = static_cast<uint32_t>(std::clamp(static_cast<int>(contextLength), 128, 131072));
-    contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 2048);
-    contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 512);
+    // Mobile safety clamp: on mobile devices, context must never exceed 4096 tokens
+    // to avoid allocating multiple gigabytes of KV-cache that trigger OS Out-Of-Memory (LMK) kills.
+    const int requestedCtx = static_cast<int>(contextLength);
+    const int safeCtx = (requestedCtx <= 0) ? 2048 : std::clamp(requestedCtx, 128, 4096);
+    contextParams.n_ctx = static_cast<uint32_t>(safeCtx);
+    contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 512);
+    contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 256);
 
+    // Mobile threading: snap to hardware-detected performance cores to prevent severe
+    // thread synchronization barrier stalls across weak asymmetric Cortex-A55 efficiency cores on mobile SoCs.
+    const int perfCores = detectPerformanceCores();
     int threads = static_cast<int>(nThreads);
-    if (threads <= 0) {
-        const long onlineCpus = sysconf(_SC_NPROCESSORS_ONLN);
-        threads = onlineCpus > 0 ? static_cast<int>(onlineCpus) : 4;
+    if (threads <= 0 || threads > perfCores) {
+        threads = perfCores;
     }
-    contextParams.n_threads = std::clamp(threads, 1, 16);
+    contextParams.n_threads = std::clamp(threads, 1, 4);
     contextParams.n_threads_batch = contextParams.n_threads;
 
     state->context = llama_init_from_model(state->model, contextParams);
@@ -326,8 +369,13 @@ static jint internalGenerate(
             size_t capacity = 4096;
             for (const auto & t : turns) capacity += t.content.size() * 3;
             std::vector<char> formatted(capacity);
-            const int32_t formattedLength = llama_chat_apply_template(
+            int32_t formattedLength = llama_chat_apply_template(
                 chatTemplate, chatMsgs.data(), chatMsgs.size(), true, formatted.data(), static_cast<int32_t>(formatted.size()));
+            if (formattedLength > static_cast<int32_t>(formatted.size())) {
+                formatted.resize(static_cast<size_t>(formattedLength) + 1);
+                formattedLength = llama_chat_apply_template(
+                    chatTemplate, chatMsgs.data(), chatMsgs.size(), true, formatted.data(), static_cast<int32_t>(formatted.size()));
+            }
             if (formattedLength > 0 && static_cast<size_t>(formattedLength) < formatted.size()) {
                 prompt.assign(formatted.data(), static_cast<size_t>(formattedLength));
                 LOGI("Applied native model chat template (%d bytes)", formattedLength);
@@ -377,7 +425,10 @@ static jint internalGenerate(
     }
 
     // Reset KV cache for clean generation session
-    llama_memory_clear(llama_get_memory(state->context), true);
+    llama_memory_t mem = llama_get_memory(state->context);
+    if (mem != nullptr) {
+        llama_memory_clear(mem, true);
+    }
 
     llama_batch_ext * batch = llama_batch_ext_init(state->context);
     if (batch == nullptr) {
@@ -388,6 +439,8 @@ static jint internalGenerate(
     const int32_t n_batch = static_cast<int32_t>(llama_n_batch(state->context));
     int32_t n_pos = 0;
 
+    LOGI("Tokenized prompt into %zu tokens. Evaluating prompt (n_batch=%d)...", promptTokens.size(), n_batch);
+
     // Evaluate prompt in chunks of n_batch
     for (int32_t i = 0; i < (int32_t)promptTokens.size(); i += n_batch) {
         if (state->cancelled.load()) {
@@ -395,6 +448,7 @@ static jint internalGenerate(
             return 0;
         }
         const int32_t n_eval = std::min((int32_t)promptTokens.size() - i, n_batch);
+        LOGI("Evaluating prompt chunk %d to %d (%d tokens)...", i, i + n_eval, n_eval);
         batch_set_tokens(batch, promptTokens.data() + i, n_eval, i);
         if (llama_process(state->context, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
             LOGE("Prompt evaluation failed in llama_process at chunk offset %d", i);
@@ -403,17 +457,18 @@ static jint internalGenerate(
         }
         n_pos = i + n_eval;
     }
+    LOGI("Prompt evaluation finished successfully (%zu tokens at n_pos=%d).", promptTokens.size(), n_pos);
 
     auto samplerParams = llama_sampler_chain_default_params();
     llama_sampler * sampler = llama_sampler_chain_init(samplerParams);
-    if (topK > 0) {
-        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
-    }
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.01f, 1.0f), 1));
     if (repetitionPenalty > 1.0f) {
         const int32_t n_vocab = llama_vocab_n_tokens(state->vocab);
         llama_sampler_chain_add(sampler, llama_sampler_init_penalties(n_vocab, 64, repetitionPenalty, 0.0f, 0.0f));
     }
+    if (topK > 0) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
+    }
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.01f, 1.0f), 1));
     if (temperature > 0.0f) {
         llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
         const uint32_t s = seed > 0 ? static_cast<uint32_t>(seed) : LLAMA_DEFAULT_SEED;
@@ -442,6 +497,7 @@ static jint internalGenerate(
         }
 
         const llama_token token = llama_sampler_sample(sampler, state->context, -1);
+        llama_sampler_accept(sampler, token);
         if (i == 0) {
             LOGI("First token sampled from model: %d", token);
         }
@@ -454,11 +510,8 @@ static jint internalGenerate(
         const int pieceLength = llama_token_to_piece(
             state->vocab, token, piece, static_cast<int>(sizeof(piece)), 0, true);
         if (pieceLength < 0) {
-            LOGE("llama_token_to_piece failed for token %d", token);
-            break;
-        }
-
-        if (pieceLength > 0) {
+            LOGE("llama_token_to_piece buffer overflow (needed %d) for token %d", -pieceLength, token);
+        } else if (pieceLength > 0) {
             utf8Buffer.append(piece, static_cast<size_t>(pieceLength));
             const size_t completeLen = getCompleteUtf8Length(utf8Buffer);
             if (completeLen > 0) {
@@ -488,6 +541,9 @@ static jint internalGenerate(
                         break;
                     }
                     ++generated;
+                    if (generated % 10 == 0) {
+                        LOGI("Streaming generation: %d tokens emitted so far", generated);
+                    }
                     if (keepGoing != JNI_TRUE) break;
                 }
             } else {

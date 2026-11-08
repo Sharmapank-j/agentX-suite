@@ -5,6 +5,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Mandatory for neural network inference: always optimize with -O3 and SIMD,
+# even when building debug APKs, so tensor operations vectorize with ARM NEON & DotProd.
+add_compile_options(-O3 -DNDEBUG)
+if (ANDROID_ABI STREQUAL "arm64-v8a")
+    add_compile_options(-march=armv8.2-a+dotprod+fp16)
+endif()
+
 # Build the upstream llama.cpp runtime as part of the Android native build.
 # Pin an immutable upstream commit so model execution is reproducible.
 include(FetchContent)

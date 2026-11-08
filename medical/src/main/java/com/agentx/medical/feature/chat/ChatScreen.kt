@@ -370,10 +370,9 @@ fun ChatScreen(
                 )
 
                 if (state.messages.isEmpty()) {
-                    // Dynamic Clinical "Did You Know?" Insight (disappears when chat starts)
-                    MedicalDidYouKnowCard(
-                        conversationId = state.currentConversation?.id,
-                        onSelectPrompt = { prompt -> viewModel.sendPrompt(prompt) },
+                    EmptyMedicalChatPlaceholder(
+                        activeModel = state.activeModel,
+                        modelStatus = state.modelStatus,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
@@ -853,18 +852,14 @@ fun ChatInputBar(
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dynamic Clinical "Did You Know?" Insight Card (Empty State)
+// Minimalist Unscripted Clinical Empty State
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun MedicalDidYouKnowCard(
-    conversationId: String?,
-    onSelectPrompt: (String) -> Unit,
+private fun EmptyMedicalChatPlaceholder(
+    activeModel: com.agentx.medical.domain.models.GGUFModel?,
+    modelStatus: com.agentx.medical.core.inference.ModelStatus,
     modifier: Modifier = Modifier
 ) {
-    var insight by remember(conversationId) {
-        mutableStateOf(MedicalDidYouKnowRepository.getRandomInsight())
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -873,184 +868,108 @@ private fun MedicalDidYouKnowCard(
         Surface(
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(52.dp)
+            modifier = Modifier.size(64.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    Icons.Default.Lightbulb,
+                    Icons.Default.Psychology,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             "AgentX Medical",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
-            "Evidence-Based Clinical Decision Support • Fast & Private",
-            style = MaterialTheme.typography.labelSmall,
+            "Evidence-Based Clinical Decision Support • 100% Offline",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.outline
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Clinical notice banner
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(0.9f)
         ) {
             Text(
                 text = "⚕️ Clinical Notice: For education, research, and assistive reasoning only. Non-diagnostic. Verify all outputs with licensed physician.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Glassmorphic Clinical "Did You Know?" Card
+        // Status Card
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-            modifier = Modifier.fillMaxWidth()
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier.fillMaxWidth(0.9f)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                // Header: Badge + Category + Shuffle Button
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                        ) {
-                            Text(
-                                text = "💡 CLINICAL INSIGHT",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (modelStatus.state == com.agentx.medical.core.inference.ModelLifecycleState.LOADED)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error
                             )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
-                        ) {
-                            Text(
-                                text = "${insight.emoji} ${insight.category}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = {
-                            insight = MedicalDidYouKnowRepository.getRandomInsight(excludeId = insight.id)
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Next Insight",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                    )
+                    Text(
+                        text = if (modelStatus.state == com.agentx.medical.core.inference.ModelLifecycleState.LOADED)
+                            "Engine Ready" else "Model Not Loaded",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (modelStatus.state == com.agentx.medical.core.inference.ModelLifecycleState.LOADED)
+                            MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Headline
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = insight.headline,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // Fact Content
-                Text(
-                    text = insight.fact,
+                    text = activeModel?.name ?: "No model selected",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+
+                if (activeModel != null) {
+                    Text(
+                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} ctx",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // 1-Tap Clinical Consult Button
-                Surface(
-                    onClick = { onSelectPrompt(insight.suggestedPrompt) },
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Ask: \"${insight.suggestedPrompt.take(45)}...\"",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                // Related Exploration Chips
-                if (insight.relatedChips.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        insight.relatedChips.forEach { chip ->
-                            Surface(
-                                onClick = { onSelectPrompt("Evaluate evidence and clinical guidelines regarding $chip.") },
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                            ) {
-                                Text(
-                                    text = chip,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = "Enter clinical question or case notes below to begin.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         }
     }

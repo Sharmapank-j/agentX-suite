@@ -107,6 +107,7 @@ class AgentXApplication : Application() {
         val savedMode = preferencesManager.loadInferenceMode()
         val savedBackend = preferencesManager.loadLocalBackend()
 
+        LlamaCppEngine.appContext = this
         val localLlama = LlamaCppEngine()
         val cloudEngine = CloudInferenceEngine(config = savedCloudConfig)
         hybridInferenceEngine = HybridInferenceEngine(
@@ -169,7 +170,9 @@ class AgentXApplication : Application() {
                     val candidateDirs = listOfNotNull(
                         File(filesDir, "models"),
                         File(getExternalFilesDir(null), "models"),
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                        File(Environment.getExternalStorageDirectory(), "Download"),
+                        File("/sdcard/Download")
                     )
                     for (dir in candidateDirs) {
                         if (!dir.exists() || !dir.isDirectory) continue
@@ -191,12 +194,13 @@ class AgentXApplication : Application() {
                                 isActive = true
                             )
                             modelRepository.addModel(newModel)
+                            modelRepository.setActiveModel(newModel.id)
                             inferenceEngine.loadModel(
                                 ModelConfig(
                                     modelId = newModel.id,
                                     modelPath = newModel.filePath,
-                                    contextLength = newModel.contextLength,
-                                    threads = newModel.threads,
+                                    contextLength = newModel.contextLength.coerceIn(512, 3840),
+                                    threads = newModel.threads.coerceIn(1, 4),
                                     temperature = newModel.temperature,
                                     topP = newModel.topP
                                 )
@@ -206,17 +210,21 @@ class AgentXApplication : Application() {
                         if (modelRepository.getAllModels().first().isNotEmpty()) break
                     }
                 } else {
-                    val active = current.firstOrNull { it.isActive } ?: current.first()
-                    inferenceEngine.loadModel(
-                        ModelConfig(
-                            modelId = active.id,
-                            modelPath = active.filePath,
-                            contextLength = active.contextLength,
-                            threads = active.threads,
-                            temperature = active.temperature,
-                            topP = active.topP
+                    val active = current.firstOrNull { it.isActive && File(it.filePath).exists() }
+                        ?: current.firstOrNull { File(it.filePath).exists() }
+                    if (active != null) {
+                        modelRepository.setActiveModel(active.id)
+                        inferenceEngine.loadModel(
+                            ModelConfig(
+                                modelId = active.id,
+                                modelPath = active.filePath,
+                                contextLength = active.contextLength.coerceIn(512, 3840),
+                                threads = active.threads.coerceIn(1, 4),
+                                temperature = active.temperature,
+                                topP = active.topP
+                            )
                         )
-                    )
+                    }
                 }
             } catch (_: Exception) {}
         }

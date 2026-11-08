@@ -1034,8 +1034,8 @@ fun ModelConfigScreen(
     var systemPrompt by remember(model) { mutableStateOf(extendedConfig.systemPrompt ?: "") }
     var outputFormat by remember(model) { mutableStateOf(extendedConfig.outputFormat) }
     var jsonSchema by remember(model) { mutableStateOf(extendedConfig.jsonSchema ?: "") }
-    var threads by remember(model) { mutableIntStateOf(model?.threads ?: state.cpuTopology.recommendedInferenceThreads) }
-    var contextLength by remember(model) { mutableIntStateOf(model?.contextLength ?: 3840) }
+    var threads by remember(model) { mutableIntStateOf((model?.threads ?: state.cpuTopology.recommendedInferenceThreads).coerceIn(1, 4)) }
+    var contextLength by remember(model) { mutableIntStateOf((model?.contextLength ?: 2048).coerceIn(512, 3840)) }
     var maxTokens by remember(model) { mutableIntStateOf(extendedConfig.maxTokens) }
     var temperature by remember(model) { mutableFloatStateOf(model?.temperature ?: 0.7f) }
     var topP by remember(model) { mutableFloatStateOf(model?.topP ?: 0.9f) }

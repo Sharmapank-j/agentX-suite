@@ -85,7 +85,7 @@ object GgufMetadataParser {
                     TYPE_UINT32, TYPE_INT32 -> {
                         val num = readInt32(inputStream)
                         if (key.endsWith(".context_length")) {
-                            contextLength = num
+                            contextLength = minOf(num, 3840).coerceAtLeast(512)
                         } else if (key == "general.file_type") {
                             quantization = mapFileTypeToQuant(num)
                         }
@@ -96,7 +96,7 @@ object GgufMetadataParser {
                     TYPE_UINT64, TYPE_INT64 -> {
                         val num = readInt64(inputStream)
                         if (key.endsWith(".context_length")) {
-                            contextLength = num.toInt()
+                            contextLength = minOf(num.toInt(), 3840).coerceAtLeast(512)
                         }
                     }
                     TYPE_FLOAT64 -> {

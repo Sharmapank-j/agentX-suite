@@ -79,11 +79,11 @@ class SettingsPreferencesManager(context: Context) {
     }
 
     fun loadInferenceMode(): InferenceMode {
-        val modeStr = prefs.getString(KEY_INFERENCE_MODE, InferenceMode.HYBRID_AUTO.name) ?: InferenceMode.HYBRID_AUTO.name
+        val modeStr = prefs.getString(KEY_INFERENCE_MODE, InferenceMode.LOCAL_ONLY.name) ?: InferenceMode.LOCAL_ONLY.name
         return try {
             InferenceMode.valueOf(modeStr)
         } catch (_: Exception) {
-            InferenceMode.HYBRID_AUTO
+            InferenceMode.LOCAL_ONLY
         }
     }
 
