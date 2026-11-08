@@ -5,6 +5,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -18,6 +23,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import com.agentx.admin.ui.theme.MatrixGreenBright
+import com.agentx.admin.ui.theme.RoseError
+import com.agentx.admin.ui.theme.ServerBorder
+import com.agentx.admin.ui.theme.ServerGlass
+import com.agentx.admin.ui.theme.ServerGlassElevated
+import com.agentx.admin.ui.theme.ServerSurface
+import com.agentx.admin.ui.theme.ServerTextPrimary
+import com.agentx.admin.ui.theme.ServerTextSecondary
+import com.agentx.admin.ui.theme.ServerVoid
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -137,6 +156,17 @@ fun AdminDashboardScreen(
 
     val serverUrl = "http://${state.telemetry.ipAddress}:${state.telemetry.port}"
 
+    val infiniteTransition = rememberInfiniteTransition(label = "serverPulse")
+    val beaconAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "beaconAlpha"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -144,14 +174,15 @@ fun AdminDashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = ServerGlass,
+                            border = BorderStroke(1.dp, if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = beaconAlpha) else ServerBorder),
                             modifier = Modifier.size(28.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Default.Dns,
                                     contentDescription = "Server Hub",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    tint = if (state.telemetry.isRunning) MatrixGreenBright else ServerTextSecondary,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -161,15 +192,19 @@ fun AdminDashboardScreen(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (state.telemetry.isRunning) Color(0xFF10B981) else Color(0xFFEF4444))
+                                .background(if (state.telemetry.isRunning) MatrixGreenBright else RoseError)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("AgentX Serve", fontWeight = FontWeight.Bold)
+                        Text("AgentX Serve", fontWeight = FontWeight.Bold, color = ServerTextPrimary)
                     }
-                }
+                },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = ServerVoid
+                )
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = ServerVoid,
         modifier = modifier
     ) { padding ->
         Column(
@@ -177,18 +212,18 @@ fun AdminDashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Master Server Banner Card
+            // Master Server Banner Card with Pulsing Beacon
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     .animateContentSize(),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (state.telemetry.isRunning) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
+                    containerColor = if (state.telemetry.isRunning) ServerGlassElevated else ServerSurface
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = beaconAlpha) else ServerBorder
                 ),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -203,13 +238,13 @@ fun AdminDashboardScreen(
                                 if (state.telemetry.isRunning) "SERVER ONLINE • ${state.servingMode.label}" else "SERVER STOPPED",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
-                                color = if (state.telemetry.isRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                color = if (state.telemetry.isRunning) MatrixGreenBright else ServerTextSecondary
                             )
                             Text(
                                 if (state.telemetry.isRunning) serverUrl else "Tap Start to host endpoints",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.outline
+                                color = if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = 0.8f) else ServerTextSecondary
                             )
                         }
 
@@ -318,6 +353,7 @@ fun AdminDashboardScreen(
             val tabs = listOf("Local Models", "CLI Console", "Tunneling", "Telemetry", "Cloud Gateway", "Clients", "API Keys", "Logs", "Quickstart")
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
+                containerColor = ServerVoid,
                 edgePadding = 16.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -325,7 +361,13 @@ fun AdminDashboardScreen(
                     Tab(
                         selected = state.selectedTab == index,
                         onClick = { viewModel.selectTab(index) },
-                        text = { Text(title) }
+                        text = {
+                            Text(
+                                text = title,
+                                color = if (state.selectedTab == index) MatrixGreenBright else ServerTextSecondary,
+                                fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     )
                 }
             }
@@ -838,14 +880,16 @@ private fun CliConsoleTab(
     var cmdInput by remember { mutableStateOf("") }
     val listState = rememberScrollState()
 
-    LaunchedEffect(cliHistory.size) {
+    LaunchedEffect(cliHistory.size, cliHistory.lastOrNull()?.output) {
         listState.animateScrollTo(listState.maxValue)
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 8.dp),
+            .padding(bottom = 8.dp)
+            .navigationBarsPadding()
+            .imePadding(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Top HUD & Controls

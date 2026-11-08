@@ -20,12 +20,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
@@ -74,6 +78,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +134,35 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) {
+                true
+            } else {
+                val lastVisibleIndex = visibleItems.last().index
+                val totalItems = layoutInfo.totalItemsCount
+                lastVisibleIndex >= totalItems - 2
+            }
+        }
+    }
+
+    // Auto-scroll on new message added
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            listState.animateScrollToItem(state.messages.size - 1)
+        }
+    }
+
+    // Auto-scroll on streaming content updates if user is already at the bottom
+    LaunchedEffect(state.messages.lastOrNull()?.content) {
+        if (isAtBottom && state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.size - 1)
+        }
+    }
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameText by remember { mutableStateOf("") }
@@ -309,7 +343,8 @@ fun ChatScreen(
             topBar = {
                 CyberTopAppBar(
                     conversationTitle = state.currentConversation?.title ?: "AgentX Chat",
-                                        activeModel = state.activeModel,
+                    activeModel = state.activeModel,
+                    modelStatus = state.modelStatus,
                     onTitleClick = {
                         renameText = state.currentConversation?.title ?: ""
                         showRenameDialog = true
@@ -326,13 +361,17 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .imePadding()
+                ) {
                     // Live Inference Streaming Metrics Bar
                     if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
                         LiveMetricsHud(metrics = state.liveMetrics)
                     }
 
-                    // Modern Floating Pill Input Bar
+                    // Modern Floating Pill Input Bar with Auto-Adjust
                     ChatInputBar(
                         text = state.inputText,
                         onTextChanged = viewModel::onInputTextChanged,
@@ -346,48 +385,96 @@ fun ChatScreen(
             containerColor = VoidDark,
             modifier = modifier
         ) { paddingValues ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Active Model Status Banner
-                ActiveModelStatusBanner(
-                    modelStatus = state.modelStatus,
-                    activeModel = state.activeModel,
-                    onSwitchModelClick = { showModelSwitcherSheet = true }
-                )
-
-                if (state.messages.isEmpty()) {
-                    EmptyChatPlaceholder(
-                        activeModel = state.activeModel,
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    // Active Model Status Banner
+                    ActiveModelStatusBanner(
                         modelStatus = state.modelStatus,
+                        activeModel = state.activeModel,
                         onSwitchModelClick = { showModelSwitcherSheet = true },
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                        onLoadClick = { viewModel.loadActiveModelIntoRam() },
+                        onUnloadClick = { viewModel.unloadActiveModelFromRam() }
                     )
-                } else {
-                    // Chat Message Feed
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 16.dp),
-                        reverseLayout = false
-                    ) {
-                        items(state.messages) { message ->
-                            ChatMessageItem(
-                                message = message,
-                                onRegenerate = { viewModel.regenerateResponse(message.id) },
-                                onDelete = { viewModel.deleteMessage(message.id) },
-                                isStreamingActive = state.isStreaming
-                            )
-                        }
-                        if (state.isStreaming) {
-                            item {
-                                StreamingIndicator(agentName = state.streamingAgentName ?: "AgentX")
+
+                    if (state.messages.isEmpty()) {
+                        EmptyChatPlaceholder(
+                            activeModel = state.activeModel,
+                            modelStatus = state.modelStatus,
+                            onSwitchModelClick = { showModelSwitcherSheet = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                        )
+                    } else {
+                        // Chat Message Feed with Smart Auto-Scroll
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(horizontal = 16.dp),
+                            reverseLayout = false
+                        ) {
+                            items(state.messages) { message ->
+                                ChatMessageItem(
+                                    message = message,
+                                    onRegenerate = { viewModel.regenerateResponse(message.id) },
+                                    onDelete = { viewModel.deleteMessage(message.id) },
+                                    isStreamingActive = state.isStreaming
+                                )
                             }
+                            if (state.isStreaming) {
+                                item {
+                                    StreamingIndicator(agentName = state.streamingAgentName ?: "AgentX")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Floating Smart Auto-Scroll Pill (Never hijack user scrolling)
+                AnimatedVisibility(
+                    visible = !isAtBottom && state.messages.isNotEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Surface(
+                        onClick = {
+                            scope.launch {
+                                listState.animateScrollToItem(state.messages.size - 1)
+                            }
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        color = SurfaceGlassElevated,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.6f)),
+                        shadowElevation = 6.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Scroll to bottom",
+                                tint = ElectricCyan,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (state.isStreaming) "⚡ Live Tokens ▾" else "Scroll to latest ▾",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ElectricCyan,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -850,7 +937,7 @@ fun ActiveModelStatusBanner(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Minimalist Unscripted Empty State
+// Futuristic Cyber-Obsidian Empty State
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun EmptyChatPlaceholder(
@@ -859,95 +946,167 @@ private fun EmptyChatPlaceholder(
     onSwitchModelClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val auraAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.65f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "auraAlpha"
+    )
+
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Glowing Hero Icon
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(ElectricCyan, NeonIndigo))),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Psychology,
-                contentDescription = null,
-                tint = VoidDark,
-                modifier = Modifier.size(36.dp)
+        // Glowing Hero Orbital Emblem
+        Box(contentAlignment = Alignment.Center) {
+            // Outer Aura
+            Box(
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                ElectricCyan.copy(alpha = auraAlpha),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
+            // Core Orb
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(ElectricCyan, NeonIndigo))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Psychology,
+                    contentDescription = null,
+                    tint = VoidDark,
+                    modifier = Modifier.size(38.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
         Text(
-            "AgentX",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
+            "AgentX Intelligence",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
             color = TextPrimary
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            "100% Offline On-Device LLM Inference",
+            "100% Offline On-Device LLM Inference • Upstream llama.cpp",
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Status Card
+        // Hardware & Architecture Diagnostics Card
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             color = SurfaceGlassElevated,
             border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
-            modifier = Modifier.fillMaxWidth(0.88f)
+            modifier = Modifier.fillMaxWidth(0.92f)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Engine Status Pill
+                val isLoaded = modelStatus.state == ModelLifecycleState.LOADED
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isLoaded) CyberMint.copy(alpha = 0.15f) else AlertRose.copy(alpha = 0.15f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(10.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (modelStatus.state == ModelLifecycleState.LOADED) CyberMint else AlertRose)
+                            .background(if (isLoaded) CyberMint else AlertRose)
                     )
                     Text(
-                        text = if (modelStatus.state == ModelLifecycleState.LOADED) "Engine Ready" else "Model Not Loaded",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (modelStatus.state == ModelLifecycleState.LOADED) CyberMint else AlertRose
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = activeModel?.name ?: "No model selected",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (activeModel != null) {
-                    Text(
-                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} ctx",
+                        text = if (isLoaded) "Native Engine Online & Ready" else "Model Not Staged In RAM",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary
+                        fontWeight = FontWeight.Bold,
+                        color = if (isLoaded) CyberMint else AlertRose
                     )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Type your query below to begin inference.",
+                    text = activeModel?.name ?: "No model selected",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (activeModel != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${activeModel.quantization} • ${activeModel.architecture} • ${activeModel.contextLength} Tokens Context",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ElectricCyan
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Hardware Topology Badges
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SpaceDark,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("CPU TOPOLOGY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            Text("2 Perf Cores", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = SpaceDark,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("SOVEREIGNTY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            Text("Zero Cloud Leak", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CyberMint)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Type any prompt below to begin on-device reasoning.",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted
+                    color = TextSecondary
                 )
             }
         }
@@ -955,7 +1114,7 @@ private fun EmptyChatPlaceholder(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Chat Message Item
+// Elevated Chat Message Item
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ChatMessageItem(
@@ -1003,10 +1162,18 @@ fun ChatMessageItem(
             } else {
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
+                        .size(18.dp)
                         .clip(CircleShape)
-                        .background(NeonIndigo)
-                )
+                        .background(Brush.linearGradient(listOf(ElectricCyan, NeonIndigo))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = VoidDark,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "AgentX",
@@ -1016,36 +1183,46 @@ fun ChatMessageItem(
                 )
                 if (message.tokenCount > 0) {
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "• ${message.tokenCount} tokens",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF0E2A47),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.3f))
+                    ) {
+                        Text(
+                            text = "⚡ ${message.tokenCount} tokens",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricCyan,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }
 
-        // Message Bubble
+        // Message Bubble with Asymmetric Geometry
         Surface(
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp
+                topStart = if (isUser) 18.dp else 4.dp,
+                topEnd = 18.dp,
+                bottomStart = 18.dp,
+                bottomEnd = if (isUser) 4.dp else 18.dp
             ),
-            color = if (isUser) Color(0xFF0E2A47) else SurfaceGlass,
+            color = if (isUser) Color(0xFF0F2B48) else SurfaceGlass,
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                if (isUser) ElectricCyan.copy(alpha = 0.3f) else SurfaceBorder
+                if (isUser) ElectricCyan.copy(alpha = 0.35f) else SurfaceBorder
             ),
-            modifier = Modifier.fillMaxWidth(0.92f)
+            modifier = Modifier.fillMaxWidth(if (isUser) 0.88f else 0.94f)
         ) {
             Box(modifier = Modifier.padding(14.dp)) {
                 if (isUser) {
                     Text(
                         text = message.content,
                         color = TextPrimary,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        lineHeight = 22.sp
                     )
                 } else {
                     MarkdownText(
@@ -1066,21 +1243,32 @@ fun ChatMessageItem(
                     clipboardManager.setText(AnnotatedString(message.content))
                     isCopied = true
                 },
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
                     imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
                     contentDescription = "Copy text",
-                    tint = if (isCopied) ElectricCyan else TextMuted,
+                    tint = if (isCopied) CyberMint else TextMuted,
                     modifier = Modifier.size(14.dp)
                 )
+            }
+
+            if (isCopied) {
+                Text(
+                    text = "Copied",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    color = CyberMint,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
             }
 
             if (!isUser) {
                 IconButton(
                     onClick = onRegenerate,
                     enabled = !isStreamingActive,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -1093,7 +1281,7 @@ fun ChatMessageItem(
 
             IconButton(
                 onClick = onDelete,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,

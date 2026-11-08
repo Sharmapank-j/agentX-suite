@@ -2,22 +2,40 @@ package com.agentx.medical.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Clinical-Obsidian Void Backgrounds
+val MedicalVoid = Color(0xFF040A12)
+val MedicalSurface = Color(0xFF081422)
+val MedicalSurfaceGlass = Color(0xFF0D1E33)
+val MedicalSurfaceBorder = Color(0xFF163252)
+val MedicalSurfaceElevated = Color(0xFF11243B)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Clinical Accents
+val ClinicalTeal = Color(0xFF0D9488)
+val ClinicalTealBright = Color(0xFF14B8A6)
+val BioEmerald = Color(0xFF10B981)
+val CyanCaduceus = Color(0xFF06B6D4)
+val ClinicalAlert = Color(0xFFF43F5E)
+val ClinicalWarning = Color(0xFFF59E0B)
 
-// AgentX Specific Palette
-val AgentBlue = Color(0xFF2979FF)
-val AgentCyan = Color(0xFF00E5FF)
-val AgentGreen = Color(0xFF00E676)
-val AgentAmber = Color(0xFFFFAB00)
-val AgentPurple = Color(0xFFAA00FF)
-val AgentRed = Color(0xFFFF1744)
+// Clinical Typography
+val ClinicalTextPrimary = Color(0xFFF1F5F9)
+val ClinicalTextSecondary = Color(0xFF94A3B8)
+val ClinicalTextMuted = Color(0xFF64748B)
 
-val SurfaceDark = Color(0xFF121212)
-val SurfaceVariantDark = Color(0xFF1E1E1E)
-val CardBackgroundDark = Color(0xFF242424)
+// Backward Compatibility Aliases
+val AgentBlue = CyanCaduceus
+val AgentCyan = ClinicalTealBright
+val AgentGreen = BioEmerald
+val AgentAmber = ClinicalWarning
+val AgentPurple = Color(0xFF8B5CF6)
+val AgentRed = ClinicalAlert
+val SurfaceDark = MedicalVoid
+val SurfaceVariantDark = MedicalSurfaceGlass
+val CardBackgroundDark = MedicalSurfaceElevated
+
+val Purple80 = ClinicalTealBright
+val PurpleGrey80 = ClinicalTextSecondary
+val Pink80 = CyanCaduceus
+val Purple40 = ClinicalTeal
+val PurpleGrey40 = ClinicalTextMuted
+val Pink40 = ClinicalAlert
