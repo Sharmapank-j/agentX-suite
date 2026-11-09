@@ -3,6 +3,7 @@ package com.agentx.feature.settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -527,6 +528,113 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // ── Phone-to-Phone Cross-Network Pairing ─────────────────────────
+            Text("Phone-to-Phone Cross-Network Pairing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Devices, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Pair with AgentX Serve", fontWeight = FontWeight.Bold)
+                        }
+                        state.pairedServerName?.let { sName ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    "Paired: $sName",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        "Enter the 6-digit code shown on the host phone running AgentX Serve to auto-configure Base URL, API keys, and models across any Wi-Fi or cellular network.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    var pairCodeInput by remember { mutableStateOf("") }
+                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = pairCodeInput,
+                            onValueChange = { if (it.length <= 7) pairCodeInput = it },
+                            placeholder = { Text("e.g. 583912") },
+                            label = { Text("6-Digit Code") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Button(
+                            onClick = { viewModel.pairWith6DigitCode(pairCodeInput) },
+                            enabled = pairCodeInput.isNotBlank() && !state.isPairing
+                        ) {
+                            if (state.isPairing) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("Pair")
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val clipText = clipboardManager.getText()?.text ?: ""
+                                if (clipText.startsWith("agentx://pair?") || clipText.length == 6) {
+                                    if (clipText.length == 6) {
+                                        pairCodeInput = clipText
+                                        viewModel.pairWith6DigitCode(clipText)
+                                    } else {
+                                        viewModel.pairWithQrString(clipText)
+                                    }
+                                } else {
+                                    pairCodeInput = clipText
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Paste from Clipboard")
+                        }
+                    }
+
+                    state.pairingMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (state.isPairingSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // ── Inbuilt Cloud Models & Hybrid Execution ─────────────────────────
             Text("Inbuilt Cloud Models & Hybrid Execution", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

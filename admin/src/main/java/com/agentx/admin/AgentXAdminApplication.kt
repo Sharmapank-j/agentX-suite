@@ -33,6 +33,9 @@ class AgentXAdminApplication : Application() {
     lateinit var tunnelManager: TunnelManager
         private set
 
+    lateinit var pairingManager: com.agentx.admin.server.PairingManager
+        private set
+
     lateinit var nsdHelper: AgentXNsdHelper
         private set
 
@@ -53,6 +56,7 @@ class AgentXAdminApplication : Application() {
         cloudGateway = CloudGeminiGateway()
         localEngine = LocalModelServerEngine(thermalManager)
         server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager)
+        pairingManager = com.agentx.admin.server.PairingManager(this, server, localEngine, tunnelManager)
 
         // Automatically scan and register on-device storage models on startup
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {

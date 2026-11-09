@@ -68,7 +68,8 @@ data class ChatUiState(
     val attachedImageMimeType: String? = null,
     val inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
     val cloudConfig: CloudModelConfig = CloudModelConfig(),
-    val isMultimodalCapable: Boolean = false
+    val isMultimodalCapable: Boolean = false,
+    val gatewayHealth: com.agentx.core.network.GatewayHeartbeatMonitor.GatewayHealthState? = null
 )
 
 class ChatViewModel(
@@ -78,7 +79,8 @@ class ChatViewModel(
     private val inferenceEngine: InferenceEngine,
     private val clinicalSupervisor: ClinicalSupervisor? = null,
     private val executionQueue: ExecutionQueue? = null,
-    private val memoryManager: com.agentx.core.memory.DefaultLongTermMemoryManager? = null
+    private val memoryManager: com.agentx.core.memory.DefaultLongTermMemoryManager? = null,
+    private val gatewayHeartbeatMonitor: com.agentx.core.network.GatewayHeartbeatMonitor? = null
 ) : ViewModel() {
 
     private val _currentConversationId = MutableStateFlow<String?>(null)
@@ -175,7 +177,8 @@ class ChatViewModel(
             attachedImageMimeType = if (isMultimodal) inputState.attachedImageMimeType else null,
             inferenceMode = infMode,
             cloudConfig = currentCloudConfig,
-            isMultimodalCapable = isMultimodal
+            isMultimodalCapable = isMultimodal,
+            gatewayHealth = gatewayHeartbeatMonitor?.healthState?.value
         )
     }.stateIn(
         scope = viewModelScope,

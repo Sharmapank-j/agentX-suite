@@ -1,5 +1,7 @@
 package com.agentx.admin.ui
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.BorderStroke
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -430,7 +432,17 @@ fun AdminDashboardScreen(
                         onCopy = { clipboard.setText(AnnotatedString(it)) }
                     )
                     7 -> TrafficLogsTab(logs = state.trafficLogs)
-                    8 -> QuickstartTab(serverUrl = serverUrl, tunnelUrl = state.tunnelConfig.publicUrl, apiKeys = state.apiKeys)
+                    8 -> QuickstartTab(
+                        serverUrl = serverUrl,
+                        tunnelUrl = state.tunnelConfig.publicUrl,
+                        apiKeys = state.apiKeys,
+                        pairingCode = state.pairingCode,
+                        qrBitmap = state.qrBitmap,
+                        isPairingPublished = state.isPairingPublished,
+                        onRefreshPairingCode = { viewModel.refreshPairingCode() },
+                        onPublishPairing = { viewModel.publishPairingCoordinates() },
+                        onCopy = { clipboard.setText(AnnotatedString(it)) }
+                    )
                 }
             }
         }
@@ -1687,7 +1699,17 @@ private fun TrafficLogsTab(logs: List<TrafficLog>) {
 }
 
 @Composable
-private fun QuickstartTab(serverUrl: String, tunnelUrl: String? = null, apiKeys: List<ApiKeyRecord>) {
+private fun QuickstartTab(
+    serverUrl: String,
+    tunnelUrl: String? = null,
+    apiKeys: List<ApiKeyRecord>,
+    pairingCode: String = "",
+    qrBitmap: android.graphics.Bitmap? = null,
+    isPairingPublished: Boolean = false,
+    onRefreshPairingCode: () -> Unit = {},
+    onPublishPairing: () -> Unit = {},
+    onCopy: (String) -> Unit = {}
+) {
     val activeKey = apiKeys.firstOrNull { !it.isRevoked }?.key ?: "agx_adm_your_key_here"
     val clipboard = LocalClipboardManager.current
 
@@ -1776,8 +1798,147 @@ print(response.choices[0].message.content)
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Native Cross-Network 6-Digit Pairing & QR Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = ServerSurface),
+            border = BorderStroke(1.dp, ServerBorder),
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MatrixGreenBright.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Devices, contentDescription = null, tint = MatrixGreenBright, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Column {
+                            Text("AgentX Instant Pairing", style = MaterialTheme.typography.titleMedium, color = ServerTextPrimary)
+                            Text("Connect another phone in 1-tap", style = MaterialTheme.typography.bodySmall, color = ServerTextSecondary)
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPairingPublished) MatrixGreenBright.copy(alpha = 0.15f) else ServerGlass,
+                        border = BorderStroke(1.dp, if (isPairingPublished) MatrixGreenBright.copy(alpha = 0.3f) else ServerBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(if (isPairingPublished) MatrixGreenBright else ServerTextSecondary, CircleShape)
+                            )
+                            Text(
+                                if (isPairingPublished) "Cloud Active" else "Local Ready",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isPairingPublished) MatrixGreenBright else ServerTextSecondary
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = ServerBorder.copy(alpha = 0.5f))
+
+                // 6-Digit Pairing Display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("6-Digit Pairing Code", style = MaterialTheme.typography.labelSmall, color = ServerTextSecondary)
+                        val formattedCode = if (pairingCode.length == 6) {
+                            "${pairingCode.substring(0, 3)} - ${pairingCode.substring(3)}"
+                        } else pairingCode.ifBlank { "------" }
+                        Text(
+                            text = formattedCode,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            ),
+                            color = MatrixGreenBright
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        IconButton(onClick = onRefreshPairingCode) {
+                            Icon(Icons.Default.Refresh, contentDescription = "New Code", tint = ServerTextSecondary)
+                        }
+                        IconButton(onClick = { onCopy(pairingCode) }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy Code", tint = MatrixGreenBright)
+                        }
+                    }
+                }
+
+                // QR Code Display
+                if (qrBitmap != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Image(
+                                bitmap = qrBitmap.asImageBitmap(),
+                                contentDescription = "Ecosystem Pairing QR Code",
+                                modifier = Modifier
+                                    .size(160.dp)
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "On your other phone: Open AgentX -> Settings -> Pair with AgentX Serve, then enter the 6-digit code or scan the QR code above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ServerTextSecondary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onPublishPairing,
+                        modifier = Modifier.weight(1f),
+                        border = BorderStroke(1.dp, MatrixGreenBright.copy(alpha = 0.4f))
+                    ) {
+                        Text("Sync Rendezvous", color = MatrixGreenBright, style = MaterialTheme.typography.labelMedium)
+                    }
+                    Button(
+                        onClick = { onCopy(serverUrl) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Copy Base URL", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
         SnippetCard("Website Chatbot Integration (JavaScript / Fetch)", jsWebSnippet) { clipboard.setText(AnnotatedString(jsWebSnippet)) }
         SnippetCard("AgentX & Android App Setup Guide", agentXConnectSnippet) { clipboard.setText(AnnotatedString(agentXConnectSnippet)) }
         SnippetCard("cURL Example (LAN & Terminal)", curlSnippet) { clipboard.setText(AnnotatedString(curlSnippet)) }

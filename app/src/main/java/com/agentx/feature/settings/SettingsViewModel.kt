@@ -77,7 +77,12 @@ data class SettingsUiState(
     val multimodalQuality: String = "BALANCED",
     val multimodalInputEnabled: Boolean = true,
     val mcpServers: List<McpServerDescriptor> = emptyList(),
-    val storedMemories: List<MemoryEntry> = emptyList()
+    val storedMemories: List<MemoryEntry> = emptyList(),
+    val pairingCodeInput: String = "",
+    val isPairing: Boolean = false,
+    val pairingMessage: String? = null,
+    val isPairingSuccess: Boolean = false,
+    val pairedServerName: String? = null
 )
 
 class SettingsViewModel(
@@ -109,6 +114,12 @@ class SettingsViewModel(
     private val _isFetchingModels = MutableStateFlow(false)
     private val _availableGatewayModels = MutableStateFlow<List<String>>(emptyList())
     private val _serverDetails = MutableStateFlow<GatewayServerInfo?>(null)
+
+    private val _pairingCodeInput = MutableStateFlow("")
+    private val _isPairing = MutableStateFlow(false)
+    private val _pairingMessage = MutableStateFlow<String?>(null)
+    private val _isPairingSuccess = MutableStateFlow(false)
+    private val _pairedServerName = MutableStateFlow(preferencesManager?.loadPairedServerName())
 
     private data class CloudGatewayState(
         val isTesting: Boolean,
@@ -240,7 +251,12 @@ class SettingsViewModel(
             multimodalQuality = runtime.multimodalQuality,
             multimodalInputEnabled = runtime.multimodalInputEnabled,
             mcpServers = runtime.mcpServers,
-            storedMemories = runtime.memories
+            storedMemories = runtime.memories,
+            pairingCodeInput = _pairingCodeInput.value,
+            isPairing = _isPairing.value,
+            pairingMessage = _pairingMessage.value,
+            isPairingSuccess = _isPairingSuccess.value,
+            pairedServerName = _pairedServerName.value
         )
     }.stateIn(
         scope = viewModelScope,
@@ -563,5 +579,95 @@ class SettingsViewModel(
     fun setMlock(enabled: Boolean) {
         _mlock.value = enabled
         preferencesManager?.saveMlock(enabled)
+    }
+
+    fun onPairingCodeInputChanged(code: String) {
+        _pairingCodeInput.value = code
+    }
+
+    fun clearPairingMessage() {
+        _pairingMessage.value = null
+    }
+
+    fun pairWith6DigitCode(code: String) {
+        val sanitized = code.trim().replace("-", "").replace(" ", "")
+        if (sanitized.length != 6) {
+            _pairingMessage.value = "Please enter a valid 6-digit pairing code."
+            _isPairingSuccess.value = false
+            return
+        }
+
+        viewModelScope.launch {
+            _isPairing.value = true
+            _pairingMessage.value = "Resolving pairing code $sanitized from Cloud Rendezvous..."
+            val rendezvous = com.agentx.core.protocol.pairing.RendezvousService()
+            val payload = rendezvous.resolve(sanitized)
+            if (payload != null) {
+                applyPairingPayload(payload)
+            } else {
+                _pairingMessage.value = "Could not find server with code $sanitized. Ensure Serve app is running or scan the QR code."
+                _isPairingSuccess.value = false
+                _isPairing.value = false
+            }
+        }
+    }
+
+    fun pairWithQrString(qrString: String) {
+        val trimmed = qrString.trim()
+        if (trimmed.isBlank()) return
+
+        viewModelScope.launch {
+            _isPairing.value = true
+            _pairingMessage.value = "Parsing QR pairing coordinates..."
+            val payload = com.agentx.core.protocol.pairing.PairingPayload.fromQrString(trimmed)
+            if (payload != null) {
+                applyPairingPayload(payload)
+            } else {
+                _pairingMessage.value = "Unrecognized QR format. Please scan an AgentX Serve pairing code."
+                _isPairingSuccess.value = false
+                _isPairing.value = false
+            }
+        }
+    }
+
+    private suspend fun applyPairingPayload(payload: com.agentx.core.protocol.pairing.PairingPayload) {
+        val targetEndpoint = payload.preferredEndpoint()
+        val currentCfg = _cloudConfig.value
+        val updatedCfg = currentCfg.copy(
+            provider = CloudProvider.CUSTOM_GATEWAY,
+            customBaseUrl = targetEndpoint,
+            gatewayApiKey = payload.apiKey,
+            modelName = payload.activeModel.ifBlank { currentCfg.modelName.ifBlank { "medimind-v2-q5_k_m" } },
+            inferenceMode = InferenceMode.CLOUD_ONLY,
+            isEnabled = true
+        )
+
+        _cloudConfig.value = updatedCfg
+        preferencesManager?.saveCloudConfig(updatedCfg)
+        preferencesManager?.saveSavedPairingCode(payload.code)
+        preferencesManager?.savePairedServerName(payload.serverName)
+        _pairedServerName.value = payload.serverName
+
+        hybridInferenceEngine?.cloudEngine?.config = updatedCfg
+        hybridInferenceEngine?.inferenceMode = InferenceMode.CLOUD_ONLY
+
+        // Attempt direct P2P DataChannel connection if candidate ticket is provided
+        payload.p2pTicket?.let { ticket ->
+            if (ticket.startsWith("udp:")) {
+                val parts = ticket.removePrefix("udp:").split(":")
+                if (parts.size == 2) {
+                    try {
+                        val p2p = com.agentx.core.protocol.p2p.P2PDataChannel()
+                        p2p.connectToPeer(parts[0], parts[1].toIntOrNull() ?: 49152)
+                        hybridInferenceEngine?.cloudEngine?.p2pChannel = p2p
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        _isPairingSuccess.value = true
+        _pairingMessage.value = "Paired to ${payload.serverName}! Verifying gateway..."
+        _isPairing.value = false
+        testCloudConnection()
     }
 }

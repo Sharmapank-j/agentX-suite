@@ -63,6 +63,12 @@ class AgentXApplication : Application() {
     lateinit var hybridInferenceEngine: HybridInferenceEngine
         private set
 
+    lateinit var networkMonitor: com.agentx.core.network.NetworkConnectivityMonitor
+        private set
+
+    lateinit var gatewayHeartbeatMonitor: com.agentx.core.network.GatewayHeartbeatMonitor
+        private set
+
     // ─── Repositories ─────────────────────────────────────────────────────────
 
     lateinit var conversationRepository: ConversationRepository
@@ -117,6 +123,14 @@ class AgentXApplication : Application() {
         LlamaCppEngine.appContext = this
         val localLlama = LlamaCppEngine()
         val cloudEngine = CloudInferenceEngine(config = savedCloudConfig)
+
+        networkMonitor = com.agentx.core.network.NetworkConnectivityMonitor(this)
+        gatewayHeartbeatMonitor = com.agentx.core.network.GatewayHeartbeatMonitor(
+            preferencesManager = preferencesManager,
+            networkMonitor = networkMonitor,
+            inferenceEngine = cloudEngine
+        )
+
         hybridInferenceEngine = HybridInferenceEngine(
             llamaEngine = localLlama,
             cloudEngine = cloudEngine,

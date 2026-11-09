@@ -421,6 +421,8 @@ fun ChatScreen(
                     conversationTitle = state.currentConversation?.title ?: "AgentX Chat",
                     activeModel = state.activeModel,
                     modelStatus = state.modelStatus,
+                    gatewayHealth = state.gatewayHealth,
+                    cloudConfig = state.cloudConfig,
                     onTitleClick = {
                         renameText = state.currentConversation?.title ?: ""
                         showRenameDialog = true
@@ -686,6 +688,8 @@ private fun CyberTopAppBar(
     conversationTitle: String,
     activeModel: GGUFModel?,
     modelStatus: ModelStatus? = null,
+    gatewayHealth: com.agentx.core.network.GatewayHeartbeatMonitor.GatewayHealthState? = null,
+    cloudConfig: CloudModelConfig? = null,
     onTitleClick: () -> Unit,
     onMenuClick: () -> Unit,
     onModelBadgeClick: () -> Unit,
@@ -734,17 +738,38 @@ private fun CyberTopAppBar(
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    val isCustomGw = cloudConfig?.provider == CloudProvider.CUSTOM_GATEWAY
+                    val gwStatus = gatewayHealth?.status
+
+                    val statusDotColor = when {
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.CONNECTED -> Color(0xFF10B981)
+                        isCustomGw && (gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.CONNECTING || gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.DEGRADED) -> Color(0xFFF59E0B)
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.OFFLINE -> Color(0xFFEF4444)
+                        else -> ElectricCyan
+                    }
+
+                    val statusLabel = when {
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.CONNECTED -> {
+                            val lat = gatewayHealth?.latencyMs?.let { " • ${it}ms" } ?: ""
+                            "Serve Connected$lat"
+                        }
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.CONNECTING -> "Reconnecting to Serve..."
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.DEGRADED -> "Serve High Latency • ${gatewayHealth?.latencyMs}ms"
+                        isCustomGw && gwStatus == com.agentx.core.network.GatewayHeartbeatMonitor.ConnectionStatus.OFFLINE -> "Serve Offline (Local Mode)"
+                        else -> "AgentX Assistant • Online"
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(ElectricCyan)
+                            .background(statusDotColor)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "AgentX Assistant • Online",
+                        text = statusLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        color = ElectricCyan,
+                        color = statusDotColor,
                         fontSize = 11.sp
                     )
                 }
@@ -1573,10 +1598,20 @@ fun ChatInputBar(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = Color(0xFF0E2A47),
-                        modifier = Modifier.padding(start = if (isMultimodalCapable) 0.dp else 4.dp, end = 4.dp)
+                        modifier = Modifier
+                            .widthIn(max = 110.dp)
+                            .padding(start = if (isMultimodalCapable) 0.dp else 4.dp, end = 4.dp)
                     ) {
+                        val cleanBadgeName = remember(activeModelName) {
+                            activeModelName
+                                .removePrefix("Cloud: ")
+                                .removePrefix("Hybrid: ")
+                                .removePrefix("storage_")
+                                .substringAfterLast("/")
+                                .removeSuffix(".gguf")
+                        }
                         Text(
-                            text = activeModelName,
+                            text = cleanBadgeName,
                             style = MaterialTheme.typography.labelSmall,
                             color = ElectricCyan,
                             fontSize = 10.sp,
@@ -1599,7 +1634,9 @@ fun ChatInputBar(
                                     else -> "Ask AgentX anything..."
                                 },
                                 color = TextMuted,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         },
                         modifier = Modifier

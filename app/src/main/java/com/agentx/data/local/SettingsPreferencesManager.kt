@@ -128,4 +128,10 @@ class SettingsPreferencesManager(context: Context) {
 
     fun loadMultimodalInputEnabled(): Boolean = prefs.getBoolean(KEY_MULTIMODAL_ENABLED, true)
     fun saveMultimodalInputEnabled(enabled: Boolean) = prefs.edit().putBoolean(KEY_MULTIMODAL_ENABLED, enabled).apply()
+
+    fun loadSavedPairingCode(): String? = prefs.getString("saved_pairing_code", null)
+    fun saveSavedPairingCode(code: String) = prefs.edit().putString("saved_pairing_code", code).apply()
+
+    fun loadPairedServerName(): String? = prefs.getString("paired_server_name", null)
+    fun savePairedServerName(name: String) = prefs.edit().putString("paired_server_name", name).apply()
 }

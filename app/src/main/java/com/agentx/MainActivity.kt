@@ -32,7 +32,8 @@ class MainActivity : ComponentActivity() {
                         app.inferenceEngine,
                         app.clinicalSupervisor,
                         app.executionQueue,
-                        app.memoryManager
+                        app.memoryManager,
+                        app.gatewayHeartbeatMonitor
                     ) as T
                 }
             }

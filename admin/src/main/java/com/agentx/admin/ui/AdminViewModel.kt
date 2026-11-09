@@ -77,7 +77,10 @@ data class AdminUiState(
     val tlsFingerprint: String = "",
     val tunnelConfig: TunnelConfig = TunnelConfig(),
     val cliHistory: List<CliEntry> = emptyList(),
-    val isCliExecuting: Boolean = false
+    val isCliExecuting: Boolean = false,
+    val pairingCode: String = "",
+    val qrBitmap: android.graphics.Bitmap? = null,
+    val isPairingPublished: Boolean = false
 )
 
 class AdminViewModel(
@@ -91,6 +94,7 @@ class AdminViewModel(
     val thermalManager = app.thermalManager
     val tlsManager = app.tlsManager
     val tunnelManager = app.tunnelManager
+    val pairingManager = app.pairingManager
 
     private val _selectedPort = MutableStateFlow(8080)
     private val _selectedTab = MutableStateFlow(0)
@@ -230,7 +234,10 @@ class AdminViewModel(
             tlsFingerprint = tlsManager.config.value.fingerprint,
             tunnelConfig = subState.cliTunnelPrefs.tunnelConfig,
             cliHistory = subState.cliTunnelPrefs.cliHistory,
-            isCliExecuting = subState.cliTunnelPrefs.isCliExecuting
+            isCliExecuting = subState.cliTunnelPrefs.isCliExecuting,
+            pairingCode = pairingManager.pairingCode.value,
+            qrBitmap = pairingManager.qrBitmap.value,
+            isPairingPublished = pairingManager.isPublished.value
         )
     }.stateIn(
         scope = viewModelScope,
@@ -515,13 +522,33 @@ class AdminViewModel(
     }
 
     fun startTunnel(provider: TunnelProvider, token: String = "", customDomain: String = "") {
-        val updated = tunnelManager.startTunnel(provider, token, customDomain)
-        _notification.value = "Tunnel active: ${updated.publicUrl}"
+        val updated = tunnelManager.startTunnel(provider, token, customDomain, _selectedPort.value)
+        _notification.value = "Starting reverse tunnel via ${provider.displayName}..."
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            pairingManager.publishCoordinates()
+        }
     }
 
     fun stopTunnel() {
         tunnelManager.stopTunnel()
         _notification.value = "Tunnel stopped"
+        viewModelScope.launch {
+            pairingManager.publishCoordinates()
+        }
+    }
+
+    fun refreshPairingCode() {
+        val code = pairingManager.refreshCode()
+        _notification.value = "Generated new pairing code: $code"
+    }
+
+    fun publishPairingCoordinates() {
+        viewModelScope.launch {
+            _notification.value = "Publishing pairing coordinates to Cloud Rendezvous..."
+            val ok = pairingManager.publishCoordinates()
+            _notification.value = if (ok) "Coordinates published to Cloud Rendezvous" else "QR code updated locally (Rendezvous offline)"
+        }
     }
 
     fun testTunnelConnection() {

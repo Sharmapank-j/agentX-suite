@@ -4,7 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -20,6 +20,8 @@ import java.net.URL
 class CloudInferenceEngine(
     var config: CloudModelConfig = CloudModelConfig()
 ) : InferenceEngine {
+
+    var p2pChannel: com.agentx.core.protocol.p2p.P2PDataChannel? = null
 
     @Volatile
     private var activeConnection: HttpURLConnection? = null
@@ -43,7 +45,7 @@ class CloudInferenceEngine(
         )
     }
 
-    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
+    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = channelFlow {
         isStopRequested = false
         currentStatus = currentStatus.copy(state = ModelLifecycleState.GENERATING)
         val startTime = System.currentTimeMillis()
@@ -54,20 +56,20 @@ class CloudInferenceEngine(
                 CloudProvider.GEMINI -> {
                     generateGeminiSse(request, onToken = { token ->
                         totalTokens++
-                        emit(GenerationEvent.Token(token))
+                        send(GenerationEvent.Token(token))
                     })
                 }
                 CloudProvider.CUSTOM_GATEWAY -> {
                     generateOpenAiCompatible(request, onToken = { token ->
                         totalTokens++
-                        emit(GenerationEvent.Token(token))
+                        send(GenerationEvent.Token(token))
                     })
                 }
             }
 
             val duration = System.currentTimeMillis() - startTime
             val promptEstTokens = (request.prompt.length / 4) + ((request.systemPrompt?.length ?: 0) / 4)
-            emit(
+            send(
                 GenerationEvent.Finished(
                     totalTokens = promptEstTokens + totalTokens,
                     promptTokens = promptEstTokens,
@@ -78,7 +80,7 @@ class CloudInferenceEngine(
             currentStatus = currentStatus.copy(state = ModelLifecycleState.LOADED)
         } catch (e: Exception) {
             currentStatus = currentStatus.copy(state = ModelLifecycleState.ERROR, errorMessage = e.message)
-            emit(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
+            send(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
         } finally {
             activeConnection?.disconnect()
             activeConnection = null
@@ -190,6 +192,52 @@ class CloudInferenceEngine(
     }
 
     private suspend fun generateOpenAiCompatible(
+        request: InferenceRequest,
+        onToken: suspend (String) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        // Attempt low-latency zero-relay WebRTC P2P DataChannel streaming first if available
+        val p2p = p2pChannel
+        if (p2p != null && p2p.isConnected() && request.imageBase64.isNullOrBlank()) {
+            val reqId = java.util.UUID.randomUUID().toString()
+            var streamedAnyToken = false
+            val ok = p2p.streamRequest(
+                com.agentx.core.protocol.p2p.P2PDataChannel.P2PRequest(
+                    requestId = reqId,
+                    model = config.modelName,
+                    prompt = request.prompt,
+                    systemPrompt = request.systemPrompt,
+                    temperature = request.temperature
+                ),
+                onToken = { token ->
+                    streamedAnyToken = true
+                    kotlinx.coroutines.runBlocking { onToken(token) }
+                },
+                onFinish = {}
+            )
+            if (ok && streamedAnyToken) {
+                return@withContext
+            }
+        }
+
+        // Resilient HTTP/SSE fallback with automatic connection retry
+        var lastErr: Exception? = null
+        for (attempt in 1..2) {
+            try {
+                doHttpOpenAiCompatible(request, onToken)
+                return@withContext
+            } catch (e: Exception) {
+                lastErr = e
+                if (attempt < 2 && !isStopRequested) {
+                    kotlinx.coroutines.delay(1200)
+                } else {
+                    throw e
+                }
+            }
+        }
+        if (lastErr != null) throw lastErr
+    }
+
+    private suspend fun doHttpOpenAiCompatible(
         request: InferenceRequest,
         onToken: suspend (String) -> Unit
     ) = withContext(Dispatchers.IO) {
