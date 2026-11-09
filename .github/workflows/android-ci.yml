@@ -73,9 +73,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME:-v1.3.0}"
+          VERSION="${GITHUB_REF_NAME:-v1.6.0}"
           if [[ "$VERSION" == "main" || "$VERSION" == "master" ]]; then
-            VERSION="v1.3.0"
+            VERSION="v1.6.0"
           fi
           mkdir -p release
           cp dist/app/build/outputs/apk/debug/app-debug.apk release/AgentX-${VERSION}-debug.apk
@@ -87,9 +87,9 @@ jobs:
       - name: Create GitHub Release and upload APKs
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.3.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.6.0' }}
           target_commitish: ${{ github.sha }}
-          name: AgentX Suite ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.3.0' }}
+          name: AgentX Suite ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.6.0' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
@@ -98,12 +98,20 @@ jobs:
           body: |
             ## AgentX Suite Release
 
-            ### Included
-            - **AgentX** — General autonomous AI assistant with Multimodal Vision, Gemini 3.8 Flash & Local GGUF (llama.cpp) inference, and tactile Haptic Feedback.
-            - **AgentX Medical** — Clinical education, offline drug-interaction intelligence, and bedside telemetry.
-            - **AgentX Serve** — On-device OpenAI-compatible HTTP serving engine for edge computing.
+            ### Included Applications:
+            - **AgentX** — Autonomous on-device AI assistant with Multimodal Vision, Gemini 3.8 Flash & Local GGUF (`llama.cpp`) native inference, Dynamic Cross-Network Gateway, and tactile Haptic Feedback.
+            - **AgentX Medical** — Clinical triaging, offline drug-interaction intelligence, and bedside telemetry.
+            - **AgentX Serve** — On-device OpenAI-compatible HTTP/SSE edge gateway hub with Reverse Tunneling and 6-Digit Instant Pairing.
 
-            ### Key Capabilities:
-            - **Multimodal Vision Input**: Photo Library picker and direct Camera capture with downsampled memory safety and Base64 vision payload delivery.
-            - **Inference & Provider Switcher Hub**: Seamlessly toggle between Local GGUF, Google Gemini Multimodal (`gemini-3.8-flash`), Hybrid Auto-Failover, and LAN Server Gateway.
-            - **Tactile Haptic Feedback**: Dynamic linear motor tactile response across streaming tokens, button taps, attachments, and model activations with a dedicated Settings toggle (ON/OFF).
+            ### What's New:
+            - **Native Cross-Network Support**:
+              - Pure-Java Reverse Tunnel client inside `TunnelManager` (SSH over port 443) for instant public HTTPS URLs through firewalls.
+              - Cloud Rendezvous & 6-Digit Pairing with deterministic QR Code matrix generator.
+              - RFC 5389 STUN NAT traversal with zero-relay P2P UDP DataChannel streaming.
+            - **Dynamic Network Switching & Gateway Heartbeat**:
+              - Automatic background reconnection and 10s health pinging with live round-trip latency metrics.
+              - Seamless auto-discovery and auto-recovery of host IP when switching between Wi-Fi and Cellular.
+            - **Roomy & Calm Chat UI**:
+              - Responsive auto-adjusting input pill layout preventing text squeezing on all device aspect ratios.
+              - Model-aware multimodal vision controls (dynamically visible when multimodal models are active).
+              - Live streaming tokens HUD with tokens/second, memory footprint, and server connection latency indicators.
