@@ -1,6 +1,10 @@
 package com.agentx.admin.server
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -120,6 +124,105 @@ class CloudGeminiGateway {
 
         text ?: "No response generated from cloud model"
     }
+
+    fun generateChatCompletionStream(
+        prompt: String,
+        systemPrompt: String? = null,
+        temperature: Float = 0.7f,
+        maxTokens: Int = 1024,
+        imageBase64: String? = null,
+        imageMimeType: String? = null
+    ): Flow<String> = flow {
+        val apiKey = geminiApiKey.trim()
+        if (apiKey.isBlank()) {
+            val simulation = generateChatCompletion(prompt, systemPrompt, temperature, maxTokens)
+            val words = simulation.split(" ")
+            words.forEachIndexed { index, word ->
+                emit(if (index == 0) word else " $word")
+                delay(20)
+            }
+            return@flow
+        }
+
+        val urlString = "https://generativelanguage.googleapis.com/v1beta/models/$activeModelName:streamGenerateContent?alt=sse&key=$apiKey"
+        val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "text/event-stream")
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            doOutput = true
+        }
+
+        val escapedPrompt = escapeJson(prompt)
+        val escapedSystem = systemPrompt?.let { escapeJson(it) }
+
+        val systemBlock = if (!escapedSystem.isNullOrBlank()) {
+            """
+            "systemInstruction": {
+                "parts": [{"text": "$escapedSystem"}]
+            },
+            """.trimIndent()
+        } else ""
+
+        val imagePart = if (!imageBase64.isNullOrBlank() && !imageMimeType.isNullOrBlank()) {
+            """,{"inlineData": {"mimeType": "$imageMimeType", "data": "$imageBase64"}}"""
+        } else ""
+
+        val payload = """
+            {
+                $systemBlock
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": "$escapedPrompt"}
+                            $imagePart
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": $temperature,
+                    "maxOutputTokens": $maxTokens
+                }
+            }
+        """.trimIndent()
+
+        OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { writer ->
+            writer.write(payload)
+            writer.flush()
+        }
+
+        val responseCode = conn.responseCode
+        if (responseCode !in 200..299) {
+            val errorBody = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: "HTTP $responseCode"
+            throw IllegalStateException("Gemini Gateway Stream Error ($responseCode): $errorBody")
+        }
+
+        BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val trimmed = line!!.trim()
+                if (trimmed.startsWith("data:")) {
+                    val jsonStr = trimmed.removePrefix("data:").trim()
+                    if (jsonStr.isNotBlank() && jsonStr != "[DONE]") {
+                        try {
+                            val parsed = Json.parseToJsonElement(jsonStr).jsonObject
+                            val candidates = parsed["candidates"]?.jsonArray
+                            val parts = candidates?.firstOrNull()?.jsonObject
+                                ?.get("content")?.jsonObject
+                                ?.get("parts")?.jsonArray
+                            val text = parts?.firstOrNull()?.jsonObject
+                                ?.get("text")?.jsonPrimitive?.content
+                            if (!text.isNullOrEmpty()) {
+                                emit(text)
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
+    }.flowOn(Dispatchers.IO)
 
     private fun escapeJson(input: String): String {
         return input

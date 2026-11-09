@@ -188,10 +188,9 @@ class CloudInferenceEngine(
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Accept", "application/json, text/event-stream")
             val gatewayApiKey = config.apiKeyFor(CloudProvider.CUSTOM_GATEWAY)
-            if (gatewayApiKey.isNotBlank()) {
-                setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
-                setRequestProperty("X-API-Key", gatewayApiKey)
-            }
+            val effectiveKey = gatewayApiKey.ifBlank { "ax-master-serve-key" }
+            setRequestProperty("Authorization", "Bearer $effectiveKey")
+            setRequestProperty("X-API-Key", effectiveKey)
             connectTimeout = 15_000
             readTimeout = 60_000
             doOutput = true

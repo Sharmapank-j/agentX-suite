@@ -13,10 +13,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -365,67 +368,83 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                Column(
+                BoxWithConstraints(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .navigationBarsPadding()
-                        .imePadding()
+                        .imePadding(),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
-                    if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = MedicalSurfaceElevated,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
-                            modifier = Modifier
-                                .align(Alignment.CenterHorizontally)
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                    val isWideScreen = maxWidth >= 640.dp
+                    Column(
+                        modifier = if (isWideScreen) Modifier.widthIn(max = 760.dp) else Modifier.fillMaxWidth()
+                    ) {
+                        if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = MedicalSurfaceElevated,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
+                                modifier = Modifier
+                                    .align(Alignment.CenterHorizontally)
+                                    .padding(vertical = 4.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(BioEmerald)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "⚡ ${String.format("%.1f", state.liveMetrics.tokensPerSecond)} t/s • ${state.liveMetrics.tokensGenerated} tokens • ${String.format("%.1f", state.liveMetrics.elapsedSeconds)}s",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ClinicalTextPrimary
-                                )
-                                if (state.liveMetrics.memoryUsageMb > 0) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(BioEmerald)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        "• ${state.liveMetrics.memoryUsageMb} MB",
+                                        "⚡ ${String.format("%.1f", state.liveMetrics.tokensPerSecond)} t/s • ${state.liveMetrics.tokensGenerated} tokens • ${String.format("%.1f", state.liveMetrics.elapsedSeconds)}s",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = ClinicalTealBright
+                                        fontWeight = FontWeight.Bold,
+                                        color = ClinicalTextPrimary
                                     )
+                                    if (state.liveMetrics.memoryUsageMb > 0) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            "• ${state.liveMetrics.memoryUsageMb} MB",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = ClinicalTealBright
+                                        )
+                                    }
                                 }
                             }
                         }
+                        ChatInputBar(
+                            text = state.inputText,
+                            onTextChanged = viewModel::onInputTextChanged,
+                            onSend = viewModel::sendMessage,
+                            onStop = viewModel::stopGeneration,
+                            isStreaming = state.isStreaming
+                        )
                     }
-                    ChatInputBar(
-                        text = state.inputText,
-                        onTextChanged = viewModel::onInputTextChanged,
-                        onSend = viewModel::sendMessage,
-                        onStop = viewModel::stopGeneration,
-                        isStreaming = state.isStreaming
-                    )
                 }
             },
             containerColor = MedicalVoid,
             modifier = modifier
         ) { paddingValues ->
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(paddingValues),
+                contentAlignment = Alignment.TopCenter
             ) {
+                val isWideScreen = maxWidth >= 640.dp
+                val contentModifier = if (isWideScreen) {
+                    Modifier.widthIn(max = 760.dp).fillMaxHeight()
+                } else {
+                    Modifier.fillMaxSize()
+                }
+
                 Column(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = contentModifier,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (state.messages.isEmpty()) {
                         EmptyMedicalChatPlaceholder(
@@ -435,16 +454,18 @@ fun ChatScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                                .padding(horizontal = if (isWideScreen) 32.dp else 16.dp, vertical = 12.dp)
                         )
                     } else {
-                        // Message Thread with Smart Auto-Scroll
+                        // Roomy, Calm Message Thread with Smart Auto-Scroll
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = if (isWideScreen) 24.dp else 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            contentPadding = PaddingValues(vertical = 14.dp),
                             reverseLayout = false
                         ) {
                             items(state.messages) { message ->
@@ -818,28 +839,28 @@ fun ChatMessageItem(
             }
         }
 
-        // Clinical Message Bubble
+        // Clinical Message Bubble with Serene, Roomy Geometry
         Surface(
             shape = RoundedCornerShape(
-                topStart = if (isUser) 18.dp else 4.dp,
-                topEnd = 18.dp,
-                bottomStart = 18.dp,
-                bottomEnd = if (isUser) 4.dp else 18.dp
+                topStart = if (isUser) 20.dp else 4.dp,
+                topEnd = 20.dp,
+                bottomStart = 20.dp,
+                bottomEnd = if (isUser) 4.dp else 20.dp
             ),
-            color = if (isUser) Color(0xFF062E3B) else MedicalSurfaceGlass,
+            color = if (isUser) Color(0xFF063342) else Color(0xFF041924),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                if (isUser) ClinicalTealBright.copy(alpha = 0.4f) else MedicalSurfaceBorder
+                if (isUser) ClinicalTealBright.copy(alpha = 0.45f) else MedicalSurfaceBorder
             ),
             modifier = Modifier.fillMaxWidth(if (isUser) 0.88f else 0.94f)
         ) {
-            Box(modifier = Modifier.padding(14.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
                 if (isUser) {
                     Text(
                         text = message.content,
                         color = ClinicalTextPrimary,
                         style = MaterialTheme.typography.bodyMedium,
-                        lineHeight = 22.sp
+                        lineHeight = 23.sp
                     )
                 } else {
                     MarkdownText(

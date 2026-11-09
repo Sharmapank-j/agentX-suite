@@ -183,6 +183,9 @@ class KtorAgentXServer(
             allowHeader(HttpHeaders.Authorization)
             allowHeader(HttpHeaders.ContentType)
             allowHeader(HttpHeaders.Accept)
+            allowHeader("X-API-Key")
+            allowHeader("X-Forwarded-For")
+            anyHost()
         }
         install(ContentNegotiation) {
             json(Json { prettyPrint = true; ignoreUnknownKeys = true })
@@ -290,8 +293,7 @@ class KtorAgentXServer(
 
     private suspend fun handleModels(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
-        val allModels = localEngine.allAvailableModels
-        val modelEntries = allModels.joinToString(",\n") { m ->
+        val localModels = localEngine.allAvailableModels.map { m ->
             """
                 {
                   "id": "${m.id}",
@@ -312,12 +314,36 @@ class KtorAgentXServer(
                 }
             """.trimIndent()
         }
+        val cloudModels = if (cloudGateway.isConfigured || servingMode == ServingMode.CLOUD_GATEWAY) {
+            listOf(
+                """
+                {
+                  "id": "${cloudGateway.activeModelName}",
+                  "object": "model",
+                  "created": 1700000000,
+                  "owned_by": "google-gemini",
+                  "permission": [],
+                  "root": "${cloudGateway.activeModelName}",
+                  "parent": null,
+                  "metadata": {
+                    "architecture": "multimodal-transformer",
+                    "parameterCount": "cloud",
+                    "quantization": "FP16",
+                    "contextWindow": 1048576,
+                    "memoryFootprintMb": 0,
+                    "isLoaded": true
+                  }
+                }
+                """.trimIndent()
+            )
+        } else emptyList()
 
+        val allEntries = (cloudModels + localModels).joinToString(",\n")
         val json = """
             {
               "object": "list",
               "data": [
-                $modelEntries
+                $allEntries
               ]
             }
         """.trimIndent()
@@ -409,8 +435,9 @@ class KtorAgentXServer(
         val startTime = System.currentTimeMillis()
         val clientIp = call.request.header("X-Forwarded-For") ?: "127.0.0.1"
 
-        // 1. Zero-Trust API Key Validation
+        // 1. Zero-Trust API Key Validation (Support Authorization & X-API-Key with ecosystem pairing)
         val authHeader = call.request.header(HttpHeaders.Authorization)
+            ?: call.request.header("X-API-Key")
         if (!clientManager.isKeyValid(authHeader)) {
             clientManager.logTraffic(clientIp, "POST", "/v1/chat/completions", 401, System.currentTimeMillis() - startTime, 0)
             call.respondText(
@@ -441,21 +468,33 @@ class KtorAgentXServer(
 
         val promptBuilder = StringBuilder()
         var systemPrompt: String? = null
+        var requestImageBase64: String? = null
+        var requestImageMimeType: String? = null
+
         messages?.forEach { elem ->
             val msgObj = elem.jsonObject
             val role = msgObj["role"]?.jsonPrimitive?.content ?: "user"
-            val content = msgObj["content"]?.jsonPrimitive?.content ?: ""
+            val contentElement = msgObj["content"]
+            val (textContent, imageBase64) = extractMessageContent(contentElement)
+            if (imageBase64 != null) {
+                requestImageBase64 = imageBase64
+                requestImageMimeType = "image/jpeg"
+            }
             if (role.equals("system", true)) {
-                systemPrompt = content
+                systemPrompt = textContent
             } else {
                 val label = if (role.equals("user", true)) "User" else "Assistant"
-                promptBuilder.append("$label: $content\n")
+                promptBuilder.append("$label: $textContent\n")
             }
         }
         val prompt = promptBuilder.toString().trim()
 
-        // Auto-load model on demand if not yet loaded
-        if (localEngine.status != LocalModelStatus.LOADED) {
+        // 3. Execution Routing
+        val isLocalMode = servingMode == ServingMode.LOCAL_MODEL
+        val isCloudMode = servingMode == ServingMode.CLOUD_GATEWAY
+        val isHybrid = servingMode == ServingMode.HYBRID
+
+        if ((isLocalMode || isHybrid) && localEngine.status != LocalModelStatus.LOADED) {
             val candidate = localEngine.allAvailableModels.firstOrNull {
                 it.filePath != null && (it.id == modelRequested || it.name == modelRequested || it.filePath == modelRequested)
             } ?: localEngine.allAvailableModels.firstOrNull { it.filePath != null }
@@ -464,14 +503,7 @@ class KtorAgentXServer(
             }
         }
 
-        if (localEngine.status != LocalModelStatus.LOADED) {
-            call.respondText(
-                "{\"error\":{\"message\":\"No local GGUF model is loaded. Load a model first via /v1/models/load or the dashboard.\",\"type\":\"server_error\"}}",
-                ContentType.Application.Json,
-                HttpStatusCode.BadRequest
-            )
-            return
-        }
+        val useLocal = (isLocalMode || isHybrid) && localEngine.status == LocalModelStatus.LOADED && requestImageBase64 == null
 
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val createdEpoch = System.currentTimeMillis() / 1000
@@ -486,11 +518,43 @@ class KtorAgentXServer(
                 var totalTokensEmitted = 0
                 val writer = this
 
-                localEngine.generateCompletionStream(prompt, systemPrompt, maxTokens = maxTokens).collect { token ->
-                    val chunkJson = """{"id":"$completionId","object":"chat.completion.chunk","created":$createdEpoch,"model":"$modelRequested","choices":[{"index":0,"delta":{"content":${Json.encodeToString(kotlinx.serialization.serializer(), token)}},"finish_reason":null}]}"""
-                    writer.write("data: $chunkJson\n\n")
-                    writer.flush()
-                    totalTokensEmitted++
+                val tokenFlow = if (useLocal) {
+                    localEngine.generateCompletionStream(prompt, systemPrompt, maxTokens = maxTokens)
+                } else {
+                    cloudGateway.generateChatCompletionStream(
+                        prompt = prompt,
+                        systemPrompt = systemPrompt,
+                        maxTokens = maxTokens,
+                        imageBase64 = requestImageBase64,
+                        imageMimeType = requestImageMimeType
+                    )
+                }
+
+                try {
+                    tokenFlow.collect { token ->
+                        val chunkJson = """{"id":"$completionId","object":"chat.completion.chunk","created":$createdEpoch,"model":"$modelRequested","choices":[{"index":0,"delta":{"content":${Json.encodeToString(kotlinx.serialization.serializer(), token)}},"finish_reason":null}]}"""
+                        writer.write("data: $chunkJson\n\n")
+                        writer.flush()
+                        totalTokensEmitted++
+                    }
+                } catch (e: Exception) {
+                    if (isHybrid && useLocal) {
+                        // Failover to Cloud Gateway SSE
+                        cloudGateway.generateChatCompletionStream(
+                            prompt = prompt,
+                            systemPrompt = systemPrompt,
+                            maxTokens = maxTokens,
+                            imageBase64 = requestImageBase64,
+                            imageMimeType = requestImageMimeType
+                        ).collect { token ->
+                            val chunkJson = """{"id":"$completionId","object":"chat.completion.chunk","created":$createdEpoch,"model":"$modelRequested","choices":[{"index":0,"delta":{"content":${Json.encodeToString(kotlinx.serialization.serializer(), token)}},"finish_reason":null}]}"""
+                            writer.write("data: $chunkJson\n\n")
+                            writer.flush()
+                            totalTokensEmitted++
+                        }
+                    } else {
+                        throw e
+                    }
                 }
 
                 // Final EOS chunk
@@ -507,7 +571,20 @@ class KtorAgentXServer(
             }
         } else {
             // Synchronous Response
-            val fullText = localEngine.generateCompletionSync(prompt, systemPrompt, maxTokens = maxTokens)
+            val fullText = try {
+                if (useLocal) {
+                    localEngine.generateCompletionSync(prompt, systemPrompt, maxTokens = maxTokens)
+                } else {
+                    cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
+                }
+            } catch (e: Exception) {
+                if (isHybrid && useLocal) {
+                    cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
+                } else {
+                    throw e
+                }
+            }
+
             val responsePayload = """
                 {
                   "id": "$completionId",
@@ -539,6 +616,33 @@ class KtorAgentXServer(
             clientManager.logTraffic(clientIp, "POST", "/v1/chat/completions", 200, System.currentTimeMillis() - startTime, fullText.length / 4)
             call.respondText(responsePayload, ContentType.Application.Json)
         }
+    }
+
+    private fun extractMessageContent(contentElement: kotlinx.serialization.json.JsonElement?): Pair<String, String?> {
+        if (contentElement == null) return Pair("", null)
+        if (contentElement is kotlinx.serialization.json.JsonPrimitive) {
+            return Pair(contentElement.content, null)
+        }
+        if (contentElement is kotlinx.serialization.json.JsonArray) {
+            val textBuilder = StringBuilder()
+            var imageBase64: String? = null
+            contentElement.forEach { item ->
+                if (item is kotlinx.serialization.json.JsonObject) {
+                    val type = item["type"]?.jsonPrimitive?.content ?: ""
+                    if (type == "text") {
+                        val t = item["text"]?.jsonPrimitive?.content ?: ""
+                        textBuilder.append(t)
+                    } else if (type == "image_url") {
+                        val url = item["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content ?: ""
+                        if (url.startsWith("data:") && url.contains(";base64,")) {
+                            imageBase64 = url.substringAfter(";base64,")
+                        }
+                    }
+                }
+            }
+            return Pair(textBuilder.toString(), imageBase64)
+        }
+        return Pair(contentElement.toString(), null)
     }
 
     private suspend fun handleEmbeddings(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {

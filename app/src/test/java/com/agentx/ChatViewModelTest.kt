@@ -182,6 +182,51 @@ class ChatViewModelTest {
         assertTrue(inferenceEngine.stopped)
         assertFalse(viewModel.uiState.value.isStreaming)
     }
+
+    @Test
+    fun testTextOnlyModelDisablesMultimodalCapabilities() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        val textModel = GGUFModel(
+            id = "smollm_360m",
+            name = "SmolLM-360M-Instruct",
+            filePath = "/data/models/smollm.gguf",
+            uriString = "content://models/smollm.gguf",
+            sizeBytes = 380_000_000L,
+            architecture = "llama",
+            capabilityProfile = "general-assistant"
+        )
+        modelRepo.activeModel.value = textModel
+        testScheduler.advanceUntilIdle()
+
+        assertFalse("Text-only model should not be multimodal capable", viewModel.uiState.value.isMultimodalCapable)
+
+        // Attempting to attach image on text-only model should be ignored
+        viewModel.attachImage("/path/to/image.jpg", "image/jpeg")
+        testScheduler.advanceUntilIdle()
+        assertEquals(null, viewModel.uiState.value.attachedImagePath)
+    }
+
+    @Test
+    fun testVisionCapableModelEnablesMultimodalCapabilities() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        val visionModel = GGUFModel(
+            id = "llava_v1.6_7b",
+            name = "LLaVA-v1.6-7B-Vision",
+            filePath = "/data/models/llava.gguf",
+            uriString = "content://models/llava.gguf",
+            sizeBytes = 4_000_000_000L,
+            architecture = "llava",
+            capabilityProfile = "multimodal-vision"
+        )
+        modelRepo.activeModel.value = visionModel
+        testScheduler.advanceUntilIdle()
+
+        assertTrue("Vision model should be multimodal capable", viewModel.uiState.value.isMultimodalCapable)
+
+        viewModel.attachImage("/path/to/diagram.png", "image/png")
+        testScheduler.advanceUntilIdle()
+        assertEquals("/path/to/diagram.png", viewModel.uiState.value.attachedImagePath)
+    }
 }
 
 // --- Test Fakes ---

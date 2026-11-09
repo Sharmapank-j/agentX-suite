@@ -18,10 +18,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -434,51 +437,68 @@ fun ChatScreen(
                 )
             },
             bottomBar = {
-                Column(
+                BoxWithConstraints(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .navigationBarsPadding()
-                        .imePadding()
+                        .imePadding(),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
-                    // Live Inference Streaming Metrics Bar
-                    if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
-                        LiveMetricsHud(metrics = state.liveMetrics)
-                    }
-
-                    // Modern Floating Pill Input Bar with Multimodal & Auto-Adjust
-                    ChatInputBar(
-                        text = state.inputText,
-                        onTextChanged = viewModel::onInputTextChanged,
-                        onSend = viewModel::sendMessage,
-                        onStop = viewModel::stopGeneration,
-                        isStreaming = state.isStreaming,
-                        activeModelName = when (state.inferenceMode) {
-                            InferenceMode.CLOUD_ONLY -> "Cloud: ${state.cloudConfig.modelName}"
-                            InferenceMode.HYBRID_AUTO -> "Hybrid: ${state.cloudConfig.modelName}"
-                            InferenceMode.LOCAL_ONLY -> state.activeModel?.name ?: state.activeModel?.quantization ?: "Local GGUF (llama.cpp)"
-                        },
-                        attachedImagePath = state.attachedImagePath,
-                        onRemoveAttachment = viewModel::removeAttachment,
-                        onPickGallery = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        onCaptureCamera = {
-                            cameraLauncher.launch(null)
+                    val isWideScreen = maxWidth >= 640.dp
+                    Column(
+                        modifier = if (isWideScreen) Modifier.widthIn(max = 760.dp) else Modifier.fillMaxWidth()
+                    ) {
+                        // Live Inference Streaming Metrics Bar
+                        if (state.liveMetrics.isLive || (state.isStreaming && state.liveMetrics.tokensGenerated > 0)) {
+                            LiveMetricsHud(metrics = state.liveMetrics)
                         }
-                    )
+
+                        // Modern Floating Pill Input Bar with Multimodal & Auto-Adjust
+                        ChatInputBar(
+                            text = state.inputText,
+                            onTextChanged = viewModel::onInputTextChanged,
+                            onSend = viewModel::sendMessage,
+                            onStop = viewModel::stopGeneration,
+                            isStreaming = state.isStreaming,
+                            isMultimodalCapable = state.isMultimodalCapable,
+                            activeModelName = when (state.inferenceMode) {
+                                InferenceMode.CLOUD_ONLY -> "Cloud: ${state.cloudConfig.modelName}"
+                                InferenceMode.HYBRID_AUTO -> "Hybrid: ${state.cloudConfig.modelName}"
+                                InferenceMode.LOCAL_ONLY -> state.activeModel?.name ?: state.activeModel?.quantization ?: "Local GGUF (llama.cpp)"
+                            },
+                            attachedImagePath = state.attachedImagePath,
+                            onRemoveAttachment = viewModel::removeAttachment,
+                            onPickGallery = {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            onCaptureCamera = {
+                                cameraLauncher.launch(null)
+                            }
+                        )
+                    }
                 }
             },
             containerColor = VoidDark,
             modifier = modifier
         ) { paddingValues ->
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(paddingValues),
+                contentAlignment = Alignment.TopCenter
             ) {
+                val isWideScreen = maxWidth >= 640.dp
+                val contentModifier = if (isWideScreen) {
+                    Modifier.widthIn(max = 760.dp).fillMaxHeight()
+                } else {
+                    Modifier.fillMaxSize()
+                }
+
                 Column(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = contentModifier,
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (state.messages.isEmpty()) {
                         EmptyChatPlaceholder(
@@ -486,6 +506,7 @@ fun ChatScreen(
                             modelStatus = state.modelStatus,
                             inferenceMode = state.inferenceMode,
                             cloudConfig = state.cloudConfig,
+                            isMultimodalCapable = state.isMultimodalCapable,
                             onSwitchModelClick = { showModelSwitcherSheet = true },
                             onPickImage = {
                                 photoPickerLauncher.launch(
@@ -500,16 +521,18 @@ fun ChatScreen(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 20.dp, vertical = 12.dp)
+                                .padding(horizontal = if (isWideScreen) 32.dp else 16.dp, vertical = 12.dp)
                         )
                     } else {
-                        // Chat Message Feed with Smart Auto-Scroll
+                        // Roomy, Calm Chat Message Feed with Smart Auto-Scroll
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = if (isWideScreen) 24.dp else 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            contentPadding = PaddingValues(vertical = 14.dp),
                             reverseLayout = false
                         ) {
                             items(state.messages) { message ->
@@ -947,7 +970,7 @@ fun ActiveModelStatusBanner(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Futuristic Cyber-Obsidian Empty State
+// Futuristic Cyber-Obsidian Empty State (Calm, Roomy & Model-Aware)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun EmptyChatPlaceholder(
@@ -955,6 +978,7 @@ private fun EmptyChatPlaceholder(
     modelStatus: ModelStatus,
     inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
     cloudConfig: CloudModelConfig = CloudModelConfig(),
+    isMultimodalCapable: Boolean = false,
     onSwitchModelClick: () -> Unit,
     onPickImage: () -> Unit = {},
     onCaptureCamera: () -> Unit = {},
@@ -1024,6 +1048,36 @@ private fun EmptyChatPlaceholder(
             color = TextSecondary
         )
 
+        // Calm Model Capability Pill
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = if (isMultimodalCapable) Color(0xFF0A2234) else Color(0xFF0B192A),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (isMultimodalCapable) CyberMint.copy(alpha = 0.45f) else ElectricCyan.copy(alpha = 0.35f)
+            ),
+            modifier = Modifier.padding(top = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(if (isMultimodalCapable) CyberMint else ElectricCyan)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isMultimodalCapable) "👁️ Multimodal Vision Active • Image reasoning ready" else "💬 Text Reasoning Active • Fast local intelligence",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isMultimodalCapable) CyberMint else ElectricCyan,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(28.dp))
 
         // Open Spacious Quick Prompt Suggestions
@@ -1031,12 +1085,21 @@ private fun EmptyChatPlaceholder(
             modifier = Modifier.fillMaxWidth(0.92f),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            val quickSuggestions = listOf(
-                "💡 Brainstorm creative ideas" to "Brainstorm 5 innovative and high-impact ideas for my project.",
-                "💻 Write & analyze code" to "Write a clean, performant, and production-ready solution with clear explanations.",
-                "📊 Analyze documents & insights" to "Analyze the key insights, findings, and actionable takeaways from this data.",
-                "🔍 Deep reasoning & exploration" to "Walk me step-by-step through the core principles and architecture of this topic."
-            )
+            val quickSuggestions = if (isMultimodalCapable) {
+                listOf(
+                    "💡 Brainstorm creative ideas" to "Brainstorm 5 innovative and high-impact ideas for my project.",
+                    "💻 Write & analyze code" to "Write a clean, performant, and production-ready solution with clear explanations.",
+                    "🖼️ Multimodal visual analysis" to "Analyze this image and explain the concepts and details in depth.",
+                    "🔍 Deep reasoning & exploration" to "Walk me step-by-step through the core principles and architecture of this topic."
+                )
+            } else {
+                listOf(
+                    "💡 Brainstorm creative ideas" to "Brainstorm 5 innovative and high-impact ideas for my project.",
+                    "💻 Write & analyze code" to "Write a clean, performant, and production-ready solution with clear explanations.",
+                    "📊 Analyze documents & insights" to "Analyze the key insights, findings, and actionable takeaways from this data.",
+                    "🔍 Deep reasoning & exploration" to "Walk me step-by-step through the core principles and architecture of this topic."
+                )
+            }
             quickSuggestions.forEach { (label, prompt) ->
                 Surface(
                     onClick = { onQuickPrompt(prompt) },
@@ -1204,28 +1267,28 @@ fun ChatMessageItem(
             }
         }
 
-        // Message Bubble with Asymmetric Geometry
+        // Message Bubble with Serene, Roomy Geometry
         Surface(
             shape = RoundedCornerShape(
-                topStart = if (isUser) 18.dp else 4.dp,
-                topEnd = 18.dp,
-                bottomStart = 18.dp,
-                bottomEnd = if (isUser) 4.dp else 18.dp
+                topStart = if (isUser) 20.dp else 4.dp,
+                topEnd = 20.dp,
+                bottomStart = 20.dp,
+                bottomEnd = if (isUser) 4.dp else 20.dp
             ),
-            color = if (isUser) Color(0xFF0F2B48) else SurfaceGlass,
+            color = if (isUser) Color(0xFF0D3252) else Color(0xFF0C1625),
             border = androidx.compose.foundation.BorderStroke(
                 1.dp,
-                if (isUser) ElectricCyan.copy(alpha = 0.35f) else SurfaceBorder
+                if (isUser) Color(0xFF1E517B).copy(alpha = 0.55f) else Color(0xFF1E2D44)
             ),
             modifier = Modifier.fillMaxWidth(if (isUser) 0.88f else 0.94f)
         ) {
-            Box(modifier = Modifier.padding(14.dp)) {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
                 if (isUser) {
                     Text(
                         text = message.content,
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyMedium,
-                        lineHeight = 22.sp
+                        lineHeight = 23.sp
                     )
                 } else {
                     MarkdownText(
@@ -1350,7 +1413,7 @@ fun StreamingIndicator(agentName: String) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Floating Pill Input Bar with Multimodal Attachment Capsule & Glowing Neon Send
+// Floating Pill Input Bar with Dynamic Multimodal & Responsive Auto-Adjust
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 fun ChatInputBar(
@@ -1359,6 +1422,7 @@ fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     isStreaming: Boolean,
+    isMultimodalCapable: Boolean = false,
     activeModelName: String = "llama.cpp",
     attachedImagePath: String? = null,
     onRemoveAttachment: () -> Unit = {},
@@ -1375,9 +1439,9 @@ fun ChatInputBar(
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Attached Media Preview Capsule
+            // Attached Media Preview Capsule (Visible only when multimodal capable and image selected)
             AnimatedVisibility(
-                visible = attachedImagePath != null,
+                visible = isMultimodalCapable && attachedImagePath != null,
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
@@ -1452,11 +1516,11 @@ fun ChatInputBar(
                 }
             }
 
-            // Input Pill
+            // Roomy, Calm Input Pill
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = SurfaceGlassElevated,
-                border = androidx.compose.foundation.BorderStroke(1.dp, SurfaceBorder),
+                color = Color(0xFF0C1625),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E2D44)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -1465,49 +1529,51 @@ fun ChatInputBar(
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Attachment Picker Button with Dropdown Menu
-                    Box {
-                        IconButton(
-                            onClick = { showAttachmentMenu = true },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (attachedImagePath != null) Icons.Default.Image else Icons.Default.AttachFile,
-                                contentDescription = "Attach media",
-                                tint = if (attachedImagePath != null) ElectricCyan else TextMuted,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                    // Attachment Picker Button (Visible ONLY when currently active model is multimodal capable)
+                    if (isMultimodalCapable) {
+                        Box {
+                            IconButton(
+                                onClick = { showAttachmentMenu = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (attachedImagePath != null) Icons.Default.Image else Icons.Default.AttachFile,
+                                    contentDescription = "Attach media",
+                                    tint = if (attachedImagePath != null) CyberMint else ElectricCyan.copy(alpha = 0.85f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                        DropdownMenu(
-                            expanded = showAttachmentMenu,
-                            onDismissRequest = { showAttachmentMenu = false },
-                            modifier = Modifier.background(SpaceDark)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Photo Library / Gallery", color = TextPrimary) },
-                                leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = ElectricCyan) },
-                                onClick = {
-                                    showAttachmentMenu = false
-                                    onPickGallery()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Take Camera Photo", color = TextPrimary) },
-                                leadingIcon = { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = CyberMint) },
-                                onClick = {
-                                    showAttachmentMenu = false
-                                    onCaptureCamera()
-                                }
-                            )
+                            DropdownMenu(
+                                expanded = showAttachmentMenu,
+                                onDismissRequest = { showAttachmentMenu = false },
+                                modifier = Modifier.background(SpaceDark)
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Photo Library / Gallery", color = TextPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.Image, contentDescription = null, tint = ElectricCyan) },
+                                    onClick = {
+                                        showAttachmentMenu = false
+                                        onPickGallery()
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Take Camera Photo", color = TextPrimary) },
+                                    leadingIcon = { Icon(Icons.Default.CameraAlt, contentDescription = null, tint = CyberMint) },
+                                    onClick = {
+                                        showAttachmentMenu = false
+                                        onCaptureCamera()
+                                    }
+                                )
+                            }
                         }
                     }
 
-                    // Quantization / Model Badge
+                    // Quantization / Model Capability Badge
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = Color(0xFF0E2A47),
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(start = if (isMultimodalCapable) 0.dp else 4.dp, end = 4.dp)
                     ) {
                         Text(
                             text = activeModelName,
@@ -1517,7 +1583,7 @@ fun ChatInputBar(
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
 
@@ -1527,7 +1593,11 @@ fun ChatInputBar(
                         onValueChange = onTextChanged,
                         placeholder = {
                             Text(
-                                if (attachedImagePath != null) "Ask about this image..." else "Ask AgentX anything...",
+                                text = when {
+                                    attachedImagePath != null -> "Ask about this image..."
+                                    isMultimodalCapable -> "Ask AgentX with text or image..."
+                                    else -> "Ask AgentX anything..."
+                                },
                                 color = TextMuted,
                                 fontSize = 14.sp
                             )
@@ -1546,7 +1616,7 @@ fun ChatInputBar(
                         )
                     )
 
-                    val canSend = text.isNotBlank() || attachedImagePath != null
+                    val canSend = text.isNotBlank() || (isMultimodalCapable && attachedImagePath != null)
 
                     if (isStreaming) {
                         IconButton(

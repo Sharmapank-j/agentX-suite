@@ -67,7 +67,8 @@ data class ChatUiState(
     val attachedImagePath: String? = null,
     val attachedImageMimeType: String? = null,
     val inferenceMode: InferenceMode = InferenceMode.LOCAL_ONLY,
-    val cloudConfig: CloudModelConfig = CloudModelConfig()
+    val cloudConfig: CloudModelConfig = CloudModelConfig(),
+    val isMultimodalCapable: Boolean = false
 )
 
 class ChatViewModel(
@@ -150,6 +151,12 @@ class ChatViewModel(
         executionFlow,
         _inferenceMode
     ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState, infMode ->
+        val currentCloudConfig = _cloudConfig.value
+        val isMultimodal = isMultimodalCapable(infMode, currentCloudConfig, activeModel)
+        if (!isMultimodal && inputState.attachedImagePath != null) {
+            _attachedImagePath.value = null
+            _attachedImageMimeType.value = null
+        }
         ChatUiState(
             conversations = conversations,
             currentConversation = activeConv,
@@ -164,16 +171,55 @@ class ChatViewModel(
             modelStatus = modelStatus,
             activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null,
             liveMetrics = inputState.metrics,
-            attachedImagePath = inputState.attachedImagePath,
-            attachedImageMimeType = inputState.attachedImageMimeType,
+            attachedImagePath = if (isMultimodal) inputState.attachedImagePath else null,
+            attachedImageMimeType = if (isMultimodal) inputState.attachedImageMimeType else null,
             inferenceMode = infMode,
-            cloudConfig = _cloudConfig.value
+            cloudConfig = currentCloudConfig,
+            isMultimodalCapable = isMultimodal
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ChatUiState()
     )
+
+    private fun isMultimodalCapable(
+        inferenceMode: InferenceMode,
+        cloudConfig: CloudModelConfig,
+        activeModel: GGUFModel?
+    ): Boolean {
+        return when (inferenceMode) {
+            InferenceMode.CLOUD_ONLY -> {
+                if (cloudConfig.provider == CloudProvider.GEMINI) true
+                else {
+                    val m = cloudConfig.modelName.lowercase()
+                    m.contains("vision") || m.contains("vl") || m.contains("llava") || m.contains("gemini") || m.contains("moondream") || m.contains("gpt-4")
+                }
+            }
+            InferenceMode.HYBRID_AUTO -> {
+                if (cloudConfig.provider == CloudProvider.GEMINI) true
+                else {
+                    val m = cloudConfig.modelName.lowercase()
+                    val cloudVision = m.contains("vision") || m.contains("vl") || m.contains("llava") || m.contains("gemini") || m.contains("moondream")
+                    cloudVision || isModelMultimodal(activeModel)
+                }
+            }
+            InferenceMode.LOCAL_ONLY -> {
+                isModelMultimodal(activeModel)
+            }
+        }
+    }
+
+    private fun isModelMultimodal(model: GGUFModel?): Boolean {
+        if (model == null) return false
+        val lowerName = model.name.lowercase()
+        val lowerArch = model.architecture.lowercase()
+        val lowerProfile = model.capabilityProfile.lowercase()
+        return lowerName.contains("vision") || lowerName.contains("-vl") || lowerName.contains("llava") ||
+               lowerName.contains("moondream") || lowerName.contains("minicpm-v") ||
+               lowerArch.contains("clip") || lowerArch.contains("vision") ||
+               lowerProfile.contains("multimodal") || lowerProfile.contains("vision")
+    }
 
     init {
         viewModelScope.launch {
@@ -333,6 +379,7 @@ class ChatViewModel(
     }
 
     fun attachImage(path: String, mimeType: String = "image/jpeg") {
+        if (!uiState.value.isMultimodalCapable) return
         _attachedImagePath.value = path
         _attachedImageMimeType.value = mimeType
     }
