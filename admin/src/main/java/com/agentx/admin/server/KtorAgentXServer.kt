@@ -503,7 +503,7 @@ class KtorAgentXServer(
             }
         }
 
-        val useLocal = (isLocalMode || isHybrid) && localEngine.status == LocalModelStatus.LOADED && requestImageBase64 == null
+        val useLocal = (isLocalMode || isHybrid) && localEngine.status == LocalModelStatus.LOADED && (requestImageBase64 == null || localEngine.activeModel.supportsVision)
 
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val createdEpoch = System.currentTimeMillis() / 1000

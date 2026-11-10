@@ -5,27 +5,30 @@
     android:viewportHeight="108">
     <!-- Diagonal Primary Beam (Indigo) -->
     <path
-        android:pathData="M35,32 L46,32 L73,76 L62,76 Z"
+        android:pathData="M36,27 L45,27 L74,81 L65,81 Z"
         android:fillColor="#6366F1" />
     <!-- Diagonal Secondary Beam (Electric Cyan) -->
     <path
-        android:pathData="M73,32 L62,32 L35,76 L46,76 Z"
+        android:pathData="M72,27 L63,27 L34,81 L43,81 Z"
         android:fillColor="#06B6D4" />
     <!-- Center Core Diamond -->
     <path
-        android:pathData="M54,48 L60,54 L54,60 L48,54 Z"
+        android:pathData="M54,46 L62,54 L54,62 L46,54 Z"
         android:fillColor="#FFFFFF" />
-    <!-- Neural Nodes -->
     <path
-        android:pathData="M40.5,32 A4,4 0 1,0 40.5,24 A4,4 0 1,0 40.5,32 Z"
+        android:pathData="M54,51 A3,3 0 1,0 54,57 A3,3 0 1,0 54,51 Z"
+        android:fillColor="#38BDF8" />
+    <!-- Synaptic Nodes (Safe within 18..90dp area) -->
+    <path
+        android:pathData="M34,29 A5,5 0 1,0 34,19 A5,5 0 1,0 34,29 Z"
+        android:fillColor="#818CF8" />
+    <path
+        android:pathData="M74,29 A5,5 0 1,0 74,19 A5,5 0 1,0 74,29 Z"
         android:fillColor="#38BDF8" />
     <path
-        android:pathData="M67.5,32 A4,4 0 1,0 67.5,24 A4,4 0 1,0 67.5,32 Z"
-        android:fillColor="#A78BFA" />
+        android:pathData="M34,89 A5,5 0 1,0 34,79 A5,5 0 1,0 34,89 Z"
+        android:fillColor="#22D3EE" />
     <path
-        android:pathData="M67.5,76 A4,4 0 1,0 67.5,84 A4,4 0 1,0 67.5,76 Z"
-        android:fillColor="#38BDF8" />
-    <path
-        android:pathData="M40.5,76 A4,4 0 1,0 40.5,84 A4,4 0 1,0 40.5,76 Z"
-        android:fillColor="#A78BFA" />
+        android:pathData="M74,89 A5,5 0 1,0 74,79 A5,5 0 1,0 74,89 Z"
+        android:fillColor="#6366F1" />
 </vector>

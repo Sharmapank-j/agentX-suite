@@ -3,27 +3,43 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Clinical Cross Vertical Bar -->
+    <!-- Clinical Cross Datum Bar -->
     <path
-        android:pathData="M48,28 L60,28 L60,80 L48,80 Z"
+        android:pathData="M27,54 L81,54"
+        android:strokeColor="#14B8A6"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,27 L54,81"
+        android:strokeColor="#10B981"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <!-- Shared Diagonal Primary Beam (Teal) -->
+    <path
+        android:pathData="M36,27 L45,27 L74,81 L65,81 Z"
         android:fillColor="#0D9488" />
-    <!-- Clinical Cross Horizontal Bar -->
+    <!-- Shared Diagonal Secondary Beam (Emerald) -->
     <path
-        android:pathData="M28,48 L80,48 L80,60 L28,60 Z"
-        android:fillColor="#0D9488" />
-    <!-- Center Core Shield -->
-    <path
-        android:pathData="M48,48 L60,48 L60,60 L48,60 Z"
+        android:pathData="M72,27 L63,27 L34,81 L43,81 Z"
         android:fillColor="#14B8A6" />
-    <!-- Intersecting Vital Heartbeat / EKG Pulse Line -->
+    <!-- Center Core Clinical Diamond -->
     <path
-        android:pathData="M22,54 L40,54 L45,40 L50,68 L55,44 L60,60 L65,54 L86,54"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-    <!-- Glowing Vital Dot -->
+        android:pathData="M54,46 L62,54 L54,62 L46,54 Z"
+        android:fillColor="#FFFFFF" />
     <path
-        android:pathData="M55,44 A3,3 0 1,0 55,38 A3,3 0 1,0 55,44 Z"
+        android:pathData="M54,51 A3,3 0 1,0 54,57 A3,3 0 1,0 54,51 Z"
+        android:fillColor="#2DD4BF" />
+    <!-- Clinical Synaptic Nodes -->
+    <path
+        android:pathData="M34,29 A5,5 0 1,0 34,19 A5,5 0 1,0 34,29 Z"
+        android:fillColor="#2DD4BF" />
+    <path
+        android:pathData="M74,29 A5,5 0 1,0 74,19 A5,5 0 1,0 74,29 Z"
         android:fillColor="#34D399" />
+    <path
+        android:pathData="M34,89 A5,5 0 1,0 34,79 A5,5 0 1,0 34,89 Z"
+        android:fillColor="#10B981" />
+    <path
+        android:pathData="M74,89 A5,5 0 1,0 74,79 A5,5 0 1,0 74,89 Z"
+        android:fillColor="#14B8A6" />
 </vector>

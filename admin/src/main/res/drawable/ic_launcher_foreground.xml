@@ -3,68 +3,49 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Broadcast Waves at Top -->
+    <!-- Broadcast Waves (Telemetry Edge Server) -->
     <path
-        android:pathData="M44,32 A14,14 0 0,1 64,32"
-        android:strokeColor="#06B6D4"
+        android:pathData="M44,18 A14,14 0 0,1 64,18"
+        android:strokeColor="#10B981"
         android:strokeWidth="2.5"
         android:strokeLineCap="round" />
     <path
-        android:pathData="M38,26 A22,22 0 0,1 70,26"
+        android:pathData="M38,24 A22,22 0 0,1 70,24"
         android:strokeColor="#3B82F6"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round" />
-
-    <!-- Server Rack Top Unit -->
-    <path
-        android:pathData="M30,38 L78,38 L78,48 L30,48 Z"
-        android:fillColor="#1E293B" />
-    <!-- Server Rack Middle Unit -->
-    <path
-        android:pathData="M30,52 L78,52 L78,62 L30,62 Z"
-        android:fillColor="#1E293B" />
-    <!-- Server Rack Bottom Unit -->
-    <path
-        android:pathData="M30,66 L78,66 L78,76 L30,76 Z"
-        android:fillColor="#1E293B" />
-
-    <!-- Server Activity LEDs (Green = Online, Amber = Serving) -->
-    <!-- Unit 1 LEDs -->
-    <path
-        android:pathData="M35,43 A2,2 0 1,0 35,41 A2,2 0 1,0 35,43 Z"
-        android:fillColor="#10B981" />
-    <path
-        android:pathData="M42,43 A2,2 0 1,0 42,41 A2,2 0 1,0 42,43 Z"
-        android:fillColor="#F59E0B" />
-    <path
-        android:pathData="M50,42 L72,42"
-        android:strokeColor="#334155"
         android:strokeWidth="2"
         android:strokeLineCap="round" />
-
-    <!-- Unit 2 LEDs -->
+    <!-- Infrastructure Base Anchor Bar -->
     <path
-        android:pathData="M35,57 A2,2 0 1,0 35,55 A2,2 0 1,0 35,57 Z"
-        android:fillColor="#10B981" />
-    <path
-        android:pathData="M42,57 A2,2 0 1,0 42,55 A2,2 0 1,0 42,57 Z"
-        android:fillColor="#38BDF8" />
-    <path
-        android:pathData="M50,56 L72,56"
+        android:pathData="M32,84 L76,84"
         android:strokeColor="#334155"
-        android:strokeWidth="2"
+        android:strokeWidth="3.5"
         android:strokeLineCap="round" />
-
-    <!-- Unit 3 LEDs -->
+    <!-- Shared Diagonal Primary Beam (Signal Emerald) -->
     <path
-        android:pathData="M35,71 A2,2 0 1,0 35,69 A2,2 0 1,0 35,71 Z"
+        android:pathData="M36,27 L45,27 L74,81 L65,81 Z"
+        android:fillColor="#059669" />
+    <!-- Shared Diagonal Secondary Beam (Cobalt) -->
+    <path
+        android:pathData="M72,27 L63,27 L34,81 L43,81 Z"
+        android:fillColor="#2563EB" />
+    <!-- Center Core Server Gateway Diamond -->
+    <path
+        android:pathData="M54,46 L62,54 L54,62 L46,54 Z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M54,51 A3,3 0 1,0 54,57 A3,3 0 1,0 54,51 Z"
         android:fillColor="#10B981" />
+    <!-- Infrastructure Nodes -->
     <path
-        android:pathData="M42,71 A2,2 0 1,0 42,69 A2,2 0 1,0 42,71 Z"
+        android:pathData="M34,29 A5,5 0 1,0 34,19 A5,5 0 1,0 34,29 Z"
+        android:fillColor="#34D399" />
+    <path
+        android:pathData="M74,29 A5,5 0 1,0 74,19 A5,5 0 1,0 74,29 Z"
+        android:fillColor="#60A5FA" />
+    <path
+        android:pathData="M34,89 A5,5 0 1,0 34,79 A5,5 0 1,0 34,89 Z"
+        android:fillColor="#3B82F6" />
+    <path
+        android:pathData="M74,89 A5,5 0 1,0 74,79 A5,5 0 1,0 74,89 Z"
         android:fillColor="#10B981" />
-    <path
-        android:pathData="M50,70 L72,70"
-        android:strokeColor="#334155"
-        android:strokeWidth="2"
-        android:strokeLineCap="round" />
 </vector>

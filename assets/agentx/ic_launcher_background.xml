@@ -6,8 +6,8 @@
     <path
         android:pathData="M0,0h108v108h-108z"
         android:fillColor="#090D16" />
-    <!-- Subtle radial glow backing -->
+    <!-- Subtle radial aura backing -->
     <path
         android:pathData="M54,18 A36,36 0 1,0 54,90 A36,36 0 1,0 54,18 Z"
-        android:fillColor="#181E36" />
+        android:fillColor="#151D33" />
 </vector>

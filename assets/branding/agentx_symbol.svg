@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="beamPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8" />
+      <stop offset="50%" stop-color="#6366F1" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+    <linearGradient id="beamSecondary" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#22D3EE" />
+      <stop offset="100%" stop-color="#06B6D4" />
+    </linearGradient>
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="45%" stop-color="#E0F2FE" />
+      <stop offset="80%" stop-color="#38BDF8" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0" />
+    </radialGradient>
+    <filter id="subtleDrop" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Neural Synaptic Arch Filaments -->
+  <path d="M 160,138 Q 256,92 352,138" fill="none" stroke="#6366F1" stroke-width="4" stroke-dasharray="6,6" opacity="0.6" />
+  <path d="M 160,374 Q 256,420 352,374" fill="none" stroke="#06B6D4" stroke-width="4" stroke-dasharray="6,6" opacity="0.6" />
+  <path d="M 160,138 Q 110,256 160,374" fill="none" stroke="#4F46E5" stroke-width="3" stroke-dasharray="4,4" opacity="0.4" />
+  <path d="M 352,138 Q 402,256 352,374" fill="none" stroke="#22D3EE" stroke-width="3" stroke-dasharray="4,4" opacity="0.4" />
+
+  <!-- Diagonal Primary Beam (Indigo) -->
+  <polygon points="172,126 216,126 352,386 308,386" fill="url(#beamPrimary)" filter="url(#subtleDrop)" />
+
+  <!-- Diagonal Secondary Beam (Electric Cyan) -->
+  <polygon points="340,126 296,126 160,386 204,386" fill="url(#beamSecondary)" filter="url(#subtleDrop)" />
+
+  <!-- Center Core Singularity Diamond -->
+  <polygon points="256,218 294,256 256,294 218,256" fill="url(#coreGlow)" filter="url(#subtleDrop)" />
+  <circle cx="256" cy="256" r="10" fill="#FFFFFF" />
+
+  <!-- Four Precision Synaptic Nodes -->
+  <!-- Top-Left -->
+  <circle cx="160" cy="138" r="22" fill="#1E1B4B" stroke="#818CF8" stroke-width="5" />
+  <circle cx="160" cy="138" r="9" fill="#38BDF8" />
+  <!-- Top-Right -->
+  <circle cx="352" cy="138" r="22" fill="#082F49" stroke="#38BDF8" stroke-width="5" />
+  <circle cx="352" cy="138" r="9" fill="#818CF8" />
+  <!-- Bottom-Left -->
+  <circle cx="160" cy="374" r="22" fill="#082F49" stroke="#22D3EE" stroke-width="5" />
+  <circle cx="160" cy="374" r="9" fill="#6366F1" />
+  <!-- Bottom-Right -->
+  <circle cx="352" cy="374" r="22" fill="#1E1B4B" stroke="#6366F1" stroke-width="5" />
+  <circle cx="352" cy="374" r="9" fill="#22D3EE" />
+</svg>

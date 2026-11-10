@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="420" height="120">
+  <defs>
+    <linearGradient id="wmGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22D3EE" />
+      <stop offset="50%" stop-color="#818CF8" />
+      <stop offset="100%" stop-color="#C084FC" />
+    </linearGradient>
+  </defs>
+  <style>
+    .font-agent { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 76px; font-weight: 700; fill: #F8FAFC; letter-spacing: -2px; }
+    .font-x { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 82px; font-weight: 900; fill: url(#wmGradient); }
+    .font-tagline { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 14px; font-weight: 600; fill: #94A3B8; letter-spacing: 5px; }
+  </style>
+  <text x="10" y="82" class="font-agent">Agent<tspan class="font-x">X</tspan></text>
+  <text x="14" y="108" class="font-tagline">AUTONOMOUS SUITE</text>
+</svg>

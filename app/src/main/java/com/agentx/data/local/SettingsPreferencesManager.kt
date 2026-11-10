@@ -6,6 +6,7 @@ import com.agentx.core.inference.CloudModelConfig
 import com.agentx.core.inference.CloudProvider
 import com.agentx.core.inference.InferenceMode
 import com.agentx.core.inference.LocalBackendType
+import com.agentx.core.security.SecureCredentialStore
 
 /**
  * Persistent SharedPreferences storage for user settings, gateway endpoints,
@@ -50,10 +51,10 @@ class SettingsPreferencesManager(context: Context) {
             InferenceMode.HYBRID_AUTO
         }
 
-        val legacyApiKey = prefs.getString(KEY_API_KEY, "") ?: ""
-        val geminiApiKey = prefs.getString(KEY_GEMINI_API_KEY, null)
+        val legacyApiKey = SecureCredentialStore.decrypt(prefs.getString(KEY_API_KEY, "") ?: "")
+        val geminiApiKey = prefs.getString(KEY_GEMINI_API_KEY, null)?.let { SecureCredentialStore.decrypt(it) }
             ?: if (provider == CloudProvider.GEMINI) legacyApiKey else ""
-        val gatewayApiKey = prefs.getString(KEY_GATEWAY_API_KEY, null)
+        val gatewayApiKey = prefs.getString(KEY_GATEWAY_API_KEY, null)?.let { SecureCredentialStore.decrypt(it) }
             ?: if (provider == CloudProvider.CUSTOM_GATEWAY) legacyApiKey else ""
         val modelName = prefs.getString(KEY_MODEL_NAME, "gemini-2.5-flash") ?: "gemini-2.5-flash"
         val customBaseUrl = prefs.getString(KEY_CUSTOM_BASE_URL, "http://192.168.1.100:8080/v1") ?: "http://192.168.1.100:8080/v1"
@@ -74,8 +75,8 @@ class SettingsPreferencesManager(context: Context) {
         prefs.edit()
             .putString(KEY_CLOUD_PROVIDER, config.provider.name)
             .putString(KEY_INFERENCE_MODE, config.inferenceMode.name)
-            .putString(KEY_GEMINI_API_KEY, config.geminiApiKey)
-            .putString(KEY_GATEWAY_API_KEY, config.gatewayApiKey)
+            .putString(KEY_GEMINI_API_KEY, SecureCredentialStore.encrypt(config.geminiApiKey))
+            .putString(KEY_GATEWAY_API_KEY, SecureCredentialStore.encrypt(config.gatewayApiKey))
             .remove(KEY_API_KEY)
             .putString(KEY_MODEL_NAME, config.modelName)
             .putString(KEY_CUSTOM_BASE_URL, config.customBaseUrl)
