@@ -264,7 +264,7 @@ class KtorAgentXServer(
             {
               "status": "online",
               "server": "AgentX Serve Edge Gateway Hub (Ktor CIO)",
-              "version": "0.9.0",
+              "version": "1.0.0",
               "uptimeSeconds": $uptimeSec,
               "servingMode": "${servingMode.name}",
               "activeLocalModel": "${localEngine.activeModel.name}",
@@ -519,7 +519,7 @@ class KtorAgentXServer(
                 val writer = this
 
                 val tokenFlow = if (useLocal) {
-                    localEngine.generateCompletionStream(prompt, systemPrompt, maxTokens = maxTokens)
+                    localEngine.generateCompletionStream(prompt, systemPrompt, maxTokens = maxTokens, imageBase64 = requestImageBase64)
                 } else {
                     cloudGateway.generateChatCompletionStream(
                         prompt = prompt,
@@ -573,7 +573,7 @@ class KtorAgentXServer(
             // Synchronous Response
             val fullText = try {
                 if (useLocal) {
-                    localEngine.generateCompletionSync(prompt, systemPrompt, maxTokens = maxTokens)
+                    localEngine.generateCompletionSync(prompt, systemPrompt, maxTokens = maxTokens, imageBase64 = requestImageBase64)
                 } else {
                     cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
                 }

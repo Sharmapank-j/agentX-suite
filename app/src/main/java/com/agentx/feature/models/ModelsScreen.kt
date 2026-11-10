@@ -86,6 +86,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agentx.core.device.CpuTopology
+import com.agentx.core.device.MemorySnapshot
+import com.agentx.core.device.ThermalSnapshot
+import com.agentx.core.device.BenchmarkResult
 import com.agentx.core.inference.model.ExtendedModelConfig
 import com.agentx.core.inference.model.GenerationProfile
 import com.agentx.core.inference.model.OutputFormat
@@ -158,23 +161,42 @@ fun ModelsScreen(
                 availableBytes = state.storageAvailableBytes
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Active Model Banner with Real-time RAM status and Load/Unload
+            // Hardware Profiler Live Bar
+            HardwareProfilerBar(
+                memory = state.memorySnapshot,
+                thermal = state.thermalSnapshot,
+                cpu = state.cpuTopology
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Active Model Banner with Real-time RAM status, Vision indicator, and Benchmark
             ActiveModelBanner(
                 activeModel = state.activeModel,
                 isLoadedInRam = state.isLoadedInRam,
                 loadedMemoryMb = state.loadedMemoryMb,
+                isBenchmarking = state.isBenchmarking,
                 onLoadModel = {
                     state.activeModel?.let { viewModel.loadModelIntoRam(it.id) }
                 },
                 onUnloadModel = {
                     viewModel.unloadModelFromRam()
                 },
+                onRunBenchmark = {
+                    state.activeModel?.let { viewModel.runHardwareBenchmark(it.id) }
+                },
                 onConfigure = {
                     state.activeModel?.let { onNavigateToModelConfig(it.id) }
                 }
             )
+
+            // Benchmark Result Card (if latest benchmark available)
+            state.latestBenchmark?.let { bench ->
+                Spacer(modifier = Modifier.height(6.dp))
+                BenchmarkResultCard(benchmark = bench)
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -563,12 +585,117 @@ fun ModelsScreen(
 }
 
 @Composable
+private fun HardwareProfilerBar(
+    memory: MemorySnapshot,
+    thermal: ThermalSnapshot,
+    cpu: CpuTopology
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Memory, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "RAM: ${memory.availableRamMb}/${memory.totalRamMb} MB Free",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(7.dp).clip(CircleShape).background(
+                        if (thermal.isThrottled) Color(0xFFEF4444) else Color(0xFF10B981)
+                    )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "%.1f°C • %s".format(thermal.temperatureCelsius, thermal.statusLabel.substringBefore(" ")),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "${cpu.performanceCores}P + ${cpu.efficiencyCores}E Cores",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BenchmarkResultCard(benchmark: BenchmarkResult) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF1E1B4B).copy(alpha = 0.35f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF6366F1)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Speed, contentDescription = null, tint = Color(0xFF818CF8), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "HARDWARE BENCHMARK VERIFIED",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color(0xFF818CF8)
+                    )
+                }
+                Text(
+                    benchmark.deviceModel,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Generation Speed", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                    Text("%.1f tok/s".format(benchmark.evalTokensPerSec), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                }
+                Column {
+                    Text("First Token (TTFT)", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                    Text("%d ms".format(benchmark.ttftMs), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                }
+                Column {
+                    Text("Peak Memory", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                    Text("%d MB".format(benchmark.peakMemoryMb), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ActiveModelBanner(
     activeModel: GGUFModel?,
     isLoadedInRam: Boolean,
     loadedMemoryMb: Long,
+    isBenchmarking: Boolean,
     onLoadModel: () -> Unit,
     onUnloadModel: () -> Unit,
+    onRunBenchmark: () -> Unit,
     onConfigure: () -> Unit
 ) {
     Surface(
@@ -599,18 +726,36 @@ private fun ActiveModelBanner(
                     )
                 }
 
-                if (isLoadedInRam) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF10B981)
-                    ) {
-                        Text(
-                            text = "${loadedMemoryMb} MB RAM",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (activeModel?.supportsVision == true) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF0284C7)
+                        ) {
+                            Text(
+                                text = "👁️ VISION READY",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
+
+                    if (isLoadedInRam) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF10B981)
+                        ) {
+                            Text(
+                                text = "${loadedMemoryMb} MB RAM",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -640,6 +785,17 @@ private fun ActiveModelBanner(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onConfigure) {
                         Icon(Icons.Default.Tune, contentDescription = "Configure", tint = MaterialTheme.colorScheme.primary)
+                    }
+
+                    IconButton(
+                        onClick = onRunBenchmark,
+                        enabled = activeModel != null && !isBenchmarking
+                    ) {
+                        if (isBenchmarking) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Speed, contentDescription = "Run Benchmark", tint = Color(0xFF6366F1))
+                        }
                     }
 
                     if (isLoadedInRam) {
@@ -708,6 +864,21 @@ private fun ModelCard(
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                            if (model.supportsVision) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFF0284C7)
+                                ) {
+                                    Text(
+                                        "👁️ VISION",
+                                        color = Color.White,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             if (isLoaded) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(

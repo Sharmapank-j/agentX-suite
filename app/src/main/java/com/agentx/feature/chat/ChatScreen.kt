@@ -1229,13 +1229,22 @@ fun ChatMessageItem(
                 )
                 if (message.tokenCount > 0) {
                     Spacer(modifier = Modifier.width(8.dp))
+                    val statsText = buildString {
+                        append("⚡ ${message.tokenCount} tok")
+                        message.tokensPerSecond?.takeIf { it > 0 }?.let {
+                            append(" • %.1f t/s".format(it))
+                        }
+                        message.ttftMs?.takeIf { it > 0 }?.let {
+                            append(" • %dms".format(it))
+                        }
+                    }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = Color(0xFF0E2A47),
                         border = androidx.compose.foundation.BorderStroke(1.dp, ElectricCyan.copy(alpha = 0.3f))
                     ) {
                         Text(
-                            text = "⚡ ${message.tokenCount} tokens",
+                            text = statsText,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,

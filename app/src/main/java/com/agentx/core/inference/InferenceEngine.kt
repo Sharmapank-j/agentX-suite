@@ -15,7 +15,8 @@ data class ModelConfig(
     val topP: Float = 0.9f,
     val topK: Int = 40,
     val repeatPenalty: Float = 1.1f,
-    val seed: Int = 0
+    val seed: Int = 0,
+    val mmprojPath: String? = null
 )
 
 @Serializable
@@ -39,7 +40,9 @@ sealed interface GenerationEvent {
         val totalTokens: Int,
         val promptTokens: Int,
         val completionTokens: Int,
-        val durationMs: Long
+        val durationMs: Long,
+        val tokensPerSecond: Double = 0.0,
+        val ttftMs: Long = 0L
     ) : GenerationEvent
     data class Error(val throwable: Throwable, val message: String) : GenerationEvent
 }
@@ -59,7 +62,9 @@ data class ModelStatus(
     val activeModelId: String? = null,
     val activeModelName: String? = null,
     val memoryUsageBytes: Long = 0L,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val supportsVision: Boolean = false,
+    val mmprojPath: String? = null
 )
 
 interface InferenceEngine {

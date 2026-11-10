@@ -73,9 +73,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME:-v0.9.0}"
+          VERSION="${GITHUB_REF_NAME:-v1.0.0}"
           if [[ "$VERSION" == "main" || "$VERSION" == "master" ]]; then
-            VERSION="v0.9.0"
+            VERSION="v1.0.0"
           fi
           mkdir -p release
           cp dist/app/build/outputs/apk/debug/app-debug.apk release/AgentX-${VERSION}-debug.apk
@@ -87,31 +87,32 @@ jobs:
       - name: Create GitHub Release and upload APKs
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.9.0' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
           target_commitish: ${{ github.sha }}
-          name: AgentX Suite ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.9.0' }}
+          name: AgentX Suite ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
             release/*.apk
             release/SHA256SUMS.txt
           body: |
-            ## AgentX Suite Release
+            ## AgentX Suite v1.0.0 — Major Release
 
             ### Included Applications:
-            - **AgentX** — Autonomous on-device AI assistant with Multimodal Vision, Gemini 3.8 Flash & Local GGUF (`llama.cpp`) native inference, Dynamic Cross-Network Gateway, and tactile Haptic Feedback.
-            - **AgentX Medical** — Clinical triaging, offline drug-interaction intelligence, and bedside telemetry.
-            - **AgentX Serve** — On-device OpenAI-compatible HTTP/SSE edge gateway hub with Reverse Tunneling and 6-Digit Instant Pairing.
+            - **AgentX** — Autonomous on-device AI assistant with Multimodal Local Vision Engine, Gemini 3.8 Flash & Local GGUF (`llama.cpp`) native inference, Dynamic Multi-Model Hub, WebRTC P2P DataChannel, and tactile Haptics.
+            - **AgentX Medical** — Clinical triaging, offline drug-interaction intelligence, bedside telemetry, and localized reasoning.
+            - **AgentX Serve** — On-device OpenAI-compatible HTTP/SSE edge gateway hub with In-App Reverse Tunneling, 6-Digit Cloud Rendezvous, and Multimodal Vision Projector Serving.
 
-            ### What's New:
-            - **Native Cross-Network Support**:
-              - Pure-Java Reverse Tunnel client inside `TunnelManager` (SSH over port 443) for instant public HTTPS URLs through firewalls.
-              - Cloud Rendezvous & 6-Digit Pairing with deterministic QR Code matrix generator.
-              - RFC 5389 STUN NAT traversal with zero-relay P2P UDP DataChannel streaming.
-            - **Dynamic Network Switching & Gateway Heartbeat**:
-              - Automatic background reconnection and 10s health pinging with live round-trip latency metrics.
-              - Seamless auto-discovery and auto-recovery of host IP when switching between Wi-Fi and Cellular.
-            - **Roomy & Calm Chat UI**:
-              - Responsive auto-adjusting input pill layout preventing text squeezing on all device aspect ratios.
-              - Model-aware multimodal vision controls (dynamically visible when multimodal models are active).
-              - Live streaming tokens HUD with tokens/second, memory footprint, and server connection latency indicators.
+            ### What's New in v1.0.0:
+            - **Local Multi-Model Dynamic Hub**:
+              - In-app discovery and switching across multiple local `.gguf` models stored on device (`/sdcard/Download`, internal storage, SD cards).
+              - Safe model hot-swapping with complete memory deallocation and clean context reloading.
+            - **Multimodal Local Vision Engine**:
+              - Offline image comprehension directly on mobile using `mtmd` & `llama-clip` multimodal projector weights (`mmproj-*.gguf`) alongside language weights.
+              - Auto-detection and pairing of projector files in model directories with image prompt integration.
+            - **Production WebRTC P2P Direct DataChannel**:
+              - Automated STUN candidate exchange during 6-digit cloud rendezvous pairing.
+              - Zero-relay, direct UDP token streaming between devices with graceful HTTP/SSE failover.
+            - **On-Device Benchmark & Hardware Profiler**:
+              - Real-time metrics in chat: Time-To-First-Token (TTFT), tokens/sec throughput, active RAM footprint, and thermal status.
+              - In-app hardware benchmark suite measuring prompt evaluation and token generation speed on mobile SoCs.

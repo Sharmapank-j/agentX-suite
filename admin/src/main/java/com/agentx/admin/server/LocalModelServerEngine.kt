@@ -109,7 +109,9 @@ class LocalModelServerEngine(
     fun registerStorageModel(
         name: String,
         filePath: String,
-        fileSizeBytes: Long
+        fileSizeBytes: Long,
+        mmprojPath: String? = null,
+        supportsVision: Boolean = false
     ): LocalServerModel {
         val sanitizedId = "storage_" + name.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
         val existing = _storageModels.find { it.id == sanitizedId || it.filePath == filePath }
@@ -130,12 +132,14 @@ class LocalModelServerEngine(
             quantization = quant,
             contextWindow = 4096,
             memoryFootprintMb = ramMb,
-            description = "Discovered model file. Runtime compatibility and memory requirements have not yet been validated.",
+            description = if (supportsVision) "Discovered multimodal vision model with paired projector." else "Discovered model file.",
             isLoaded = false,
             isServing = false,
             filePath = filePath,
             fileSizeBytes = fileSizeBytes,
-            isCustomStorageModel = true
+            isCustomStorageModel = true,
+            mmprojPath = mmprojPath,
+            supportsVision = supportsVision
         )
         _storageModels.add(0, newModel)
         return newModel
@@ -197,12 +201,18 @@ class LocalModelServerEngine(
 
         for (dir in candidateDirs) {
             try {
-                dir.walkTopDown().maxDepth(2).forEach { file ->
-                    if (file.isFile && file.name.endsWith(".gguf", ignoreCase = true)) {
-                        val registered = registerStorageModel(file.name, file.absolutePath, file.length())
-                        if (!discovered.any { it.id == registered.id }) {
-                            discovered.add(registered)
-                        }
+                val files = dir.listFiles() ?: continue
+                val mmprojFile = files.firstOrNull { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) && it.name.contains("mmproj", ignoreCase = true) }
+                files.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) && !it.name.contains("mmproj", ignoreCase = true) }.forEach { file ->
+                    val registered = registerStorageModel(
+                        file.name,
+                        file.absolutePath,
+                        file.length(),
+                        mmprojPath = mmprojFile?.absolutePath,
+                        supportsVision = mmprojFile != null
+                    )
+                    if (!discovered.any { it.id == registered.id }) {
+                        discovered.add(registered)
                     }
                 }
             } catch (_: Exception) {}
@@ -241,14 +251,21 @@ class LocalModelServerEngine(
                 memoryFootprintMb = selected.memoryFootprintMb,
                 isLocal = true,
                 providerId = "agentx_serve_local",
-                modelPath = path
+                modelPath = path,
+                mmprojPath = selected.mmprojPath,
+                supportsVision = selected.supportsVision
             )
             val result = inferenceEngine.loadModel(modelInfo)
             if (result.isFailure) {
                 _status = LocalModelStatus.NOT_LOADED
                 return@withLock false
             }
-            _activeModel = selected.copy(isLoaded = true, isServing = false)
+            _activeModel = selected.copy(
+                isLoaded = true,
+                isServing = false,
+                mmprojPath = inferenceEngine.loadedModel?.mmprojPath ?: selected.mmprojPath,
+                supportsVision = inferenceEngine.loadedModel?.supportsVision ?: selected.supportsVision
+            )
             _status = LocalModelStatus.LOADED
             true
         }
@@ -267,7 +284,8 @@ class LocalModelServerEngine(
         prompt: String,
         systemPrompt: String? = null,
         temperature: Float = 0.7f,
-        maxTokens: Int = 1024
+        maxTokens: Int = 1024,
+        imageBase64: String? = null
     ): Flow<String> = flow {
         check(inferenceEngine.isModelLoaded) { "Load a local GGUF model before serving completions." }
         _status = LocalModelStatus.GENERATING
@@ -277,7 +295,8 @@ class LocalModelServerEngine(
                     prompt = prompt,
                     systemPrompt = systemPrompt,
                     temperature = temperature,
-                    maxTokens = maxTokens.coerceIn(1, 4096)
+                    maxTokens = maxTokens.coerceIn(1, 4096),
+                    imageBase64 = imageBase64
                 )
             ).collect { event ->
                 when (event) {
@@ -295,10 +314,11 @@ class LocalModelServerEngine(
         prompt: String,
         systemPrompt: String? = null,
         temperature: Float = 0.7f,
-        maxTokens: Int = 1024
+        maxTokens: Int = 1024,
+        imageBase64: String? = null
     ): String = withContext(Dispatchers.IO) {
         val sb = java.lang.StringBuilder()
-        generateCompletionStream(prompt, systemPrompt, temperature, maxTokens).collect { token ->
+        generateCompletionStream(prompt, systemPrompt, temperature, maxTokens, imageBase64).collect { token ->
             sb.append(token)
         }
         sb.toString()

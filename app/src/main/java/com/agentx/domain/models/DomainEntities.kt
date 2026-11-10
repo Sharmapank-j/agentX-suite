@@ -30,7 +30,9 @@ data class Message(
     val tokenCount: Int = 0,
     val status: MessageStatus = MessageStatus.COMPLETED,
     val attachmentUri: String? = null,
-    val attachmentMimeType: String? = null
+    val attachmentMimeType: String? = null,
+    val ttftMs: Long? = null,
+    val tokensPerSecond: Double? = null
 )
 
 @Serializable
@@ -117,5 +119,7 @@ data class GGUFModel(
     val threads: Int = 4,
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,
+    val mmprojPath: String? = null,
+    val supportsVision: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

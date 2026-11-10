@@ -1,11 +1,11 @@
 #include <jni.h>
 #include <android/log.h>
 #include <llama.h>
+#include <mtmd.h>
+#include <mtmd-helper.h>
 
 #include <atomic>
 #include <algorithm>
-#include <codecvt>
-#include <locale>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -21,6 +21,7 @@ struct AgentXContext {
     llama_model * model = nullptr;
     llama_context * context = nullptr;
     const llama_vocab * vocab = nullptr;
+    mtmd_context * mtmdCtx = nullptr;
     std::atomic<bool> cancelled{false};
     std::mutex generationMutex;
     jlong modelFileBytes = 0;
@@ -30,14 +31,39 @@ static jstring utf8ToJString(JNIEnv * env, const char * bytes, size_t length) {
     if (bytes == nullptr || length == 0) {
         return env->NewStringUTF("");
     }
-    try {
-        std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
-        const std::u16string utf16 = converter.from_bytes(bytes, bytes + length);
-        return env->NewString(reinterpret_cast<const jchar *>(utf16.data()), static_cast<jsize>(utf16.size()));
-    } catch (...) {
-        std::string safe(bytes, length);
-        return env->NewStringUTF(safe.c_str());
+    // Direct UTF-8 to UTF-16 conversion avoiding deprecated codecvt
+    std::vector<jchar> utf16;
+    utf16.reserve(length);
+    size_t i = 0;
+    while (i < length) {
+        uint32_t codepoint = 0;
+        unsigned char c = static_cast<unsigned char>(bytes[i++]);
+        if (c < 0x80) {
+            codepoint = c;
+        } else if ((c & 0xE0) == 0xC0) {
+            if (i >= length) break;
+            codepoint = ((c & 0x1F) << 6) | (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+        } else if ((c & 0xF0) == 0xE0) {
+            if (i + 1 >= length) break;
+            codepoint = ((c & 0x0F) << 12) |
+                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+        } else if ((c & 0xF8) == 0xF0) {
+            if (i + 2 >= length) break;
+            codepoint = ((c & 0x07) << 18) |
+                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 12) |
+                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+        }
+        if (codepoint <= 0xFFFF) {
+            utf16.push_back(static_cast<jchar>(codepoint));
+        } else {
+            codepoint -= 0x10000;
+            utf16.push_back(static_cast<jchar>(0xD800 + (codepoint >> 10)));
+            utf16.push_back(static_cast<jchar>(0xDC00 + (codepoint & 0x3FF)));
+        }
     }
+    return env->NewString(utf16.data(), static_cast<jsize>(utf16.size()));
 }
 
 static size_t getCompleteUtf8Length(const std::string & s) {
@@ -597,6 +623,295 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerateLegac
                             maxTokens, temperature, topP, 40, 1.1f, 0, nullptr, callback);
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadVisionProjector(
+        JNIEnv * env, jobject, jlong handle, jstring mmprojPath) {
+    AgentXContext * state = fromHandle(handle);
+    if (state == nullptr || state->model == nullptr || mmprojPath == nullptr) {
+        return JNI_FALSE;
+    }
+    const char * rawPath = env->GetStringUTFChars(mmprojPath, nullptr);
+    if (rawPath == nullptr) return JNI_FALSE;
+    const std::string path(rawPath);
+    env->ReleaseStringUTFChars(mmprojPath, rawPath);
+
+    std::lock_guard<std::mutex> guard(state->generationMutex);
+    if (state->mtmdCtx != nullptr) {
+        mtmd_free(state->mtmdCtx);
+        state->mtmdCtx = nullptr;
+    }
+
+    struct stat fileInfo {};
+    if (stat(path.c_str(), &fileInfo) != 0 || fileInfo.st_size < 8) {
+        LOGE("Vision projector path is unreadable or empty: %s", path.c_str());
+        return JNI_FALSE;
+    }
+
+    mtmd_context_params mparams = mtmd_context_params_default();
+    mparams.use_gpu = false;
+    mparams.n_threads = 4;
+    mparams.warmup = false;
+    state->mtmdCtx = mtmd_init_from_file(path.c_str(), state->model, mparams);
+    if (state->mtmdCtx == nullptr) {
+        LOGE("mtmd_init_from_file failed for projector: %s", path.c_str());
+        return JNI_FALSE;
+    }
+
+    LOGI("Successfully initialized mtmd vision projector: %s (%lld bytes)", path.c_str(), (long long)fileInfo.st_size);
+    return JNI_TRUE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeSupportsVision(
+        JNIEnv *, jobject, jlong handle) {
+    AgentXContext * state = fromHandle(handle);
+    if (state == nullptr || state->mtmdCtx == nullptr) return JNI_FALSE;
+    return mtmd_support_vision(state->mtmdCtx) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeGenerateMultimodal(
+        JNIEnv * env, jobject, jlong handle, jstring systemPromptString, jstring userPromptString,
+        jbyteArray imageBytes, jint maxTokens, jfloat temperature, jfloat topP, jint topK,
+        jfloat repetitionPenalty, jint seed, jobjectArray stopSequencesArray, jobject callback) {
+    AgentXContext * state = fromHandle(handle);
+    if (state == nullptr || state->context == nullptr || userPromptString == nullptr || callback == nullptr) return -1;
+
+    // If no image is provided or vision projector is not loaded, delegate to standard text generation
+    if (imageBytes == nullptr || state->mtmdCtx == nullptr) {
+        return internalGenerate(env, handle, systemPromptString, userPromptString,
+                                maxTokens, temperature, topP, topK, repetitionPenalty,
+                                seed, stopSequencesArray, callback);
+    }
+
+    jsize imageLen = env->GetArrayLength(imageBytes);
+    if (imageLen <= 0) {
+        return internalGenerate(env, handle, systemPromptString, userPromptString,
+                                maxTokens, temperature, topP, topK, repetitionPenalty,
+                                seed, stopSequencesArray, callback);
+    }
+
+    jbyte * rawImage = env->GetByteArrayElements(imageBytes, nullptr);
+    if (rawImage == nullptr) {
+        return internalGenerate(env, handle, systemPromptString, userPromptString,
+                                maxTokens, temperature, topP, topK, repetitionPenalty,
+                                seed, stopSequencesArray, callback);
+    }
+
+    mtmd_helper_init_opt opt = mtmd_helper_init_opt_default();
+    auto res = mtmd_helper_bitmap_init_from_buf(
+        state->mtmdCtx,
+        reinterpret_cast<const unsigned char *>(rawImage),
+        static_cast<size_t>(imageLen),
+        false,
+        opt
+    );
+    env->ReleaseByteArrayElements(imageBytes, rawImage, JNI_ABORT);
+
+    if (!res.bitmap) {
+        LOGE("Failed to decode image buffer into mtmd_bitmap; falling back to text generation");
+        return internalGenerate(env, handle, systemPromptString, userPromptString,
+                                maxTokens, temperature, topP, topK, repetitionPenalty,
+                                seed, stopSequencesArray, callback);
+    }
+
+    std::lock_guard<std::mutex> guard(state->generationMutex);
+    state->cancelled.store(false);
+
+    const char * rawUser = env->GetStringUTFChars(userPromptString, nullptr);
+    const std::string userPrompt(rawUser ? rawUser : "");
+    if (rawUser) env->ReleaseStringUTFChars(userPromptString, rawUser);
+
+    std::string systemPrompt;
+    if (systemPromptString != nullptr) {
+        const char * rawSystem = env->GetStringUTFChars(systemPromptString, nullptr);
+        if (rawSystem != nullptr) {
+            systemPrompt.assign(rawSystem);
+            env->ReleaseStringUTFChars(systemPromptString, rawSystem);
+        }
+    }
+
+    std::vector<std::string> stopSequences;
+    if (stopSequencesArray != nullptr) {
+        const jsize numStops = env->GetArrayLength(stopSequencesArray);
+        for (jsize s = 0; s < numStops; ++s) {
+            auto stopStr = static_cast<jstring>(env->GetObjectArrayElement(stopSequencesArray, s));
+            if (stopStr != nullptr) {
+                const char * rawStop = env->GetStringUTFChars(stopStr, nullptr);
+                if (rawStop != nullptr) {
+                    if (strlen(rawStop) > 0) {
+                        stopSequences.emplace_back(rawStop);
+                    }
+                    env->ReleaseStringUTFChars(stopStr, rawStop);
+                }
+                env->DeleteLocalRef(stopStr);
+            }
+        }
+    }
+
+    const std::string marker = mtmd_default_marker();
+    std::string formattedPrompt;
+    if (!systemPrompt.empty()) {
+        formattedPrompt = "System: " + systemPrompt + "\n\n";
+    }
+    formattedPrompt += "User: " + marker + "\n" + userPrompt + "\nAssistant:";
+
+    mtmd_input_text inputText = {
+        formattedPrompt.c_str(),
+        formattedPrompt.size(),
+        /*add_special*/ true,
+        /*parse_special*/ true
+    };
+    const mtmd_bitmap * bitmaps[] = { res.bitmap };
+
+    mtmd_input_chunks * chunks = mtmd_input_chunks_init();
+    if (chunks == nullptr) {
+        mtmd_bitmap_free(res.bitmap);
+        return -1;
+    }
+
+    int32_t tokRes = mtmd_tokenize(state->mtmdCtx, chunks, &inputText, bitmaps, 1);
+    if (tokRes != 0) {
+        LOGE("mtmd_tokenize failed with code %d", tokRes);
+        mtmd_input_chunks_free(chunks);
+        mtmd_bitmap_free(res.bitmap);
+        return -1;
+    }
+
+    llama_memory_t mem = llama_get_memory(state->context);
+    if (mem != nullptr) {
+        llama_memory_clear(mem, true);
+    }
+
+    const int32_t n_batch = static_cast<int32_t>(llama_n_batch(state->context));
+    llama_pos n_past = 0;
+
+    int32_t evalRes = mtmd_helper_eval_chunks(
+        state->mtmdCtx,
+        state->context,
+        chunks,
+        0, // n_past
+        0, // seq_id
+        n_batch,
+        true, // logits_last
+        &n_past
+    );
+
+    mtmd_input_chunks_free(chunks);
+    mtmd_bitmap_free(res.bitmap);
+
+    if (evalRes != 0) {
+        LOGE("mtmd_helper_eval_chunks failed with code %d", evalRes);
+        return -1;
+    }
+
+    LOGI("Multimodal prompt & image evaluated successfully up to n_past=%d", n_past);
+
+    jclass callbackClass = env->GetObjectClass(callback);
+    jmethodID onToken = callbackClass == nullptr ? nullptr :
+        env->GetMethodID(callbackClass, "onToken", "(Ljava/lang/String;)Z");
+    if (onToken == nullptr) return -1;
+
+    auto samplerParams = llama_sampler_chain_default_params();
+    llama_sampler * sampler = llama_sampler_chain_init(samplerParams);
+    if (repetitionPenalty > 1.0f) {
+        const int32_t n_vocab = llama_vocab_n_tokens(state->vocab);
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(n_vocab, 64, repetitionPenalty, 0.0f, 0.0f));
+    }
+    if (topK > 0) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(std::max(1, static_cast<int>(topK))));
+    }
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(std::clamp(topP, 0.01f, 1.0f), 1));
+    if (temperature > 0.0f) {
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(temperature));
+        const uint32_t s = seed > 0 ? static_cast<uint32_t>(seed) : LLAMA_DEFAULT_SEED;
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(s));
+    } else {
+        llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
+    }
+
+    llama_batch_ext * batch = llama_batch_ext_init(state->context);
+    if (batch == nullptr) {
+        llama_sampler_free(sampler);
+        return -1;
+    }
+
+    const uint32_t n_ctx = llama_n_ctx(state->context);
+    const int maxGen = std::clamp(static_cast<int>(maxTokens), 1, 4096);
+    int generated = 0;
+    char piece[4096];
+    std::string utf8Buffer;
+    std::string totalGeneratedText;
+
+    for (int i = 0; i < maxGen; ++i) {
+        if (state->cancelled.load()) break;
+        if (static_cast<uint32_t>(n_past) >= n_ctx - 1) break;
+
+        const llama_token token = llama_sampler_sample(sampler, state->context, -1);
+        llama_sampler_accept(sampler, token);
+
+        if (llama_vocab_is_eog(state->vocab, token)) break;
+
+        const int pieceLength = llama_token_to_piece(
+            state->vocab, token, piece, static_cast<int>(sizeof(piece)), 0, true);
+        if (pieceLength > 0) {
+            utf8Buffer.append(piece, static_cast<size_t>(pieceLength));
+            const size_t completeLen = getCompleteUtf8Length(utf8Buffer);
+            if (completeLen > 0) {
+                std::string pieceStr(utf8Buffer.data(), completeLen);
+                totalGeneratedText.append(pieceStr);
+
+                bool hitStop = false;
+                for (const auto & stopSeq : stopSequences) {
+                    if (!stopSeq.empty() && totalGeneratedText.find(stopSeq) != std::string::npos) {
+                        hitStop = true;
+                        break;
+                    }
+                }
+                if (hitStop) break;
+
+                jstring text = utf8ToJString(env, utf8Buffer.data(), completeLen);
+                utf8Buffer.erase(0, completeLen);
+                if (text != nullptr) {
+                    const jboolean keepGoing = env->CallBooleanMethod(callback, onToken, text);
+                    env->DeleteLocalRef(text);
+                    if (env->ExceptionCheck()) {
+                        env->ExceptionClear();
+                        break;
+                    }
+                    ++generated;
+                    if (keepGoing != JNI_TRUE) break;
+                }
+            } else {
+                ++generated;
+            }
+        }
+
+        batch_set_tokens(batch, &token, 1, n_past);
+        n_past += 1;
+
+        if (llama_process(state->context, LLAMA_PROCESS_TYPE_DECODE, batch) != 0) {
+            LOGE("llama_process decode failed at step %d", generated);
+            break;
+        }
+    }
+
+    if (!utf8Buffer.empty()) {
+        jstring text = utf8ToJString(env, utf8Buffer.data(), utf8Buffer.size());
+        if (text != nullptr) {
+            env->CallBooleanMethod(callback, onToken, text);
+            env->DeleteLocalRef(text);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+        utf8Buffer.clear();
+    }
+
+    llama_batch_ext_free(batch);
+    llama_sampler_free(sampler);
+    LOGI("Finished native multimodal generation. Emitted tokens: %d", generated);
+    return generated;
+}
+
 JNIEXPORT void JNICALL
 Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeCancel(
         JNIEnv *, jobject, jlong handle) {
@@ -618,6 +933,10 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeFree(
     if (state == nullptr) return JNI_FALSE;
     std::lock_guard<std::mutex> guard(state->generationMutex);
     state->cancelled.store(true);
+    if (state->mtmdCtx != nullptr) {
+        mtmd_free(state->mtmdCtx);
+        state->mtmdCtx = nullptr;
+    }
     if (state->context != nullptr) llama_free(state->context);
     if (state->model != nullptr) llama_model_free(state->model);
     delete state;

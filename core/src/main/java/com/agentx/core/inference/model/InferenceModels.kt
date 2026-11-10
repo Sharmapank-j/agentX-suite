@@ -40,7 +40,10 @@ data class ModelInfo(
     val isLocal: Boolean = true,
     val providerId: String = "local_embedded",
     val description: String = "",
-    val modelPath: String? = null
+    val modelPath: String? = null,
+    val mmprojPath: String? = null,
+    val supportsVision: Boolean = false,
+    val architecture: String = "llama"
 )
 
 @Serializable
@@ -57,7 +60,9 @@ data class GenerationRequest(
     val stopSequences: List<String> = emptyList(),
     val tools: List<String> = emptyList(),
     val preferredModelId: String? = null,
-    val executionMode: ExecutionMode = ExecutionMode.HYBRID
+    val executionMode: ExecutionMode = ExecutionMode.HYBRID,
+    val imageBase64: String? = null,
+    val imageMimeType: String? = null
 )
 
 sealed class GenerationEvent {
@@ -68,7 +73,9 @@ sealed class GenerationEvent {
         val completionTokens: Int,
         val durationMs: Long,
         val providerId: String,
-        val modelId: String
+        val modelId: String,
+        val tokensPerSecond: Double = 0.0,
+        val ttftMs: Long = 0L
     ) : GenerationEvent()
     data class Error(
         val cause: Throwable,

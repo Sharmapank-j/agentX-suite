@@ -11,6 +11,12 @@ import com.agentx.core.device.CpuTopology
 import com.agentx.core.device.CpuTopologyInspector
 import com.agentx.core.inference.CuratedModel
 import com.agentx.core.inference.DownloadProgress
+import com.agentx.core.device.HardwareProfiler
+import com.agentx.core.device.BenchmarkResult
+import com.agentx.core.device.MemorySnapshot
+import com.agentx.core.device.ThermalSnapshot
+import com.agentx.core.inference.InferenceRequest
+import com.agentx.core.inference.GenerationEvent
 import com.agentx.core.inference.GgufMetadataParser
 import com.agentx.core.inference.HuggingFaceDownloader
 import com.agentx.core.inference.InferenceEngine
@@ -69,7 +75,11 @@ data class ModelsUiState(
     val isScanningStorage: Boolean = false,
     val activeFilter: String = "ALL", // "ALL", "INSTALLED", "FAVORITES"
     val favoriteModelIds: Set<String> = emptySet(),
-    val cpuTopology: CpuTopology = CpuTopologyInspector.inspect()
+    val cpuTopology: CpuTopology = CpuTopologyInspector.inspect(),
+    val isBenchmarking: Boolean = false,
+    val latestBenchmark: BenchmarkResult? = null,
+    val memorySnapshot: MemorySnapshot = HardwareProfiler.getMemorySnapshot(),
+    val thermalSnapshot: ThermalSnapshot = HardwareProfiler.getThermalSnapshot(null)
 )
 
 class ModelsViewModel(
@@ -92,6 +102,8 @@ class ModelsViewModel(
     private val _isScanningStorage = MutableStateFlow(false)
     private val _activeFilter = MutableStateFlow("ALL")
     private val _favoriteModelIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _isBenchmarking = MutableStateFlow(false)
+    private val _latestBenchmark = MutableStateFlow<BenchmarkResult?>(null)
 
     private var downloadJob: Job? = null
 
@@ -100,7 +112,9 @@ class ModelsViewModel(
         val memoryMb: Long,
         val isScanning: Boolean,
         val filter: String,
-        val favorites: Set<String>
+        val favorites: Set<String>,
+        val isBenchmarking: Boolean,
+        val latestBenchmark: BenchmarkResult?
     )
 
     private val progressFlow = combine(_stagingState, _downloadState) { staging, download ->
@@ -111,14 +125,22 @@ class ModelsViewModel(
         Pair(specs, recs)
     }
 
+    private val benchFlow = combine(_isBenchmarking, _latestBenchmark) { benchmarking, benchResult ->
+        Pair(benchmarking, benchResult)
+    }
+
+    private val filterFavFlow = combine(_activeFilter, _favoriteModelIds) { filter, favs ->
+        Pair(filter, favs)
+    }
+
     private val ramStatusFlow = combine(
         _isLoadedInRam,
         _loadedMemoryMb,
         _isScanningStorage,
-        _activeFilter,
-        _favoriteModelIds
-    ) { loaded, mem, scanning, filter, favs ->
-        RamUiStatus(loaded, mem, scanning, filter, favs)
+        filterFavFlow,
+        benchFlow
+    ) { loaded, mem, scanning, (filter, favs), (benchmarking, benchResult) ->
+        RamUiStatus(loaded, mem, scanning, filter, favs, benchmarking, benchResult)
     }
 
     val uiState: StateFlow<ModelsUiState> = combine(
@@ -147,7 +169,11 @@ class ModelsViewModel(
             isScanningStorage = ramStatus.isScanning,
             activeFilter = ramStatus.filter,
             favoriteModelIds = ramStatus.favorites,
-            cpuTopology = CpuTopologyInspector.inspect()
+            cpuTopology = CpuTopologyInspector.inspect(),
+            isBenchmarking = ramStatus.isBenchmarking,
+            latestBenchmark = ramStatus.latestBenchmark,
+            memorySnapshot = HardwareProfiler.getMemorySnapshot(),
+            thermalSnapshot = HardwareProfiler.getThermalSnapshot(context)
         )
     }.stateIn(
         scope = viewModelScope,
@@ -236,14 +262,16 @@ class ModelsViewModel(
                             contextLength = model.contextLength.coerceIn(512, 3840),
                             threads = model.threads.coerceIn(1, 4),
                             temperature = model.temperature,
-                            topP = model.topP
+                            topP = model.topP,
+                            mmprojPath = model.mmprojPath
                         )
                     )
                     val status = inferenceEngine.getModelStatus()
                     val memMb = status.memoryUsageBytes / (1024 * 1024)
                     _isLoadedInRam.value = (status.state == ModelLifecycleState.LOADED)
                     _loadedMemoryMb.value = memMb
-                    _notification.value = "Loaded ${model.name} into RAM (${memMb} MB in use, ${model.threads} CPU threads)"
+                    val visionTag = if (status.supportsVision) " • 👁️ Vision Active" else ""
+                    _notification.value = "Loaded ${model.name} into RAM (${memMb} MB in use, ${model.threads} CPU threads$visionTag)"
                 } catch (e: Exception) {
                     _isLoadedInRam.value = false
                     _loadedMemoryMb.value = 0L
@@ -268,6 +296,87 @@ class ModelsViewModel(
         }
     }
 
+    fun runHardwareBenchmark(modelId: String) {
+        viewModelScope.launch {
+            val engine = inferenceEngine ?: run {
+                _notification.value = "Inference engine is not initialized."
+                return@launch
+            }
+            val model = modelRepository.getModelById(modelId) ?: run {
+                _notification.value = "Model not found for benchmark."
+                return@launch
+            }
+            val file = File(model.filePath)
+            if (!file.exists() || !file.isFile) {
+                _notification.value = "Model file does not exist at ${model.filePath}"
+                return@launch
+            }
+
+            _isBenchmarking.value = true
+            _notification.value = "Benchmarking ${model.name} on ${android.os.Build.MODEL}..."
+
+            try {
+                if (engine.getModelStatus().state != ModelLifecycleState.LOADED || engine.getModelStatus().activeModelId != model.id) {
+                    engine.loadModel(
+                        ModelConfig(
+                            modelId = model.id,
+                            modelPath = model.filePath,
+                            contextLength = 1024,
+                            threads = model.threads.coerceIn(1, 4),
+                            temperature = 0.0f,
+                            mmprojPath = model.mmprojPath
+                        )
+                    )
+                }
+
+                val benchmarkPrompt = "Explain the fundamental principles of artificial intelligence and deep neural networks in concise bullet points."
+                val started = System.currentTimeMillis()
+                var firstTokenTime = 0L
+                var tokenCount = 0
+
+                engine.generate(
+                    InferenceRequest(
+                        prompt = benchmarkPrompt,
+                        maxTokens = 64,
+                        temperature = 0.0f
+                    )
+                ).collect { event ->
+                    when (event) {
+                        is GenerationEvent.Token -> {
+                            if (firstTokenTime == 0L) firstTokenTime = System.currentTimeMillis()
+                            tokenCount++
+                        }
+                        is GenerationEvent.Finished -> {
+                            val duration = System.currentTimeMillis() - started
+                            val ttft = if (firstTokenTime > 0L) firstTokenTime - started else duration
+                            val tokPerSec = if (duration > 0 && tokenCount > 0) (tokenCount * 1000.0) / duration else 0.0
+                            val bench = BenchmarkResult(
+                                modelId = model.id,
+                                modelName = model.name,
+                                ttftMs = ttft,
+                                evalTokensPerSec = tokPerSec,
+                                promptTokensPerSec = if (ttft > 0) (benchmarkPrompt.length / 4.0) / (ttft / 1000.0) else 0.0,
+                                peakMemoryMb = engine.getModelStatus().memoryUsageBytes / (1024 * 1024),
+                                deviceModel = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}"
+                            )
+                            _latestBenchmark.value = bench
+                            _notification.value = "Benchmark Complete: %.1f tok/s • TTFT: %d ms • Memory: %d MB".format(
+                                bench.evalTokensPerSec, bench.ttftMs, bench.peakMemoryMb
+                            )
+                        }
+                        is GenerationEvent.Error -> {
+                            _notification.value = "Benchmark failed: ${event.message}"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _notification.value = "Benchmark error: ${e.message}"
+            } finally {
+                _isBenchmarking.value = false
+            }
+        }
+    }
+
     fun scanAndRegisterLocalModels() {
         viewModelScope.launch(Dispatchers.IO) {
             val candidateDirs = listOfNotNull(
@@ -282,7 +391,12 @@ class ModelsViewModel(
             var hasActive = currentModels.any { it.isActive }
             for (dir in candidateDirs) {
                 if (!dir.exists() || !dir.isDirectory) continue
-                dir.listFiles()?.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) }?.forEach { file ->
+                val dirFiles = dir.listFiles() ?: continue
+                val mmprojFile = dirFiles.firstOrNull { f ->
+                    f.isFile && f.name.endsWith(".gguf", ignoreCase = true) && f.name.contains("mmproj", ignoreCase = true)
+                }
+
+                dirFiles.filter { it.isFile && it.name.endsWith(".gguf", ignoreCase = true) && !it.name.contains("mmproj", ignoreCase = true) }.forEach { file ->
                     val existing = currentModels.find { it.filePath == file.absolutePath || it.name == file.nameWithoutExtension }
                     if (existing == null) {
                         val metadata = try {
@@ -301,9 +415,11 @@ class ModelsViewModel(
                             tensorCount = metadata?.tensorCount ?: 0,
                             format = "GGUF v${metadata?.version ?: 3}",
                             quantization = metadata?.quantization ?: "Q5_K_M",
-                            capabilityProfile = "general-assistant",
+                            capabilityProfile = if (mmprojFile != null) "vision-multimodal" else "general-assistant",
                             isStaged = true,
-                            isActive = shouldActivate
+                            isActive = shouldActivate,
+                            mmprojPath = mmprojFile?.absolutePath,
+                            supportsVision = mmprojFile != null
                         )
                         modelRepository.addModel(newModel)
                         if (shouldActivate) {
@@ -318,7 +434,8 @@ class ModelsViewModel(
                                             contextLength = newModel.contextLength.coerceIn(512, 3840),
                                             threads = newModel.threads.coerceIn(1, 4),
                                             temperature = newModel.temperature,
-                                            topP = newModel.topP
+                                            topP = newModel.topP,
+                                            mmprojPath = newModel.mmprojPath
                                         )
                                     )
                                     syncRuntimeStatus()
@@ -334,7 +451,8 @@ class ModelsViewModel(
                                     contextLength = existing.contextLength.coerceIn(512, 3840),
                                     threads = existing.threads.coerceIn(1, 4),
                                     temperature = existing.temperature,
-                                    topP = existing.topP
+                                    topP = existing.topP,
+                                    mmprojPath = existing.mmprojPath
                                 )
                             )
                             syncRuntimeStatus()

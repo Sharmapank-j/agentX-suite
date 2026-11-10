@@ -115,12 +115,21 @@ class P2PDataChannel(
      * Binds to a peer candidate discovered via the Rendezvous signaling service.
      */
     fun connectToPeer(ip: String, port: Int) {
-        try {
-            remoteAddress = InetAddress.getByName(ip)
-            remotePort = port
-            sendPing()
-        } catch (_: Exception) {
-            _state.value = State.FAILED
+        scope.launch {
+            try {
+                if (socket == null || socket?.isClosed == true) {
+                    initialize()
+                }
+                remoteAddress = InetAddress.getByName(ip)
+                remotePort = port
+                // Send rapid hole-punching pings to open NAT mappings
+                for (i in 1..3) {
+                    sendPing()
+                    kotlinx.coroutines.delay(120)
+                }
+            } catch (_: Exception) {
+                _state.value = State.FAILED
+            }
         }
     }
 

@@ -91,6 +91,8 @@ class ModelRepositoryImpl(private val modelDao: ModelDao) : ModelRepository {
         threads = threads,
         temperature = temperature,
         topP = topP,
+        mmprojPath = mmprojPath,
+        supportsVision = supportsVision,
         createdAt = createdAt
     )
 
@@ -111,6 +113,8 @@ class ModelRepositoryImpl(private val modelDao: ModelDao) : ModelRepository {
         threads = threads,
         temperature = temperature,
         topP = topP,
+        mmprojPath = mmprojPath,
+        supportsVision = supportsVision,
         createdAt = createdAt
     )
 }
@@ -206,7 +210,9 @@ class ConversationRepositoryImpl(
         tokenCount = tokenCount,
         status = try { MessageStatus.valueOf(status) } catch (_: Exception) { MessageStatus.COMPLETED },
         attachmentUri = attachmentUri,
-        attachmentMimeType = attachmentMimeType
+        attachmentMimeType = attachmentMimeType,
+        ttftMs = ttftMs,
+        tokensPerSecond = tokensPerSecond
     )
 
     private fun Message.toEntity() = MessageEntity(
@@ -220,7 +226,9 @@ class ConversationRepositoryImpl(
         tokenCount = tokenCount,
         status = status.name,
         attachmentUri = attachmentUri,
-        attachmentMimeType = attachmentMimeType
+        attachmentMimeType = attachmentMimeType,
+        ttftMs = ttftMs,
+        tokensPerSecond = tokensPerSecond
     )
 }
 

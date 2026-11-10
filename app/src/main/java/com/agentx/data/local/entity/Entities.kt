@@ -24,6 +24,8 @@ data class ModelEntity(
     val threads: Int = 4,
     val temperature: Float = 0.7f,
     @ColumnInfo(name = "top_p") val topP: Float = 0.9f,
+    @ColumnInfo(name = "mmproj_path") val mmprojPath: String? = null,
+    @ColumnInfo(name = "supports_vision") val supportsVision: Boolean = false,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -70,7 +72,9 @@ data class MessageEntity(
     @ColumnInfo(name = "token_count") val tokenCount: Int = 0,
     val status: String = "COMPLETED", // PENDING, STREAMING, COMPLETED, ERROR
     @ColumnInfo(name = "attachment_uri") val attachmentUri: String? = null,
-    @ColumnInfo(name = "attachment_mime_type") val attachmentMimeType: String? = null
+    @ColumnInfo(name = "attachment_mime_type") val attachmentMimeType: String? = null,
+    @ColumnInfo(name = "ttft_ms") val ttftMs: Long? = null,
+    @ColumnInfo(name = "tokens_per_second") val tokensPerSecond: Double? = null
 )
 
 @Entity(tableName = "agents")

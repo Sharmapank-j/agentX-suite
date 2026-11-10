@@ -60,7 +60,22 @@ class LlamaCppInferenceEngine(
                     "llama.cpp could not load this GGUF model. Check model integrity, RAM, and supported architecture."
                 }
                 handle.set(nativeHandle)
-                currentModel = model
+
+                // Locate and load multimodal vision projector if present
+                val projFile = model.mmprojPath?.let { File(it) }?.takeIf { it.exists() && it.isFile }
+                    ?: path.parentFile?.listFiles()?.firstOrNull { f ->
+                        f.isFile && f.extension.equals("gguf", true) && f.name.contains("mmproj", ignoreCase = true)
+                    }
+                var visionLoaded = false
+                if (projFile != null) {
+                    visionLoaded = LlamaCppNativeBridge.nativeLoadVisionProjector(nativeHandle, projFile.absolutePath)
+                }
+                val supportsVision = visionLoaded || LlamaCppNativeBridge.nativeSupportsVision(nativeHandle)
+
+                currentModel = model.copy(
+                    mmprojPath = projFile?.absolutePath,
+                    supportsVision = supportsVision
+                )
             }
         }
     }
@@ -73,39 +88,82 @@ class LlamaCppInferenceEngine(
         }
         cancelled.set(false)
         val started = System.currentTimeMillis()
+        var firstTokenTime = 0L
         var emitted = 0
         try {
+            val imageBytes = request.imageBase64?.let {
+                try {
+                    android.util.Base64.decode(it, android.util.Base64.DEFAULT)
+                } catch (_: Throwable) { null }
+            }
+            val hasVision = imageBytes != null && (currentModel?.supportsVision == true || currentModel?.mmprojPath != null)
+
             emitted = withContext(Dispatchers.IO) {
-                LlamaCppNativeBridge.nativeGenerate(
-                    contextHandle = nativeHandle,
-                    systemPrompt = request.systemPrompt,
-                    userPrompt = request.prompt,
-                    maxTokens = request.maxTokens.coerceIn(1, 4096),
-                    temperature = request.temperature.coerceIn(0f, 2f),
-                    topP = request.topP.coerceIn(0.01f, 1.0f),
-                    topK = request.topK.coerceAtLeast(1),
-                    repetitionPenalty = request.repetitionPenalty.coerceAtLeast(1.0f),
-                    seed = request.seed,
-                    stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
-                    callback = LlamaCppNativeBridge.TokenCallback { token ->
-                        if (cancelled.get()) {
-                            false
-                        } else {
-                            trySend(GenerationEvent.Token(token))
-                            !cancelled.get()
+                if (hasVision) {
+                    LlamaCppNativeBridge.nativeGenerateMultimodal(
+                        contextHandle = nativeHandle,
+                        systemPrompt = request.systemPrompt,
+                        userPrompt = request.prompt,
+                        imageBytes = imageBytes,
+                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        temperature = request.temperature.coerceIn(0f, 2f),
+                        topP = request.topP.coerceIn(0.01f, 1.0f),
+                        topK = request.topK.coerceAtLeast(1),
+                        repetitionPenalty = request.repetitionPenalty.coerceAtLeast(1.0f),
+                        seed = request.seed,
+                        stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                        callback = LlamaCppNativeBridge.TokenCallback { token ->
+                            if (cancelled.get()) {
+                                false
+                            } else {
+                                if (firstTokenTime == 0L) {
+                                    firstTokenTime = System.currentTimeMillis()
+                                }
+                                trySend(GenerationEvent.Token(token))
+                                !cancelled.get()
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    LlamaCppNativeBridge.nativeGenerate(
+                        contextHandle = nativeHandle,
+                        systemPrompt = request.systemPrompt,
+                        userPrompt = request.prompt,
+                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        temperature = request.temperature.coerceIn(0f, 2f),
+                        topP = request.topP.coerceIn(0.01f, 1.0f),
+                        topK = request.topK.coerceAtLeast(1),
+                        repetitionPenalty = request.repetitionPenalty.coerceAtLeast(1.0f),
+                        seed = request.seed,
+                        stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                        callback = LlamaCppNativeBridge.TokenCallback { token ->
+                            if (cancelled.get()) {
+                                false
+                            } else {
+                                if (firstTokenTime == 0L) {
+                                    firstTokenTime = System.currentTimeMillis()
+                                }
+                                trySend(GenerationEvent.Token(token))
+                                !cancelled.get()
+                            }
+                        }
+                    )
+                }
             }
             check(emitted >= 0) { "llama.cpp failed during prompt evaluation or token generation." }
             if (!cancelled.get()) {
+                val durationMs = System.currentTimeMillis() - started
+                val ttft = if (firstTokenTime > 0L) firstTokenTime - started else durationMs
+                val tokPerSec = if (durationMs > 0) (emitted * 1000.0) / durationMs else 0.0
                 send(GenerationEvent.Finished(
                     totalTokens = emitted,
                     promptTokens = 0,
                     completionTokens = emitted,
-                    durationMs = System.currentTimeMillis() - started,
+                    durationMs = durationMs,
                     providerId = "llama_cpp",
-                    modelId = currentModel?.id ?: "unknown"
+                    modelId = currentModel?.id ?: "unknown",
+                    tokensPerSecond = tokPerSec,
+                    ttftMs = ttft
                 ))
             }
         } catch (error: Throwable) {

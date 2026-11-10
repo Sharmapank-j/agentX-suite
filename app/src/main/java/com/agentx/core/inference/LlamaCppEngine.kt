@@ -40,9 +40,25 @@ class LlamaCppEngine : InferenceEngine {
                 )
                 check(loaded != 0L) { "llama.cpp failed to load the GGUF model. Check RAM, file integrity, and model architecture." }
                 handle.set(loaded)
+
+                // Locate and load multimodal vision projector if available
+                val projFile = config.mmprojPath?.let { File(it) }?.takeIf { it.exists() && it.isFile }
+                    ?: file.parentFile?.listFiles()?.firstOrNull { f ->
+                        f.isFile && f.extension.equals("gguf", true) && f.name.contains("mmproj", ignoreCase = true)
+                    }
+                var visionLoaded = false
+                if (projFile != null) {
+                    visionLoaded = LlamaCppNativeBridge.nativeLoadVisionProjector(loaded, projFile.absolutePath)
+                }
+                val supportsVision = visionLoaded || LlamaCppNativeBridge.nativeSupportsVision(loaded)
+
                 status = ModelStatus(
-                    ModelLifecycleState.LOADED, config.modelId, file.name,
-                    LlamaCppNativeBridge.nativeGetMemoryUsage(loaded)
+                    state = ModelLifecycleState.LOADED,
+                    activeModelId = config.modelId,
+                    activeModelName = file.name,
+                    memoryUsageBytes = LlamaCppNativeBridge.nativeGetMemoryUsage(loaded),
+                    supportsVision = supportsVision,
+                    mmprojPath = projFile?.absolutePath
                 )
             } catch (error: Throwable) {
                 status = ModelStatus(ModelLifecycleState.ERROR, config.modelId, errorMessage = error.message)
@@ -64,6 +80,7 @@ class LlamaCppEngine : InferenceEngine {
         cancelled.set(false)
         status = status.copy(state = ModelLifecycleState.GENERATING)
         val started = System.currentTimeMillis()
+        var firstTokenTime = 0L
         var count = 0
         val wakeLock = appContext?.let { ctx ->
             try {
@@ -75,32 +92,79 @@ class LlamaCppEngine : InferenceEngine {
             } catch (_: Throwable) { null }
         }
         try {
+            val imageBytes = request.imageBase64?.let {
+                try {
+                    android.util.Base64.decode(it, android.util.Base64.DEFAULT)
+                } catch (_: Throwable) { null }
+            }
+            val hasVision = imageBytes != null && (status.supportsVision || status.mmprojPath != null)
+
             count = withContext(Dispatchers.IO) {
-                LlamaCppNativeBridge.nativeGenerate(
-                    contextHandle = nativeHandle,
-                    systemPrompt = request.systemPrompt,
-                    userPrompt = request.prompt,
-                    maxTokens = request.maxTokens.coerceIn(1, 4096),
-                    temperature = request.temperature.coerceIn(0f, 2f),
-                    topP = request.topP.coerceIn(0.01f, 1.0f),
-                    topK = request.topK.coerceAtLeast(1),
-                    repetitionPenalty = request.repeatPenalty.coerceAtLeast(1.0f),
-                    seed = request.seed,
-                    stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
-                    callback = LlamaCppNativeBridge.TokenCallback { token ->
-                        if (cancelled.get()) {
-                            false
-                        } else {
-                            trySend(GenerationEvent.Token(token))
-                            !cancelled.get()
+                if (hasVision) {
+                    LlamaCppNativeBridge.nativeGenerateMultimodal(
+                        contextHandle = nativeHandle,
+                        systemPrompt = request.systemPrompt,
+                        userPrompt = request.prompt,
+                        imageBytes = imageBytes,
+                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        temperature = request.temperature.coerceIn(0f, 2f),
+                        topP = request.topP.coerceIn(0.01f, 1.0f),
+                        topK = request.topK.coerceAtLeast(1),
+                        repetitionPenalty = request.repeatPenalty.coerceAtLeast(1.0f),
+                        seed = request.seed,
+                        stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                        callback = LlamaCppNativeBridge.TokenCallback { token ->
+                            if (cancelled.get()) {
+                                false
+                            } else {
+                                if (firstTokenTime == 0L) {
+                                    firstTokenTime = System.currentTimeMillis()
+                                }
+                                trySend(GenerationEvent.Token(token))
+                                !cancelled.get()
+                            }
                         }
-                    }
-                )
+                    )
+                } else {
+                    LlamaCppNativeBridge.nativeGenerate(
+                        contextHandle = nativeHandle,
+                        systemPrompt = request.systemPrompt,
+                        userPrompt = request.prompt,
+                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        temperature = request.temperature.coerceIn(0f, 2f),
+                        topP = request.topP.coerceIn(0.01f, 1.0f),
+                        topK = request.topK.coerceAtLeast(1),
+                        repetitionPenalty = request.repeatPenalty.coerceAtLeast(1.0f),
+                        seed = request.seed,
+                        stopSequences = if (request.stopSequences.isNotEmpty()) request.stopSequences.toTypedArray() else null,
+                        callback = LlamaCppNativeBridge.TokenCallback { token ->
+                            if (cancelled.get()) {
+                                false
+                            } else {
+                                if (firstTokenTime == 0L) {
+                                    firstTokenTime = System.currentTimeMillis()
+                                }
+                                trySend(GenerationEvent.Token(token))
+                                !cancelled.get()
+                            }
+                        }
+                    )
+                }
             }
             if (count < 0) throw IllegalStateException("llama.cpp failed during prompt evaluation or token generation.")
-            if (!cancelled.get()) send(GenerationEvent.Finished(
-                count, 0, count, System.currentTimeMillis() - started
-            ))
+            if (!cancelled.get()) {
+                val durationMs = System.currentTimeMillis() - started
+                val ttft = if (firstTokenTime > 0L) firstTokenTime - started else durationMs
+                val tokPerSec = if (durationMs > 0) (count * 1000.0) / durationMs else 0.0
+                send(GenerationEvent.Finished(
+                    totalTokens = count,
+                    promptTokens = 0,
+                    completionTokens = count,
+                    durationMs = durationMs,
+                    tokensPerSecond = tokPerSec,
+                    ttftMs = ttft
+                ))
+            }
         } catch (error: Throwable) {
             send(GenerationEvent.Error(error, error.message ?: "Native inference failed"))
         } finally {

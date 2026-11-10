@@ -719,6 +719,7 @@ class ChatViewModel(
         )
 
         try {
+            var firstTokenTime = 0L
             inferenceEngine.generate(
                 InferenceRequest(
                     prompt = contextualPrompt,
@@ -736,6 +737,7 @@ class ChatViewModel(
             ).collect { event ->
                 when (event) {
                     is GenerationEvent.Token -> {
+                        if (firstTokenTime == 0L) firstTokenTime = System.currentTimeMillis()
                         buffer.append(event.text)
                         tokenCount++
                         val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
@@ -764,6 +766,8 @@ class ChatViewModel(
                     is GenerationEvent.Finished -> {
                         val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
                         val finalTps = (event.completionTokens.coerceAtLeast(tokenCount) * 1000f) / elapsedMs
+                        val calculatedTtft = event.ttftMs.takeIf { it > 0 } ?: if (firstTokenTime > 0L) (firstTokenTime - startTime) else elapsedMs
+                        val calculatedTps = if (event.tokensPerSecond > 0) event.tokensPerSecond else finalTps.toDouble()
                         _liveMetrics.value = _liveMetrics.value.copy(
                             isLive = false,
                             tokensGenerated = event.totalTokens,
@@ -773,7 +777,9 @@ class ChatViewModel(
                         assistantMsg = assistantMsg.copy(
                             content = buffer.toString(),
                             tokenCount = event.totalTokens,
-                            status = MessageStatus.COMPLETED
+                            status = MessageStatus.COMPLETED,
+                            ttftMs = calculatedTtft,
+                            tokensPerSecond = calculatedTps
                         )
                         _messages.value = _messages.value.map {
                             if (it.id == assistantMsg.id) assistantMsg else it

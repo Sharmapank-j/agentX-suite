@@ -69,7 +69,9 @@ data class LocalServerModel(
     val isServing: Boolean = false,
     val filePath: String? = null,
     val fileSizeBytes: Long = 0L,
-    val isCustomStorageModel: Boolean = false
+    val isCustomStorageModel: Boolean = false,
+    val mmprojPath: String? = null,
+    val supportsVision: Boolean = false
 )
 
 @Serializable

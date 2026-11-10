@@ -49,18 +49,21 @@ class CloudInferenceEngine(
         isStopRequested = false
         currentStatus = currentStatus.copy(state = ModelLifecycleState.GENERATING)
         val startTime = System.currentTimeMillis()
+        var firstTokenTime = 0L
         var totalTokens = 0
 
         try {
             when (config.provider) {
                 CloudProvider.GEMINI -> {
                     generateGeminiSse(request, onToken = { token ->
+                        if (firstTokenTime == 0L) firstTokenTime = System.currentTimeMillis()
                         totalTokens++
                         send(GenerationEvent.Token(token))
                     })
                 }
                 CloudProvider.CUSTOM_GATEWAY -> {
                     generateOpenAiCompatible(request, onToken = { token ->
+                        if (firstTokenTime == 0L) firstTokenTime = System.currentTimeMillis()
                         totalTokens++
                         send(GenerationEvent.Token(token))
                     })
@@ -69,12 +72,16 @@ class CloudInferenceEngine(
 
             val duration = System.currentTimeMillis() - startTime
             val promptEstTokens = (request.prompt.length / 4) + ((request.systemPrompt?.length ?: 0) / 4)
+            val ttft = if (firstTokenTime > 0L) firstTokenTime - startTime else duration
+            val tokPerSec = if (duration > 0) (totalTokens * 1000.0) / duration else 0.0
             send(
                 GenerationEvent.Finished(
                     totalTokens = promptEstTokens + totalTokens,
                     promptTokens = promptEstTokens,
                     completionTokens = totalTokens,
-                    durationMs = duration
+                    durationMs = duration,
+                    tokensPerSecond = tokPerSec,
+                    ttftMs = ttft
                 )
             )
             currentStatus = currentStatus.copy(state = ModelLifecycleState.LOADED)

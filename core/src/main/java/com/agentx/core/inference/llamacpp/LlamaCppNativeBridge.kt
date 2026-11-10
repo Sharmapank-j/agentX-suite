@@ -44,4 +44,21 @@ object LlamaCppNativeBridge {
     external fun nativeCancel(contextHandle: Long)
     external fun nativeGetMemoryUsage(contextHandle: Long): Long
     external fun nativeFree(contextHandle: Long): Boolean
+
+    external fun nativeLoadVisionProjector(contextHandle: Long, mmprojPath: String): Boolean
+    external fun nativeSupportsVision(contextHandle: Long): Boolean
+    external fun nativeGenerateMultimodal(
+        contextHandle: Long,
+        systemPrompt: String?,
+        userPrompt: String,
+        imageBytes: ByteArray?,
+        maxTokens: Int,
+        temperature: Float,
+        topP: Float,
+        topK: Int = 40,
+        repetitionPenalty: Float = 1.1f,
+        seed: Int = 0,
+        stopSequences: Array<String>? = null,
+        callback: TokenCallback
+    ): Int
 }
