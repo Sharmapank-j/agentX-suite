@@ -75,6 +75,8 @@ import androidx.compose.ui.unit.dp
 import com.agentx.medical.core.inference.CloudModelConfig
 import com.agentx.medical.core.inference.CloudProvider
 import com.agentx.medical.core.inference.InferenceMode
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.ResponseStyle
 import com.agentx.medical.domain.models.ExecutionLog
 import com.agentx.medical.domain.models.ExecutionStatus
 import com.agentx.medical.domain.models.Tool
@@ -177,6 +179,359 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            // ── Medical Intelligence & Personalisation ──────────────────────────
+            Text("Medical Intelligence & Personalisation", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            // Default Response Style
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Default Clinical Response Style", fontWeight = FontWeight.Bold)
+                            Text("Applied as baseline persona for new consultations", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    ResponseStyle.entries.forEach { style ->
+                        val isSelected = style == state.defaultResponseStyle
+                        Surface(
+                            onClick = { viewModel.setDefaultResponseStyle(style) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setDefaultResponseStyle(style) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(style.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                    Text(style.shortDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Audience: ${style.targetAudience}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Default Answer Depth
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Default Answer Depth & Token Budget", fontWeight = FontWeight.Bold)
+                            Text("Controls detail level and generation token capacity", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    AnswerDepth.entries.forEach { depth ->
+                        val isSelected = depth == state.defaultAnswerDepth
+                        Surface(
+                            onClick = { viewModel.setDefaultAnswerDepth(depth) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setDefaultAnswerDepth(depth) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(depth.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer
+                                        ) {
+                                            Text(
+                                                "${depth.tokenBudget} tokens",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(depth.shortDescription, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── MediMind Medical Model Specifications ───────────────────────────
+            Text("MediMind Medical Model Specifications", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Primary Local Model", fontWeight = FontWeight.Bold)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                "medimind-v2-q5_k_m.gguf",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("• Architecture: Qwen2 (28 Transformer Blocks, RoPE, RMSNorm)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Quantization: Q5_K_M (High-precision medium K-quantization)", style = MaterialTheme.typography.bodySmall)
+                    Text("• File Size: 1.05 GB (1,125,050,016 bytes)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Working Set Context Window: 3,840 tokens (max 8,192)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Native JNI Engine: libagentx_llama.so (arm64-v8a native compilation)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Offline Safety: Air-gapped, zero external network dependency", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // ── Modular Component OTA Updates ────────────────────────────────────
+            Text("Modular Component Updates (OTA)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Component OTA Subsystem", fontWeight = FontWeight.Bold)
+                                Text("Hot-updates medical intelligence without APK reinstall", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                state.dynamicKnowledgeVersion,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-update toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Automatic Component Updates", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("Auto-downloads verified clinical rules & knowledge packs", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = state.isAutoUpdateEnabled,
+                            onCheckedChange = { viewModel.toggleAutoUpdate(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Wi-Fi only for large weights
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Wi-Fi Only for Large Model Weights", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("Restricts >50MB GGUF weights to unmetered connections", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = state.isWifiOnlyOta,
+                            onCheckedChange = { viewModel.toggleWifiOnlyOta(it) }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // OTA Lifecycle State & Actions
+                    when (val ota = state.otaState) {
+                        is com.agentx.core.ota.OtaUpdateState.Checking -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Checking Serve Hub for component updates...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        is com.agentx.core.ota.OtaUpdateState.Downloading -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("Downloading ${ota.componentId}...", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    Text("${(ota.progressPct * 100).toInt()}% (${ota.speedBps / 1024} KB/s)", style = MaterialTheme.typography.labelSmall)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { ota.progressPct },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                        is com.agentx.core.ota.OtaUpdateState.Verifying -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Verifying SHA-256 cryptographic signature...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        is com.agentx.core.ota.OtaUpdateState.Applied -> {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Component ${ota.component.name} v${ota.component.version} live hot-reloaded!", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                        is com.agentx.core.ota.OtaUpdateState.Error -> {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("OTA Error: ${ota.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
+                            }
+                        }
+                        is com.agentx.core.ota.OtaUpdateState.UpdateAvailable -> {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Text("Available Component Updates (${ota.availableComponents.size}):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                ota.availableComponents.forEach { comp ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(comp.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                                Text("v${comp.version} • ${comp.sizeBytes / 1024} KB • ${comp.type.name}", style = MaterialTheme.typography.labelSmall)
+                                                if (comp.releaseNotes.isNotBlank()) {
+                                                    Text(comp.releaseNotes, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                                }
+                                            }
+                                            Button(
+                                                onClick = { viewModel.applyOtaUpdate(comp) },
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Text("Update", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            // Idle state: show Check for Updates button
+                            OutlinedButton(
+                                onClick = { viewModel.checkForOtaUpdates() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Check for Component Updates")
+                            }
+                        }
+                    }
+
+                    // Show active installed components if any
+                    if (state.installedOtaComponents.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Active Hot-Loaded Components:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        state.installedOtaComponents.forEach { inst ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("• ${inst.name} (v${inst.version})", style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    "Revert",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.clickable { viewModel.rollbackOtaComponent(inst.id) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ── System & Performance ────────────────────────────────────────────
             Text("Inference Performance & Hardware", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

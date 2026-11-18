@@ -96,6 +96,23 @@ class AdminViewModel(
     val tunnelManager = app.tunnelManager
     val pairingManager = app.pairingManager
 
+    init {
+        // Universal Cross-Network Serving: Guarantee global public tunnel is active whenever server is running
+        viewModelScope.launch {
+            server.telemetry.collect { tele ->
+                val tun = tunnelManager.config.value
+                if (tele.isRunning && tun.isEnabled && tun.status == TunnelStatus.STOPPED) {
+                    tunnelManager.startTunnel(
+                        provider = tun.provider,
+                        token = tun.authToken,
+                        customDomain = tun.customDomain,
+                        localPort = tele.port
+                    )
+                }
+            }
+        }
+    }
+
     private val _selectedPort = MutableStateFlow(8080)
     private val _selectedTab = MutableStateFlow(0)
     private val _servingMode = MutableStateFlow(server.getServingMode())
@@ -406,7 +423,7 @@ class AdminViewModel(
 
             try {
                 if (isLocal) {
-                    localEngine.generateCompletionStream(prompt = prompt, maxTokens = 40).collect { token ->
+                    localEngine.generateCompletionStream(prompt = prompt, maxTokens = 512).collect { token ->
                         val now = System.currentTimeMillis()
                         if (firstTokenTime == null) {
                             firstTokenTime = now
@@ -687,7 +704,7 @@ Description:    ${model.description}
                 var firstTokenTime: Long? = null
                 var count = 0
                 val sb = StringBuilder()
-                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 50).collect { token ->
+                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 512).collect { token ->
                     val now = System.currentTimeMillis()
                     if (firstTokenTime == null) firstTokenTime = now
                     count++
@@ -722,7 +739,7 @@ Health:                     200 OK (Engine fully operational)
                 var firstTokenTime: Long? = null
                 var count = 0
                 val sb = StringBuilder()
-                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 40).collect { token ->
+                localEngine.generateCompletionStream(prompt = prompt, maxTokens = 512).collect { token ->
                     val now = System.currentTimeMillis()
                     if (firstTokenTime == null) firstTokenTime = now
                     count++

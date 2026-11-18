@@ -17,12 +17,24 @@ import org.junit.Test
 class AgentXServerServingTest {
 
     @Test
-    fun clientManagerAcceptsMasterEcosystemKeyAndBlankLocalKeys() {
+    fun clientManagerAcceptsMasterEcosystemKeyAndEnforcesAuth() {
         val manager = ClientManager()
-        assertTrue("Null key should be accepted for seamless LAN pairing", manager.isKeyValid(null))
-        assertTrue("Blank key should be accepted for seamless LAN pairing", manager.isKeyValid(""))
-        assertTrue("Master ecosystem key should be valid", manager.isKeyValid("ax-master-serve-key"))
-        assertTrue("Bearer prefixed master key should be valid", manager.isKeyValid("Bearer ax-master-serve-key"))
+        // Zero-Trust: When auth is enforced by default, null/blank/invalid keys must be rejected
+        assertFalse("Null key should be rejected when auth is enforced", manager.isKeyValid(null))
+        assertFalse("Blank key should be rejected when auth is enforced", manager.isKeyValid(""))
+        assertFalse("Invalid key should be rejected", manager.isKeyValid("invalid-token-123"))
+        assertTrue("Master ecosystem key should be valid for internal checks", manager.isKeyValid("ax-master-serve-key"))
+        assertTrue("Bearer prefixed master key should be valid for loopback", manager.isKeyValid("Bearer ax-master-serve-key", "127.0.0.1"))
+        assertTrue("Master key should be valid for LAN subnet", manager.isKeyValid("ax-master-serve-key", "192.168.1.100"))
+
+        // Security check: Master developer key MUST be rejected when requested from external WAN IPs
+        assertFalse("Master key must be rejected from external public WAN IPs", manager.isKeyValid("ax-master-serve-key", "203.0.113.195"))
+        assertFalse("Master key must be rejected from external public WAN IPs", manager.isKeyValid("Bearer ax-master-serve-key", "118.95.186.30"))
+
+        // When auth enforcement is disabled (e.g. permissive mode)
+        manager.isAuthEnforced = false
+        assertTrue("Null key should be accepted when auth is disabled", manager.isKeyValid(null))
+        assertTrue("Blank key should be accepted when auth is disabled", manager.isKeyValid(""))
     }
 
     @Test

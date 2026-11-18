@@ -1,10 +1,11 @@
 package com.agentx.medical.core.inference
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -20,6 +21,8 @@ import java.net.URL
 class CloudInferenceEngine(
     var config: CloudModelConfig = CloudModelConfig()
 ) : InferenceEngine {
+
+    private val tag = "CloudInferenceEngine"
 
     @Volatile
     private var activeConnection: HttpURLConnection? = null
@@ -43,31 +46,34 @@ class CloudInferenceEngine(
         )
     }
 
-    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
+    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = channelFlow {
         isStopRequested = false
         currentStatus = currentStatus.copy(state = ModelLifecycleState.GENERATING)
         val startTime = System.currentTimeMillis()
         var totalTokens = 0
+
+        android.util.Log.i(tag, "generate started. Provider=${config.provider}, model=${config.modelName}")
 
         try {
             when (config.provider) {
                 CloudProvider.GEMINI -> {
                     generateGeminiSse(request, onToken = { token ->
                         totalTokens++
-                        emit(GenerationEvent.Token(token))
+                        send(GenerationEvent.Token(token))
                     })
                 }
                 CloudProvider.CUSTOM_GATEWAY -> {
                     generateOpenAiCompatible(request, onToken = { token ->
                         totalTokens++
-                        emit(GenerationEvent.Token(token))
+                        send(GenerationEvent.Token(token))
                     })
                 }
             }
 
             val duration = System.currentTimeMillis() - startTime
             val promptEstTokens = (request.prompt.length / 4) + ((request.systemPrompt?.length ?: 0) / 4)
-            emit(
+            android.util.Log.i(tag, "generate finished successfully. Emitted $totalTokens tokens in ${duration}ms")
+            send(
                 GenerationEvent.Finished(
                     totalTokens = promptEstTokens + totalTokens,
                     promptTokens = promptEstTokens,
@@ -76,9 +82,13 @@ class CloudInferenceEngine(
                 )
             )
             currentStatus = currentStatus.copy(state = ModelLifecycleState.LOADED)
+        } catch (e: CancellationException) {
+            android.util.Log.i(tag, "generate cancelled by user")
+            throw e
         } catch (e: Exception) {
+            android.util.Log.e(tag, "generate encountered error: ${e.message}", e)
             currentStatus = currentStatus.copy(state = ModelLifecycleState.ERROR, errorMessage = e.message)
-            emit(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
+            send(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
         } finally {
             activeConnection?.disconnect()
             activeConnection = null
@@ -231,17 +241,22 @@ class CloudInferenceEngine(
         }
 
         val contentType = conn.getHeaderField("Content-Type") ?: ""
+        android.util.Log.i(tag, "HTTP $responseCode from $url, Content-Type: $contentType")
         if (contentType.contains("text/event-stream")) {
             // Streaming SSE
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
                 var line: String?
+                var sseChunkCount = 0
                 while (reader.readLine().also { line = it } != null) {
                     currentCoroutineContext().ensureActive()
                     if (isStopRequested) break
                     val trimmed = line!!.trim()
                     if (trimmed.startsWith("data:")) {
                         val jsonStr = trimmed.removePrefix("data:").trim()
-                        if (jsonStr == "[DONE]") break
+                        if (jsonStr == "[DONE]") {
+                            android.util.Log.i(tag, "Received [DONE] after $sseChunkCount SSE chunks")
+                            break
+                        }
                         if (jsonStr.isNotBlank()) {
                             try {
                                 val parsed = Json.parseToJsonElement(jsonStr).jsonObject
@@ -249,9 +264,12 @@ class CloudInferenceEngine(
                                     ?.get("delta")?.jsonObject
                                 val content = delta?.get("content")?.jsonPrimitive?.content
                                 if (!content.isNullOrEmpty()) {
+                                    sseChunkCount++
                                     onToken(content)
                                 }
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                android.util.Log.w(tag, "Failed to parse SSE chunk: $jsonStr, error=${e.message}")
+                            }
                         }
                     }
                 }

@@ -6,6 +6,8 @@ import com.agentx.medical.core.inference.CloudModelConfig
 import com.agentx.medical.core.inference.CloudProvider
 import com.agentx.medical.core.inference.InferenceMode
 import com.agentx.medical.core.inference.LocalBackendType
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.ResponseStyle
 import com.agentx.core.security.SecureCredentialStore
 
 /**
@@ -31,6 +33,8 @@ class SettingsPreferencesManager(context: Context) {
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback"
         private const val KEY_THREADS = "cpu_threads"
         private const val KEY_MLOCK = "enable_mlock"
+        private const val KEY_DEFAULT_RESPONSE_STYLE = "default_response_style"
+        private const val KEY_DEFAULT_ANSWER_DEPTH = "default_answer_depth"
     }
 
     fun loadCloudConfig(): CloudModelConfig {
@@ -41,11 +45,11 @@ class SettingsPreferencesManager(context: Context) {
             CloudProvider.CUSTOM_GATEWAY
         }
 
-        val modeStr = prefs.getString(KEY_INFERENCE_MODE, InferenceMode.HYBRID_AUTO.name) ?: InferenceMode.HYBRID_AUTO.name
+        val modeStr = prefs.getString(KEY_INFERENCE_MODE, InferenceMode.LOCAL_ONLY.name) ?: InferenceMode.LOCAL_ONLY.name
         val mode = try {
             InferenceMode.valueOf(modeStr)
         } catch (_: Exception) {
-            InferenceMode.HYBRID_AUTO
+            InferenceMode.LOCAL_ONLY
         }
 
         val legacyApiKey = SecureCredentialStore.decrypt(prefs.getString(KEY_API_KEY, "") ?: "")
@@ -120,4 +124,22 @@ class SettingsPreferencesManager(context: Context) {
 
     fun loadMlock(): Boolean = prefs.getBoolean(KEY_MLOCK, false)
     fun saveMlock(enabled: Boolean) = prefs.edit().putBoolean(KEY_MLOCK, enabled).apply()
+
+    fun loadDefaultResponseStyle(): ResponseStyle {
+        val styleStr = prefs.getString(KEY_DEFAULT_RESPONSE_STYLE, ResponseStyle.DEFAULT.name)
+        return ResponseStyle.fromString(styleStr)
+    }
+
+    fun saveDefaultResponseStyle(style: ResponseStyle) {
+        prefs.edit().putString(KEY_DEFAULT_RESPONSE_STYLE, style.name).apply()
+    }
+
+    fun loadDefaultAnswerDepth(): AnswerDepth {
+        val depthStr = prefs.getString(KEY_DEFAULT_ANSWER_DEPTH, AnswerDepth.DEFAULT.name)
+        return AnswerDepth.fromString(depthStr)
+    }
+
+    fun saveDefaultAnswerDepth(depth: AnswerDepth) {
+        prefs.edit().putString(KEY_DEFAULT_ANSWER_DEPTH, depth.name).apply()
+    }
 }

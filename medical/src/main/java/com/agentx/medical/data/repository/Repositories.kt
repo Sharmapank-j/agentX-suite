@@ -164,7 +164,7 @@ class ConversationRepositoryImpl(
     }
 
     override suspend fun updateMessage(message: Message) {
-        messageDao.updateMessage(message.toEntity())
+        messageDao.insertMessage(message.toEntity())
     }
 
     override suspend fun deleteMessage(id: String) {
@@ -182,7 +182,9 @@ class ConversationRepositoryImpl(
         updatedAt = updatedAt,
         activeAgentId = activeAgentId,
         activeTeamId = activeTeamId,
-        isPinned = isPinned
+        isPinned = isPinned,
+        responseStyle = responseStyle,
+        answerDepth = answerDepth
     )
 
     private fun Conversation.toEntity() = ConversationEntity(
@@ -192,7 +194,9 @@ class ConversationRepositoryImpl(
         updatedAt = updatedAt,
         activeAgentId = activeAgentId,
         activeTeamId = activeTeamId,
-        isPinned = isPinned
+        isPinned = isPinned,
+        responseStyle = responseStyle,
+        answerDepth = answerDepth
     )
 
     private fun MessageEntity.toDomain() = Message(

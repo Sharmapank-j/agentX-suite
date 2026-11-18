@@ -4,7 +4,8 @@ data class GatewayEndpoints(
     val rootUrl: String,           // e.g. "http://192.168.1.100:8080"
     val healthUrl: String,         // e.g. "http://192.168.1.100:8080/health"
     val modelsUrl: String,         // e.g. "http://192.168.1.100:8080/v1/models"
-    val chatCompletionsUrl: String // e.g. "http://192.168.1.100:8080/v1/chat/completions"
+    val chatCompletionsUrl: String,// e.g. "http://192.168.1.100:8080/v1/chat/completions"
+    val otaManifestUrl: String = "$rootUrl/ota/manifest.json"
 )
 
 object GatewayUrlNormalizer {

@@ -43,3 +43,6 @@ Thumbs.db
 
 # Kotlin
 .kotlin/
+
+# Scratch & Temporary Scripts
+scratch/

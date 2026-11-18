@@ -23,7 +23,7 @@ data class ModelConfig(
 data class InferenceRequest(
     val prompt: String,
     val systemPrompt: String? = null,
-    val maxTokens: Int = 1024,
+    val maxTokens: Int = 3072,
     val temperature: Float = 0.7f,
     val topP: Float = 0.9f,
     val topK: Int = 40,

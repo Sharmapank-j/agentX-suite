@@ -60,14 +60,32 @@ class AgentXServerService : Service() {
                         val status = app.server.telemetry.value
                         updateNotification("Running on http://${status.ipAddress}:${status.port}")
                         app.nsdHelper.registerService(status.port)
+
+                        // Universal Cross-Network Access: Auto-start global HTTPS tunnel
+                        app.tunnelManager.startTunnel(localPort = status.port)
                     } else {
                         updateNotification("Failed to bind port $port")
+                    }
+                }
+
+                serviceScope.launch {
+                    app.tunnelManager.config.collect { tunCfg ->
+                        val status = app.server.telemetry.value
+                        if (status.isRunning) {
+                            if (tunCfg.isEnabled && !tunCfg.publicUrl.isNullOrBlank() && tunCfg.status == com.agentx.admin.models.TunnelStatus.CONNECTED) {
+                                updateNotification("ONLINE • Local: ${status.ipAddress}:${status.port} | WAN: ${tunCfg.publicUrl}")
+                                app.pairingManager.publishCoordinates()
+                            } else if (tunCfg.status == com.agentx.admin.models.TunnelStatus.STARTING) {
+                                updateNotification("Local: http://${status.ipAddress}:${status.port} • Starting WAN tunnel...")
+                            }
+                        }
                     }
                 }
             }
             ACTION_STOP -> {
                 serviceScope.launch {
                     app.nsdHelper.unregisterService()
+                    app.tunnelManager.stopTunnel()
                     app.server.stop()
                     releaseLocks()
                     stopForeground(STOP_FOREGROUND_REMOVE)

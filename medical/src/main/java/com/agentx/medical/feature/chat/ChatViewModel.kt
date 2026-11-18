@@ -33,6 +33,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.agentx.core.inference.model.ExtendedModelConfig
+import com.agentx.medical.data.local.SettingsPreferencesManager
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.MedicalPromptBuilder
+import com.agentx.medical.intelligence.MedicalQueryClassification
+import com.agentx.medical.intelligence.MedicalQueryClassifier
+import com.agentx.medical.intelligence.ResponseStyle
 import java.util.UUID
 
 data class LiveInferenceMetrics(
@@ -57,7 +63,10 @@ data class ChatUiState(
     val allModels: List<GGUFModel> = emptyList(),
     val modelStatus: ModelStatus = ModelStatus(ModelLifecycleState.NOT_LOADED),
     val activeExecutionState: ExecutionState? = null,
-    val liveMetrics: LiveInferenceMetrics = LiveInferenceMetrics()
+    val liveMetrics: LiveInferenceMetrics = LiveInferenceMetrics(),
+    val currentResponseStyle: ResponseStyle = ResponseStyle.DEFAULT,
+    val currentAnswerDepth: AnswerDepth = AnswerDepth.DEFAULT,
+    val lastQueryClassification: MedicalQueryClassification? = null
 )
 
 class ChatViewModel(
@@ -66,7 +75,8 @@ class ChatViewModel(
     private val modelRepository: ModelRepository,
     private val inferenceEngine: InferenceEngine,
     private val clinicalSupervisor: ClinicalSupervisor? = null,
-    private val executionQueue: ExecutionQueue? = null
+    private val executionQueue: ExecutionQueue? = null,
+    private val preferencesManager: SettingsPreferencesManager? = null
 ) : ViewModel() {
 
     private val _currentConversationId = MutableStateFlow<String?>(null)
@@ -76,7 +86,9 @@ class ChatViewModel(
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     private val _modelStatus = MutableStateFlow(inferenceEngine.getModelStatus())
     private val _liveMetrics = MutableStateFlow(LiveInferenceMetrics())
+    private val _lastClassification = MutableStateFlow<MedicalQueryClassification?>(null)
     private var generationJob: Job? = null
+    private var messagesJob: Job? = null
 
     private val executionFlow: StateFlow<ExecutionState> =
         executionQueue?.state ?: MutableStateFlow(ExecutionState())
@@ -87,7 +99,7 @@ class ChatViewModel(
         agentRepository.getAllAgents(),
         _selectedAgentId
     ) { conversations, currentId, agents, selectedAgentId ->
-        val activeConv = conversations.find { it.id == currentId } ?: conversations.firstOrNull()
+        val activeConv = if (currentId != null) conversations.find { it.id == currentId } else null
         val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.find { it.id == "agent_assistant" } ?: agents.firstOrNull()
         Triple(conversations, activeConv, Pair(agents, activeAgent))
     }
@@ -100,15 +112,16 @@ class ChatViewModel(
         Triple(active, all, status)
     }
 
-    private val inputFlow = combine(_messages, _inputText, _isStreaming, _liveMetrics) { messages, inputText, isStreaming, metrics ->
-        InputState(messages, inputText, isStreaming, metrics)
+    private val inputFlow = combine(_messages, _inputText, _isStreaming, _liveMetrics, _lastClassification) { messages, inputText, isStreaming, metrics, classification ->
+        InputState(messages, inputText, isStreaming, metrics, classification)
     }
 
     private data class InputState(
         val messages: List<Message>,
         val inputText: String,
         val isStreaming: Boolean,
-        val metrics: LiveInferenceMetrics
+        val metrics: LiveInferenceMetrics,
+        val classification: MedicalQueryClassification?
     )
 
     val uiState: StateFlow<ChatUiState> = combine(
@@ -117,6 +130,8 @@ class ChatViewModel(
         inputFlow,
         executionFlow
     ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState ->
+        val style = ResponseStyle.fromString(activeConv?.responseStyle)
+        val depth = AnswerDepth.fromString(activeConv?.answerDepth)
         ChatUiState(
             conversations = conversations,
             currentConversation = activeConv,
@@ -130,7 +145,10 @@ class ChatViewModel(
             allModels = allModels,
             modelStatus = modelStatus,
             activeExecutionState = if (execState.status == ExecutionStatus.RUNNING) execState else null,
-            liveMetrics = inputState.metrics
+            liveMetrics = inputState.metrics,
+            currentResponseStyle = style,
+            currentAnswerDepth = depth,
+            lastQueryClassification = inputState.classification
         )
     }.stateIn(
         scope = viewModelScope,
@@ -139,19 +157,28 @@ class ChatViewModel(
     )
 
     init {
+        // On cold start, do not auto-restore last conversation — user starts fresh
+        // Prune any legacy empty conversations (0 messages)
         viewModelScope.launch {
-            conversationRepository.getAllConversations().collect { convs ->
-                if (_currentConversationId.value == null && convs.isNotEmpty()) {
-                    _currentConversationId.value = convs.first().id
+            try {
+                val all = conversationRepository.getAllConversations().first()
+                for (c in all) {
+                    val msgs = conversationRepository.getMessagesForConversation(c.id).first()
+                    if (msgs.isEmpty()) {
+                        conversationRepository.deleteConversation(c.id)
+                    }
                 }
-            }
+            } catch (_: Exception) {}
         }
 
         viewModelScope.launch {
             _currentConversationId.collect { convId ->
+                messagesJob?.cancel()
                 if (convId != null) {
-                    conversationRepository.getMessagesForConversation(convId).collect {
-                        _messages.value = it
+                    messagesJob = viewModelScope.launch {
+                        conversationRepository.getMessagesForConversation(convId).collect {
+                            _messages.value = it
+                        }
                     }
                 } else {
                     _messages.value = emptyList()
@@ -199,16 +226,45 @@ class ChatViewModel(
         _currentConversationId.value = conversationId
     }
 
+    fun startNewConversation() {
+        _currentConversationId.value = null
+        _messages.value = emptyList()
+        _inputText.value = ""
+        _lastClassification.value = null
+    }
+
     fun createNewConversation(title: String = "Clinical Consult") {
+        if (title == "Clinical Consult" || title == "New Conversation") {
+            startNewConversation()
+        } else {
+            viewModelScope.launch {
+                val newId = UUID.randomUUID().toString()
+                val defaultStyle = preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT
+                val defaultDepth = preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT
+                val newConv = Conversation(
+                    id = newId,
+                    title = title,
+                    activeAgentId = _selectedAgentId.value,
+                    responseStyle = defaultStyle.name,
+                    answerDepth = defaultDepth.name
+                )
+                conversationRepository.createConversation(newConv)
+                _currentConversationId.value = newId
+            }
+        }
+    }
+
+    fun updateCurrentConversationStyle(style: ResponseStyle) {
+        val conv = uiState.value.currentConversation ?: return
         viewModelScope.launch {
-            val newId = UUID.randomUUID().toString()
-            val newConv = Conversation(
-                id = newId,
-                title = title,
-                activeAgentId = _selectedAgentId.value
-            )
-            conversationRepository.createConversation(newConv)
-            _currentConversationId.value = newId
+            conversationRepository.updateConversation(conv.copy(responseStyle = style.name))
+        }
+    }
+
+    fun updateCurrentConversationDepth(depth: AnswerDepth) {
+        val conv = uiState.value.currentConversation ?: return
+        viewModelScope.launch {
+            conversationRepository.updateConversation(conv.copy(answerDepth = depth.name))
         }
     }
 
@@ -226,8 +282,7 @@ class ChatViewModel(
         viewModelScope.launch {
             conversationRepository.deleteConversation(conversationId)
             if (_currentConversationId.value == conversationId) {
-                val remaining = conversationRepository.getAllConversations().first()
-                _currentConversationId.value = remaining.firstOrNull()?.id
+                startNewConversation()
             }
         }
     }
@@ -308,18 +363,23 @@ class ChatViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            var convId = _currentConversationId.value ?: state.currentConversation?.id
+            var convId = _currentConversationId.value
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
+                val defaultStyle = preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT
+                val defaultDepth = preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT
+                val convTitle = if (text.length > 35) text.take(32) + "..." else text
                 conversationRepository.createConversation(
                     Conversation(
                         id = convId,
-                        title = text.take(30),
-                        activeAgentId = agent?.id
+                        title = convTitle.replace("\n", " ").trim(),
+                        activeAgentId = agent?.id,
+                        responseStyle = defaultStyle.name,
+                        answerDepth = defaultDepth.name
                     )
                 )
+                _currentConversationId.value = convId
             }
-            _currentConversationId.value = convId
 
             // Clean up any stale incomplete streaming messages
             val dirtyMessages = conversationRepository.getMessagesForConversation(convId).first()
@@ -465,6 +525,7 @@ class ChatViewModel(
             agentId = agent?.id,
             status = MessageStatus.STREAMING
         )
+        android.util.Log.i("ChatViewModel", "executeInference: inserting initial assistantMsg $assistantMsgId for conv $convId")
         conversationRepository.sendMessage(assistantMsg)
         _messages.value = _messages.value + assistantMsg
         _isStreaming.value = true
@@ -531,19 +592,42 @@ class ChatViewModel(
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
             .filter { it.id != assistantMsg.id && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
 
+        // 1. Dynamic Medical Query Classification
+        val classification = MedicalQueryClassifier.classify(userPrompt)
+        _lastClassification.value = classification
+
+        // 2. Resolve Active Conversation Style & Depth
+        val activeConv = conversationRepository.getConversationById(convId)
+        val style = ResponseStyle.fromString(activeConv?.responseStyle)
+        val depth = AnswerDepth.fromString(activeConv?.answerDepth)
+
+        // 3. Build Specialized Clinical System Prompt
+        val synthesizedSystemPrompt = MedicalPromptBuilder.buildSystemPrompt(
+            classification = classification,
+            style = style,
+            depth = depth
+        )
+
         val activeModelConfig = modelRepository.getActiveModel().first()
         val extendedConfig = ExtendedModelConfig.parse(activeModelConfig?.capabilityProfile)
-        val maxContext = (activeModelConfig?.contextLength ?: 2048).coerceIn(512, 3840)
-        val effectiveSystemPrompt = extendedConfig.systemPrompt ?: agent?.systemPrompt
-        val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 512)
+        val maxContext = (activeModelConfig?.contextLength ?: 3840).coerceIn(512, 8192)
+
+        val estimatedSystemTokens = ContextManager.estimateTokens(synthesizedSystemPrompt)
+        val estimatedUserTokens = ContextManager.estimateTokens(userPrompt)
+        val maxOutputTokens = MedicalPromptBuilder.computeMaxTokens(
+            depth = depth,
+            contextLength = maxContext,
+            estimatedPromptTokens = estimatedSystemTokens + estimatedUserTokens
+        )
 
         val contextualPrompt = ContextManager.buildPromptWithContext(
-            systemPrompt = null,
+            systemPrompt = null, // Formatted in native chat template
             history = historyMessages,
             currentPrompt = userPrompt,
             budget = ContextBudget(
                 maxContextTokens = maxContext,
-                maxOutputTokens = maxOutputTokens
+                maxOutputTokens = maxOutputTokens,
+                reservedTokens = 64
             )
         )
 
@@ -551,6 +635,7 @@ class ChatViewModel(
         val startTime = System.currentTimeMillis()
         var tokenCount = 0
         var lastDbUpdateTime = System.currentTimeMillis()
+        var lastUiUpdateTime = System.currentTimeMillis()
 
         _liveMetrics.value = LiveInferenceMetrics(
             isLive = true,
@@ -561,47 +646,60 @@ class ChatViewModel(
         )
 
         try {
+            android.util.Log.i("ChatViewModel", "Starting inferenceEngine.generate for msg ${assistantMsg.id}")
+            val stopSeqs = (extendedConfig.stopSequences + listOf("<|im_end|>", "<|endoftext|>", "\nUser:", "\nClinician:")).distinct()
             inferenceEngine.generate(
                 InferenceRequest(
                     prompt = contextualPrompt,
-                    systemPrompt = effectiveSystemPrompt,
+                    systemPrompt = synthesizedSystemPrompt,
                     maxTokens = maxOutputTokens,
                     temperature = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f,
                     topP = activeModelConfig?.topP ?: agent?.topP ?: 0.9f,
                     topK = extendedConfig.topK,
                     repeatPenalty = extendedConfig.repetitionPenalty,
                     seed = extendedConfig.seed,
-                    stopSequences = extendedConfig.stopSequences
+                    stopSequences = stopSeqs
                 )
             ).collect { event ->
                 when (event) {
                     is GenerationEvent.Token -> {
                         buffer.append(event.text)
                         tokenCount++
-                        val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                        val tps = (tokenCount * 1000f) / elapsedMs
-                        _liveMetrics.value = LiveInferenceMetrics(
-                            isLive = true,
-                            tokensGenerated = tokenCount,
-                            tokensPerSecond = tps,
-                            elapsedSeconds = elapsedMs / 1000f,
-                            memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
-                        )
-                        assistantMsg = assistantMsg.copy(
-                            content = buffer.toString(),
-                            tokenCount = tokenCount,
-                            status = MessageStatus.STREAMING
-                        )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
-                        }
+
                         val now = System.currentTimeMillis()
-                        if (now - lastDbUpdateTime >= 250L || tokenCount % 15 == 0) {
+                        if (now - lastUiUpdateTime >= 40L || tokenCount <= 3) {
+                            lastUiUpdateTime = now
+                            val elapsedMs = (now - startTime).coerceAtLeast(1)
+                            val tps = (tokenCount * 1000f) / elapsedMs
+                            _liveMetrics.value = LiveInferenceMetrics(
+                                isLive = true,
+                                tokensGenerated = tokenCount,
+                                tokensPerSecond = tps,
+                                elapsedSeconds = elapsedMs / 1000f,
+                                memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
+                            )
+                            assistantMsg = assistantMsg.copy(
+                                content = buffer.toString(),
+                                tokenCount = tokenCount,
+                                status = MessageStatus.STREAMING
+                            )
+                            val current = _messages.value
+                            if (current.none { it.id == assistantMsg.id }) {
+                                _messages.value = current + assistantMsg
+                            } else {
+                                _messages.value = current.map {
+                                    if (it.id == assistantMsg.id) assistantMsg else it
+                                }
+                            }
+                        }
+
+                        if (now - lastDbUpdateTime >= 400L || tokenCount % 20 == 0) {
                             lastDbUpdateTime = now
                             conversationRepository.updateMessage(assistantMsg)
                         }
                     }
                     is GenerationEvent.Finished -> {
+                        android.util.Log.i("ChatViewModel", "Finished event! totalTokens=${event.totalTokens}, buffer length=${buffer.length}")
                         val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
                         val finalTps = (event.completionTokens.coerceAtLeast(tokenCount) * 1000f) / elapsedMs
                         _liveMetrics.value = _liveMetrics.value.copy(
@@ -615,14 +713,20 @@ class ChatViewModel(
                             tokenCount = event.totalTokens,
                             status = MessageStatus.COMPLETED
                         )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
+                        val current = _messages.value
+                        if (current.none { it.id == assistantMsg.id }) {
+                            _messages.value = current + assistantMsg
+                        } else {
+                            _messages.value = current.map {
+                                if (it.id == assistantMsg.id) assistantMsg else it
+                            }
                         }
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false
                         _modelStatus.value = inferenceEngine.getModelStatus()
                     }
                     is GenerationEvent.Error -> {
+                        android.util.Log.e("ChatViewModel", "Error event received: ${event.message}")
                         _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
                         val currentText = buffer.toString()
                         val errorDetail = event.message.orEmpty()
@@ -639,8 +743,13 @@ class ChatViewModel(
                             content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Clinical Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
                             status = MessageStatus.ERROR
                         )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
+                        val current = _messages.value
+                        if (current.none { it.id == assistantMsg.id }) {
+                            _messages.value = current + assistantMsg
+                        } else {
+                            _messages.value = current.map {
+                                if (it.id == assistantMsg.id) assistantMsg else it
+                            }
                         }
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false
@@ -648,7 +757,12 @@ class ChatViewModel(
                     }
                 }
             }
+            android.util.Log.i("ChatViewModel", "Inference collect finished normally for msg ${assistantMsg.id}")
+        } catch (e: Throwable) {
+            android.util.Log.e("ChatViewModel", "Inference collect exception for msg ${assistantMsg.id}", e)
+            throw e
         } finally {
+            android.util.Log.i("ChatViewModel", "finally block: status=${assistantMsg.status}, bufferLen=${buffer.length}")
             _isStreaming.value = false
             _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
             _modelStatus.value = inferenceEngine.getModelStatus()
@@ -666,6 +780,7 @@ class ChatViewModel(
                     }
                     conversationRepository.updateMessage(finalized)
                 } else {
+                    android.util.Log.w("ChatViewModel", "Deleting streaming message ${assistantMsg.id} because buffer is blank!")
                     _messages.value = _messages.value.filter { it.id != assistantMsg.id }
                     conversationRepository.deleteMessage(assistantMsg.id)
                 }

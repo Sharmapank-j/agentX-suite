@@ -12,6 +12,8 @@ import com.agentx.medical.core.inference.GatewayEndpoints
 import com.agentx.medical.core.inference.GatewayUrlNormalizer
 import com.agentx.medical.core.inference.HybridInferenceEngine
 import com.agentx.medical.core.inference.InferenceMode
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.ResponseStyle
 import com.agentx.medical.data.repository.ExecutionRepository
 import com.agentx.medical.data.repository.ToolRepository
 import com.agentx.medical.domain.models.ExecutionLog
@@ -57,7 +59,14 @@ data class SettingsUiState(
     val isFetchingModels: Boolean = false,
     val availableGatewayModels: List<String> = emptyList(),
     val serverDetails: GatewayServerInfo? = null,
-    val discoveredHubs: List<DiscoveredGatewayHub> = emptyList()
+    val discoveredHubs: List<DiscoveredGatewayHub> = emptyList(),
+    val defaultResponseStyle: ResponseStyle = ResponseStyle.DEFAULT,
+    val defaultAnswerDepth: AnswerDepth = AnswerDepth.DEFAULT,
+    val otaState: com.agentx.core.ota.OtaUpdateState = com.agentx.core.ota.OtaUpdateState.Idle,
+    val installedOtaComponents: List<com.agentx.core.ota.InstalledComponent> = emptyList(),
+    val isAutoUpdateEnabled: Boolean = true,
+    val isWifiOnlyOta: Boolean = true,
+    val dynamicKnowledgeVersion: String = "Built-in v1.0"
 )
 
 class SettingsViewModel(
@@ -66,13 +75,16 @@ class SettingsViewModel(
     private val executionQueue: ExecutionQueue? = null,
     private val hybridInferenceEngine: HybridInferenceEngine? = null,
     private val nsdDiscovery: GatewayNsdDiscovery? = null,
-    private val preferencesManager: com.agentx.medical.data.local.SettingsPreferencesManager? = null
+    private val preferencesManager: com.agentx.medical.data.local.SettingsPreferencesManager? = null,
+    private val otaUpdateManager: com.agentx.core.ota.OtaUpdateManager? = null
 ) : ViewModel() {
 
     private val _darkTheme = MutableStateFlow(preferencesManager?.loadDarkTheme() ?: true)
     private val _hapticFeedback = MutableStateFlow(preferencesManager?.loadHapticFeedback() ?: true)
     private val _threads = MutableStateFlow(preferencesManager?.loadThreads() ?: 4)
     private val _mlock = MutableStateFlow(preferencesManager?.loadMlock() ?: false)
+    private val _defaultResponseStyle = MutableStateFlow(preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT)
+    private val _defaultAnswerDepth = MutableStateFlow(preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT)
     private val _cloudConfig = MutableStateFlow(
         preferencesManager?.loadCloudConfig() ?: hybridInferenceEngine?.cloudEngine?.config ?: CloudModelConfig()
     )
@@ -109,7 +121,9 @@ class SettingsViewModel(
         _threads,
         _mlock,
         _cloudConfig,
-        _cloudTestResult
+        _cloudTestResult,
+        _defaultResponseStyle,
+        _defaultAnswerDepth
     ) { args ->
         SettingsPreferences(
             darkTheme = args[0] as Boolean,
@@ -117,7 +131,9 @@ class SettingsViewModel(
             threads = args[2] as Int,
             mlock = args[3] as Boolean,
             cloudConfig = args[4] as CloudModelConfig,
-            cloudTestResult = args[5] as? String
+            cloudTestResult = args[5] as? String,
+            defaultResponseStyle = args[6] as ResponseStyle,
+            defaultAnswerDepth = args[7] as AnswerDepth
         )
     }
 
@@ -127,19 +143,30 @@ class SettingsViewModel(
         val threads: Int,
         val mlock: Boolean,
         val cloudConfig: CloudModelConfig,
-        val cloudTestResult: String?
+        val cloudTestResult: String?,
+        val defaultResponseStyle: ResponseStyle,
+        val defaultAnswerDepth: AnswerDepth
     )
 
     private val executionFlow: StateFlow<ExecutionState> =
         executionQueue?.state ?: MutableStateFlow(ExecutionState())
 
+    private val otaStateFlow: StateFlow<com.agentx.core.ota.OtaUpdateState> =
+        otaUpdateManager?.state ?: MutableStateFlow(com.agentx.core.ota.OtaUpdateState.Idle)
+
+    private val otaInstalledFlow: StateFlow<List<com.agentx.core.ota.InstalledComponent>> =
+        otaUpdateManager?.installedComponents ?: MutableStateFlow(emptyList())
+
     val uiState: StateFlow<SettingsUiState> = combine(
-        toolRepository.getAllTools(),
-        toolRepository.getAllPermissions(),
-        executionRepository.getRecentExecutions(),
+        combine(
+            toolRepository.getAllTools(),
+            toolRepository.getAllPermissions(),
+            executionRepository.getRecentExecutions()
+        ) { tools, perms, execs -> Triple(tools, perms, execs) },
         combine(preferencesFlow, gatewayFlow) { prefs, gw -> Pair(prefs, gw) },
-        executionFlow
-    ) { tools, permissions, executions, (prefs, gw), execState ->
+        executionFlow,
+        combine(otaStateFlow, otaInstalledFlow) { st, inst -> Pair(st, inst) }
+    ) { (tools, permissions, executions), (prefs, gw), execState, (otaSt, otaInst) ->
         SettingsUiState(
             tools = tools,
             permissions = permissions,
@@ -155,13 +182,49 @@ class SettingsViewModel(
             isFetchingModels = gw.isFetching,
             availableGatewayModels = gw.models,
             serverDetails = gw.serverInfo,
-            discoveredHubs = gw.discoveredHubs
+            discoveredHubs = gw.discoveredHubs,
+            defaultResponseStyle = prefs.defaultResponseStyle,
+            defaultAnswerDepth = prefs.defaultAnswerDepth,
+            otaState = otaSt,
+            installedOtaComponents = otaInst,
+            isAutoUpdateEnabled = otaUpdateManager?.isAutoUpdateEnabled ?: true,
+            isWifiOnlyOta = otaUpdateManager?.isWifiOnlyForLargeFiles ?: true,
+            dynamicKnowledgeVersion = com.agentx.medical.intelligence.DynamicMedicalKnowledgeManager.currentVersion
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = SettingsUiState()
     )
+
+    fun checkForOtaUpdates(customUrl: String? = null) {
+        val targetUrl = customUrl
+            ?: GatewayUrlNormalizer.normalize(_cloudConfig.value.customBaseUrl).otaManifestUrl
+        viewModelScope.launch {
+            otaUpdateManager?.checkForUpdates(targetUrl)
+        }
+    }
+
+    fun applyOtaUpdate(manifest: com.agentx.core.ota.ComponentManifest) {
+        viewModelScope.launch {
+            otaUpdateManager?.applyUpdate(manifest)
+        }
+    }
+
+    fun toggleAutoUpdate(enabled: Boolean) {
+        otaUpdateManager?.isAutoUpdateEnabled = enabled
+    }
+
+    fun toggleWifiOnlyOta(wifiOnly: Boolean) {
+        otaUpdateManager?.isWifiOnlyForLargeFiles = wifiOnly
+    }
+
+    fun rollbackOtaComponent(id: String) {
+        otaUpdateManager?.rollbackComponent(id)
+        if (id == "medical-intelligence-pack") {
+            com.agentx.medical.intelligence.DynamicMedicalKnowledgeManager.resetToBuiltIn()
+        }
+    }
 
 
     init {
@@ -407,5 +470,15 @@ class SettingsViewModel(
     fun setMlock(enabled: Boolean) {
         _mlock.value = enabled
         preferencesManager?.saveMlock(enabled)
+    }
+
+    fun setDefaultResponseStyle(style: ResponseStyle) {
+        _defaultResponseStyle.value = style
+        preferencesManager?.saveDefaultResponseStyle(style)
+    }
+
+    fun setDefaultAnswerDepth(depth: AnswerDepth) {
+        _defaultAnswerDepth.value = depth
+        preferencesManager?.saveDefaultAnswerDepth(depth)
     }
 }

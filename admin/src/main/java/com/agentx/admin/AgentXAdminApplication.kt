@@ -36,6 +36,12 @@ class AgentXAdminApplication : Application() {
     lateinit var pairingManager: com.agentx.admin.server.PairingManager
         private set
 
+    lateinit var otaRegistry: com.agentx.core.ota.OtaComponentRegistry
+        private set
+
+    lateinit var otaUpdateManager: com.agentx.core.ota.OtaUpdateManager
+        private set
+
     lateinit var nsdHelper: AgentXNsdHelper
         private set
 
@@ -47,6 +53,13 @@ class AgentXAdminApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        val otaDir = java.io.File(filesDir, "ota_components")
+        otaRegistry = com.agentx.core.ota.OtaComponentRegistry(otaDir)
+        otaUpdateManager = com.agentx.core.ota.OtaUpdateManager(
+            registry = otaRegistry,
+            currentAppVersionCode = 100
+        )
+
         database = com.agentx.admin.data.local.AdminDatabase.getInstance(this)
         thermalManager = ThermalBatteryManager(this)
         tlsManager = LocalTlsManager(this)
@@ -55,7 +68,7 @@ class AgentXAdminApplication : Application() {
         clientManager = ClientManager(database)
         cloudGateway = CloudGeminiGateway()
         localEngine = LocalModelServerEngine(thermalManager)
-        server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager)
+        server = AgentXAdminServer(clientManager, cloudGateway, localEngine, thermalManager, tlsManager, tunnelManager, otaRegistry)
         pairingManager = com.agentx.admin.server.PairingManager(this, server, localEngine, tunnelManager)
 
         // Automatically scan and register on-device storage models on startup

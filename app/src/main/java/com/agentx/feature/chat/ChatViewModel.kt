@@ -105,7 +105,7 @@ class ChatViewModel(
         agentRepository.getAllAgents(),
         _selectedAgentId
     ) { conversations, currentId, agents, selectedAgentId ->
-        val activeConv = conversations.find { it.id == currentId } ?: conversations.firstOrNull()
+        val activeConv = if (currentId != null) conversations.find { it.id == currentId } else null
         val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.find { it.id == "agent_assistant" } ?: agents.firstOrNull()
         Triple(conversations, activeConv, Pair(agents, activeAgent))
     }
@@ -225,12 +225,26 @@ class ChatViewModel(
     }
 
     init {
+        // On cold start, do not auto-restore last conversation — user starts fresh
+        // User can browse history via the drawer, or a new conversation is auto-created on first message
         viewModelScope.launch {
-            conversationRepository.getAllConversations().collect { convs ->
-                if (_currentConversationId.value == null && convs.isNotEmpty()) {
-                    _currentConversationId.value = convs.first().id
-                }
+            conversationRepository.getAllConversations().collect { _ ->
+                // Intentionally left blank: conversation is explicitly selected via selectConversation()
+                // or auto-created in sendMessage()
             }
+        }
+
+        // Prune any legacy empty conversations (0 messages) so users have a clean, ghost-free session list
+        viewModelScope.launch {
+            try {
+                val all = conversationRepository.getAllConversations().first()
+                for (c in all) {
+                    val msgs = conversationRepository.getMessagesForConversation(c.id).first()
+                    if (msgs.isEmpty()) {
+                        conversationRepository.deleteConversation(c.id)
+                    }
+                }
+            } catch (_: Exception) {}
         }
 
         viewModelScope.launch {
@@ -285,16 +299,30 @@ class ChatViewModel(
         _currentConversationId.value = conversationId
     }
 
+    fun startNewConversation() {
+        _currentConversationId.value = null
+        _messages.value = emptyList()
+        _inputText.value = ""
+        _attachedImagePath.value = null
+        _attachedImageMimeType.value = null
+    }
+
     fun createNewConversation(title: String = "New Conversation") {
-        viewModelScope.launch {
-            val newId = UUID.randomUUID().toString()
-            val newConv = Conversation(
-                id = newId,
-                title = title,
-                activeAgentId = _selectedAgentId.value
-            )
-            conversationRepository.createConversation(newConv)
-            _currentConversationId.value = newId
+        if (title == "New Conversation") {
+            // UI trigger: resets chat view without inserting empty DB ghost row
+            startNewConversation()
+        } else {
+            // Explicit named conversation creation
+            viewModelScope.launch {
+                val newId = UUID.randomUUID().toString()
+                val newConv = Conversation(
+                    id = newId,
+                    title = title,
+                    activeAgentId = _selectedAgentId.value
+                )
+                conversationRepository.createConversation(newConv)
+                _currentConversationId.value = newId
+            }
         }
     }
 
@@ -312,8 +340,7 @@ class ChatViewModel(
         viewModelScope.launch {
             conversationRepository.deleteConversation(conversationId)
             if (_currentConversationId.value == conversationId) {
-                val remaining = conversationRepository.getAllConversations().first()
-                _currentConversationId.value = remaining.firstOrNull()?.id
+                startNewConversation()
             }
         }
     }
@@ -364,8 +391,8 @@ class ChatViewModel(
                 ModelConfig(
                     modelId = model.id,
                     modelPath = model.filePath,
-                    contextLength = model.contextLength.coerceIn(512, 3840),
-                    threads = model.threads.coerceIn(1, 4),
+                    contextLength = model.contextLength.coerceIn(512, 8192),
+                    threads = model.threads.coerceIn(1, 8),
                     temperature = model.temperature,
                     topP = model.topP
                 )
@@ -427,18 +454,19 @@ class ChatViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
-            var convId = _currentConversationId.value ?: state.currentConversation?.id
+            var convId = _currentConversationId.value
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
+                val convTitle = if (promptText.length > 35) promptText.take(32) + "..." else promptText
                 conversationRepository.createConversation(
                     Conversation(
                         id = convId,
-                        title = promptText.take(30),
+                        title = convTitle.replace("\n", " ").trim(),
                         activeAgentId = agent?.id
                     )
                 )
+                _currentConversationId.value = convId
             }
-            _currentConversationId.value = convId
 
             // Clean up any stale incomplete streaming messages
             val dirtyMessages = conversationRepository.getMessagesForConversation(convId).first()
@@ -662,9 +690,9 @@ class ChatViewModel(
 
         val activeModelConfig = modelRepository.getActiveModel().first()
         val extendedConfig = ExtendedModelConfig.parse(activeModelConfig?.capabilityProfile)
-        val maxContext = (activeModelConfig?.contextLength ?: 2048).coerceIn(512, 3840)
+        val maxContext = (activeModelConfig?.contextLength ?: 4096).coerceIn(512, 8192)
         val effectiveSystemPrompt = extendedConfig.systemPrompt ?: agent?.systemPrompt
-        val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 512)
+        val maxOutputTokens = extendedConfig.maxTokens.takeIf { it > 0 } ?: (agent?.maxTokens ?: 2048)
 
         val contextMessages = historyMessages.map { msg ->
             com.agentx.core.context.ContextMessage(
@@ -709,6 +737,7 @@ class ChatViewModel(
         val startTime = System.currentTimeMillis()
         var tokenCount = 0
         var lastDbUpdateTime = System.currentTimeMillis()
+        var lastUiUpdateTime = System.currentTimeMillis()
 
         _liveMetrics.value = LiveInferenceMetrics(
             isLive = true,
@@ -740,25 +769,30 @@ class ChatViewModel(
                         if (firstTokenTime == 0L) firstTokenTime = System.currentTimeMillis()
                         buffer.append(event.text)
                         tokenCount++
-                        val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                        val tps = (tokenCount * 1000f) / elapsedMs
-                        _liveMetrics.value = LiveInferenceMetrics(
-                            isLive = true,
-                            tokensGenerated = tokenCount,
-                            tokensPerSecond = tps,
-                            elapsedSeconds = elapsedMs / 1000f,
-                            memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
-                        )
-                        assistantMsg = assistantMsg.copy(
-                            content = buffer.toString(),
-                            tokenCount = tokenCount,
-                            status = MessageStatus.STREAMING
-                        )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
-                        }
+
                         val now = System.currentTimeMillis()
-                        if (now - lastDbUpdateTime >= 250L || tokenCount % 15 == 0) {
+                        if (now - lastUiUpdateTime >= 40L || tokenCount <= 3) {
+                            lastUiUpdateTime = now
+                            val elapsedMs = (now - startTime).coerceAtLeast(1)
+                            val tps = (tokenCount * 1000f) / elapsedMs
+                            _liveMetrics.value = LiveInferenceMetrics(
+                                isLive = true,
+                                tokensGenerated = tokenCount,
+                                tokensPerSecond = tps,
+                                elapsedSeconds = elapsedMs / 1000f,
+                                memoryUsageMb = inferenceEngine.getModelStatus().memoryUsageBytes / (1024 * 1024)
+                            )
+                            assistantMsg = assistantMsg.copy(
+                                content = buffer.toString(),
+                                tokenCount = tokenCount,
+                                status = MessageStatus.STREAMING
+                            )
+                            _messages.value = _messages.value.map {
+                                if (it.id == assistantMsg.id) assistantMsg else it
+                            }
+                        }
+
+                        if (now - lastDbUpdateTime >= 400L || tokenCount % 20 == 0) {
                             lastDbUpdateTime = now
                             conversationRepository.updateMessage(assistantMsg)
                         }

@@ -33,8 +33,8 @@ class LlamaCppEngine : InferenceEngine {
                     "Choose a readable local .gguf model file: ${config.modelPath}"
                 }
                 unloadModelInternal()
-                val targetContext = minOf(config.contextLength, 3840).coerceAtLeast(512)
-                val targetThreads = config.threads.coerceIn(1, 4)
+                val targetContext = minOf(config.contextLength, 8192).coerceAtLeast(512)
+                val targetThreads = config.threads.coerceIn(1, Runtime.getRuntime().availableProcessors().coerceAtMost(8))
                 val loaded = LlamaCppNativeBridge.nativeLoadModel(
                     file.absolutePath, targetContext, targetThreads, config.gpuLayers.coerceAtLeast(0)
                 )
@@ -87,7 +87,7 @@ class LlamaCppEngine : InferenceEngine {
                 val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
                 pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "agentx:inference_wakelock")?.apply {
                     setReferenceCounted(false)
-                    acquire(15 * 60 * 1000L)
+                    acquire(10 * 60 * 1000L) // 10 minutes max generation safeguard
                 }
             } catch (_: Throwable) { null }
         }
@@ -106,7 +106,7 @@ class LlamaCppEngine : InferenceEngine {
                         systemPrompt = request.systemPrompt,
                         userPrompt = request.prompt,
                         imageBytes = imageBytes,
-                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        maxTokens = request.maxTokens.coerceIn(1, 8192),
                         temperature = request.temperature.coerceIn(0f, 2f),
                         topP = request.topP.coerceIn(0.01f, 1.0f),
                         topK = request.topK.coerceAtLeast(1),
@@ -130,7 +130,7 @@ class LlamaCppEngine : InferenceEngine {
                         contextHandle = nativeHandle,
                         systemPrompt = request.systemPrompt,
                         userPrompt = request.prompt,
-                        maxTokens = request.maxTokens.coerceIn(1, 4096),
+                        maxTokens = request.maxTokens.coerceIn(1, 8192),
                         temperature = request.temperature.coerceIn(0f, 2f),
                         topP = request.topP.coerceIn(0.01f, 1.0f),
                         topK = request.topK.coerceAtLeast(1),

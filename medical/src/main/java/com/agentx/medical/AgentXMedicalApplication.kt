@@ -81,6 +81,12 @@ class AgentXMedicalApplication : Application() {
 
     // ─── Phase 5 & 6: Agent Runtime & Collaboration ──────────────────────────
 
+    lateinit var otaRegistry: com.agentx.core.ota.OtaComponentRegistry
+        private set
+
+    lateinit var otaUpdateManager: com.agentx.core.ota.OtaUpdateManager
+        private set
+
     lateinit var toolRegistry: ToolRegistry
         private set
 
@@ -97,6 +103,30 @@ class AgentXMedicalApplication : Application() {
         super.onCreate()
 
         // Infrastructure
+        val otaDir = File(filesDir, "ota_components")
+        otaRegistry = com.agentx.core.ota.OtaComponentRegistry(otaDir)
+        otaUpdateManager = com.agentx.core.ota.OtaUpdateManager(
+            registry = otaRegistry,
+            currentAppVersionCode = 100
+        )
+        otaUpdateManager.defaultManifestUrl = "http://127.0.0.1:8080/ota/manifest.json"
+
+        // Live Hot-Reload Listeners for Medical Intelligence & Guidelines
+        otaUpdateManager.addHotReloadListener(com.agentx.core.ota.ComponentType.INTELLIGENCE_PACK) { comp ->
+            com.agentx.medical.intelligence.DynamicMedicalKnowledgeManager.loadFromComponent(comp)
+        }
+        otaUpdateManager.addHotReloadListener(com.agentx.core.ota.ComponentType.CLINICAL_GUIDELINES) { comp ->
+            com.agentx.medical.intelligence.DynamicMedicalKnowledgeManager.loadFromComponent(comp)
+        }
+
+        // Initialize active pack from disk if already installed
+        otaRegistry.getInstalled("medical-intelligence-pack")?.let { comp ->
+            com.agentx.medical.intelligence.DynamicMedicalKnowledgeManager.loadFromComponent(comp)
+        }
+
+        // Start background auto-update periodic check
+        otaUpdateManager.startPeriodicCheck()
+
         database = AgentXMedicalDatabase.getInstance(this)
         modelFileManager = ModelFileManager(this)
         huggingFaceDownloader = HuggingFaceDownloader(this, modelFileManager)

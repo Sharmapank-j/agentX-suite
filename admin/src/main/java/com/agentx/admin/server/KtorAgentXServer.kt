@@ -27,16 +27,23 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.request.uri
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondFile
 import io.ktor.server.response.respondText
 import io.ktor.server.response.respondTextWriter
+import com.agentx.core.ota.ComponentManifest
+import com.agentx.core.ota.ComponentType
+import com.agentx.core.ota.OtaManifest
 import io.ktor.server.routing.get
 import io.ktor.server.routing.options
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
@@ -66,7 +73,8 @@ class KtorAgentXServer(
     val localEngine: LocalModelServerEngine,
     val thermalManager: ThermalBatteryManager? = null,
     val tlsManager: LocalTlsManager? = null,
-    val tunnelManager: TunnelManager? = null
+    val tunnelManager: TunnelManager? = null,
+    val otaRegistry: com.agentx.core.ota.OtaComponentRegistry? = null
 ) {
     private var engine: ApplicationEngine? = null
     private var servingMode: ServingMode = ServingMode.LOCAL_MODEL
@@ -83,6 +91,20 @@ class KtorAgentXServer(
         )
     )
     val telemetry: StateFlow<ServerTelemetry> = _telemetry.asStateFlow()
+
+    init {
+        tunnelManager?.let { tm ->
+            CoroutineScope(Dispatchers.IO + Job()).launch {
+                tm.config.collect { tunCfg ->
+                    val isTunnel = tunCfg.isEnabled && tunCfg.status == com.agentx.admin.models.TunnelStatus.CONNECTED
+                    _telemetry.value = _telemetry.value.copy(
+                        isTunnelActive = isTunnel,
+                        tunnelUrl = tunCfg.publicUrl
+                    )
+                }
+            }
+        }
+    }
 
     fun getServingMode(): ServingMode = servingMode
 
@@ -185,6 +207,7 @@ class KtorAgentXServer(
             allowHeader(HttpHeaders.Accept)
             allowHeader("X-API-Key")
             allowHeader("X-Forwarded-For")
+            maxAgeInSeconds = 3600
             anyHost()
         }
         install(ContentNegotiation) {
@@ -201,16 +224,16 @@ class KtorAgentXServer(
                 call.respond(HttpStatusCode.OK)
             }
 
-            // Web Chat Client
-            get("/") {
-                call.respondText(EmbeddedWebChatClient.HTML, ContentType.Text.Html)
-            }
-            get("/index.html") {
-                call.respondText(EmbeddedWebChatClient.HTML, ContentType.Text.Html)
-            }
-            get("/chat") {
-                call.respondText(EmbeddedWebChatClient.HTML, ContentType.Text.Html)
-            }
+            // Web Chat Client (OTA Hot-Reloadable)
+            get("/") { serveWebChatClient(this) }
+            get("/index.html") { serveWebChatClient(this) }
+            get("/chat") { serveWebChatClient(this) }
+
+            // OTA Component Distribution Hub
+            get("/ota/manifest") { handleOtaManifest(this) }
+            get("/ota/manifest.json") { handleOtaManifest(this) }
+            get("/ota/download/{componentId}") { handleOtaDownload(this) }
+            post("/ota/publish") { handleOtaPublish(this) }
 
             // Health & Telemetry
             get("/health") { handleHealth(this) }
@@ -390,6 +413,16 @@ class KtorAgentXServer(
 
     private suspend fun handleModelLoad(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
+        val clientIp = call.request.header("X-Forwarded-For") ?: "127.0.0.1"
+        val authHeader = call.request.header(HttpHeaders.Authorization) ?: call.request.header("X-API-Key")
+        if (!clientManager.isKeyValid(authHeader, clientIp)) {
+            call.respondText(
+                "{\"error\":{\"message\":\"Unauthorized. Invalid or missing Bearer API key.\",\"type\":\"invalid_request_error\",\"code\":\"unauthorized\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.Unauthorized
+            )
+            return
+        }
         val body = try { call.receiveText() } catch (e: Exception) { "" }
         val modelId = try {
             val json = Json.parseToJsonElement(body).jsonObject
@@ -423,6 +456,16 @@ class KtorAgentXServer(
 
     private suspend fun handleModelUnload(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
         val call = pipelineContext.call
+        val clientIp = call.request.header("X-Forwarded-For") ?: "127.0.0.1"
+        val authHeader = call.request.header(HttpHeaders.Authorization) ?: call.request.header("X-API-Key")
+        if (!clientManager.isKeyValid(authHeader, clientIp)) {
+            call.respondText(
+                "{\"error\":{\"message\":\"Unauthorized. Invalid or missing Bearer API key.\",\"type\":\"invalid_request_error\",\"code\":\"unauthorized\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.Unauthorized
+            )
+            return
+        }
         unloadLocalModel()
         call.respondText(
             "{\"status\":\"unloaded\",\"activeModel\":\"None\"}",
@@ -438,7 +481,7 @@ class KtorAgentXServer(
         // 1. Zero-Trust API Key Validation (Support Authorization & X-API-Key with ecosystem pairing)
         val authHeader = call.request.header(HttpHeaders.Authorization)
             ?: call.request.header("X-API-Key")
-        if (!clientManager.isKeyValid(authHeader)) {
+        if (!clientManager.isKeyValid(authHeader, clientIp)) {
             clientManager.logTraffic(clientIp, "POST", "/v1/chat/completions", 401, System.currentTimeMillis() - startTime, 0)
             call.respondText(
                 "{\"error\":{\"message\":\"Unauthorized. Invalid or missing Bearer API key.\",\"type\":\"invalid_request_error\",\"code\":\"unauthorized\"}}",
@@ -463,7 +506,7 @@ class KtorAgentXServer(
 
         val modelRequested = json["model"]?.jsonPrimitive?.content ?: localEngine.activeModel.id
         val stream = json["stream"]?.jsonPrimitive?.booleanOrNull ?: true
-        val maxTokens = json["max_tokens"]?.jsonPrimitive?.intOrNull ?: 1024
+        val maxTokens = json["max_tokens"]?.jsonPrimitive?.intOrNull ?: 2048
         val messages = json["messages"]?.jsonArray
 
         val promptBuilder = StringBuilder()
@@ -504,6 +547,22 @@ class KtorAgentXServer(
         }
 
         val useLocal = (isLocalMode || isHybrid) && localEngine.status == LocalModelStatus.LOADED && (requestImageBase64 == null || localEngine.activeModel.supportsVision)
+        val useCloud = !useLocal && (isCloudMode || isHybrid) && cloudGateway.isConfigured
+
+        // No backend available — return a clear HTTP 503 before opening SSE writer
+        if (!useLocal && !useCloud) {
+            val errorReason = when {
+                isLocalMode -> "Local model is not loaded. Use POST /v1/models/load to load a GGUF model first."
+                isCloudMode -> "Cloud gateway is not configured. Add a Gemini API key in AgentX Serve settings."
+                else -> "No inference backend is available. Load a local model or configure the cloud gateway."
+            }
+            call.respondText(
+                "{\"error\":{\"message\":\"$errorReason\",\"type\":\"server_error\",\"code\":\"no_inference_backend\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.ServiceUnavailable
+            )
+            return
+        }
 
         val completionId = "chatcmpl-${UUID.randomUUID()}"
         val createdEpoch = System.currentTimeMillis() / 1000
@@ -553,7 +612,11 @@ class KtorAgentXServer(
                             totalTokensEmitted++
                         }
                     } else {
-                        throw e
+                        // Emit a machine-readable SSE error so the client receives a failure signal
+                        // instead of an abrupt silent stream end.
+                        val errMsg = e.message?.replace("\"", "'") ?: "Inference engine error"
+                        writer.write("data: {\"error\":{\"message\":\"$errMsg\",\"type\":\"server_error\",\"code\":\"inference_error\"}}\n\n")
+                        writer.flush()
                     }
                 }
 
@@ -578,10 +641,24 @@ class KtorAgentXServer(
                     cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
                 }
             } catch (e: Exception) {
-                if (isHybrid && useLocal) {
-                    cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
+                if (isHybrid && useLocal && useCloud) {
+                    try {
+                        cloudGateway.generateChatCompletion(prompt, systemPrompt, maxTokens = maxTokens)
+                    } catch (fallbackEx: Exception) {
+                        call.respondText(
+                            "{\"error\":{\"message\":\"Hybrid fallback also failed: ${fallbackEx.message?.replace("\"", "'") ?: "unknown"}\",\"type\":\"server_error\"}}",
+                            ContentType.Application.Json,
+                            HttpStatusCode.InternalServerError
+                        )
+                        return
+                    }
                 } else {
-                    throw e
+                    call.respondText(
+                        "{\"error\":{\"message\":\"${e.message?.replace("\"", "'") ?: "Inference engine error"}\",\"type\":\"server_error\",\"code\":\"inference_error\"}}",
+                        ContentType.Application.Json,
+                        HttpStatusCode.InternalServerError
+                    )
+                    return
                 }
             }
 
@@ -677,6 +754,148 @@ class KtorAgentXServer(
             ContentType.Application.Json,
             HttpStatusCode.NotImplemented
         )
+    }
+
+    private suspend fun serveWebChatClient(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        val dynamicHtmlFile = otaRegistry?.getActiveFile("web-chat-client")
+        if (dynamicHtmlFile != null && dynamicHtmlFile.exists() && dynamicHtmlFile.length() > 0) {
+            call.respondFile(dynamicHtmlFile)
+        } else {
+            call.respondText(EmbeddedWebChatClient.HTML, ContentType.Text.Html)
+        }
+    }
+
+    private suspend fun handleOtaManifest(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        val port = _telemetry.value.port
+        val baseUrl = if (tunnelManager?.config?.value?.isEnabled == true && !tunnelManager.config.value.publicUrl.isNullOrBlank()) {
+            tunnelManager.config.value.publicUrl!!.trimEnd('/')
+        } else {
+            "http://${getLocalIpAddress()}:$port"
+        }
+
+        val dynamicComponents = otaRegistry?.listInstalled()?.map { comp ->
+            ComponentManifest(
+                id = comp.id,
+                name = comp.name,
+                type = comp.type,
+                version = comp.version,
+                versionCode = comp.versionCode,
+                downloadUrl = "$baseUrl/ota/download/${comp.id}",
+                sha256 = comp.sha256,
+                sizeBytes = comp.sizeBytes,
+                metadata = comp.metadata
+            )
+        } ?: emptyList()
+
+        // Default built-in medical intelligence pack component entry if not already dynamic
+        val allComponents = if (dynamicComponents.none { it.id == "medical-intelligence-pack" }) {
+            listOf(
+                ComponentManifest(
+                    id = "medical-intelligence-pack",
+                    name = "MediMind Clinical Guidelines & Triage Pack",
+                    type = ComponentType.INTELLIGENCE_PACK,
+                    version = "1.1.0",
+                    versionCode = 10100,
+                    downloadUrl = "$baseUrl/ota/download/medical-intelligence-pack",
+                    sha256 = "c24fa191b72e9a7e6bdf20bfa4a6d4eeef75304cb310577be1c6e11894d07936",
+                    sizeBytes = 4096L,
+                    releaseNotes = "2026 Emergency Resuscitation and Clinical Triage Guidelines update",
+                    metadata = mapOf("disciplines" to "21", "triageLevels" to "3")
+                )
+            ) + dynamicComponents
+        } else {
+            dynamicComponents
+        }
+
+        val manifest = OtaManifest(
+            manifestVersion = 1,
+            publishedAtEpochMs = System.currentTimeMillis(),
+            serverVersion = "1.0.0",
+            components = allComponents
+        )
+
+        val jsonStr = Json.encodeToString(OtaManifest.serializer(), manifest)
+        call.respondText(jsonStr, ContentType.Application.Json)
+    }
+
+    private suspend fun handleOtaDownload(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        val compId = call.parameters["componentId"] ?: ""
+        if (compId.isBlank()) {
+            call.respondText("{\"error\":\"Missing component ID\"}", ContentType.Application.Json, HttpStatusCode.BadRequest)
+            return
+        }
+
+        val file = otaRegistry?.getActiveFile(compId)
+        if (file != null && file.exists() && file.isFile) {
+            call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"${file.name}\"")
+            call.respondFile(file)
+            return
+        }
+
+        // Built-in component fallback for "medical-intelligence-pack"
+        if (compId == "medical-intelligence-pack") {
+            val defaultPackJson = """
+            {
+              "packId": "medical-intelligence-pack",
+              "version": "1.1.0",
+              "releaseDate": "2026-11-18",
+              "additionalEntities": [
+                "scombroid", "ciguatera", "serotonin syndrome", "neuroleptic malignant syndrome", "pheochromocytoma", "myasthenia gravis"
+              ],
+              "additionalKeywords": {
+                "Toxicology & Poisoning": ["scombroid", "ciguatera", "anticholinergic toxidrome", "sympathomimetic toxidrome", "organophosphate"]
+              },
+              "updatedGuidelineDirectives": {
+                "TOXICOLOGY": "EMERGENCY TOXICOLOGY PROTOCOL 2026: Immediate airway protection, early ECG rhythm monitoring, rapid toxidrome recognition, and targeted antidote delivery."
+              },
+              "additionalCalculators": [
+                {
+                  "id": "qsofa",
+                  "name": "quick SOFA (qSOFA)",
+                  "description": "Bedside risk assessment for suspected sepsis outside ICU",
+                  "formulaDescription": "1 pt each: RR >= 22/min, Altered mentation (GCS < 15), SBP <= 100 mmHg",
+                  "clinicalInterpretation": "Score >= 2 suggests high risk of in-hospital mortality and warrants urgent sepsis workup."
+                }
+              ]
+            }
+            """.trimIndent()
+            call.response.header(HttpHeaders.ContentDisposition, "attachment; filename=\"medical_intelligence_pack.json\"")
+            call.respondText(defaultPackJson, ContentType.Application.Json)
+            return
+        }
+
+        call.respondText("{\"error\":\"Component '$compId' not found\"}", ContentType.Application.Json, HttpStatusCode.NotFound)
+    }
+
+    private suspend fun handleOtaPublish(pipelineContext: io.ktor.util.pipeline.PipelineContext<Unit, io.ktor.server.application.ApplicationCall>) {
+        val call = pipelineContext.call
+        val clientIp = call.request.header("X-Forwarded-For") ?: "127.0.0.1"
+        val authHeader = call.request.header(HttpHeaders.Authorization) ?: call.request.header("X-API-Key")
+        if (!clientManager.isKeyValid(authHeader, clientIp)) {
+            call.respondText(
+                "{\"error\":{\"message\":\"Unauthorized. Invalid or missing Bearer API key.\",\"type\":\"invalid_request_error\",\"code\":\"unauthorized\"}}",
+                ContentType.Application.Json,
+                HttpStatusCode.Unauthorized
+            )
+            return
+        }
+        val body = call.receiveText()
+        try {
+            val manifest = Json.decodeFromString<ComponentManifest>(body)
+            call.respondText(
+                "{\"status\":\"published\",\"componentId\":\"${manifest.id}\",\"version\":\"${manifest.version}\"}",
+                ContentType.Application.Json
+            )
+        } catch (e: Exception) {
+            call.respondText(
+                "{\"error\":\"Failed to parse component manifest: ${e.message}\"}",
+                ContentType.Application.Json,
+                HttpStatusCode.BadRequest
+            )
+        }
     }
 
     private fun getLocalIpAddress(): String {

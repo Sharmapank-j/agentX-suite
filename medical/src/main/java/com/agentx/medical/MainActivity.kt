@@ -33,7 +33,8 @@ class MainActivity : ComponentActivity() {
                         app.modelRepository,
                         app.inferenceEngine,
                         app.clinicalSupervisor,
-                        app.executionQueue
+                        app.executionQueue,
+                        app.preferencesManager
                     ) as T
                 }
             }
@@ -81,7 +82,8 @@ class MainActivity : ComponentActivity() {
                         app.executionRepository,
                         app.executionQueue,
                         app.hybridInferenceEngine,
-                        preferencesManager = app.preferencesManager
+                        preferencesManager = app.preferencesManager,
+                        otaUpdateManager = app.otaUpdateManager
                     ) as T
                 }
             }

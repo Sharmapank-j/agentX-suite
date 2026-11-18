@@ -295,7 +295,7 @@ class LocalModelServerEngine(
                     prompt = prompt,
                     systemPrompt = systemPrompt,
                     temperature = temperature,
-                    maxTokens = maxTokens.coerceIn(1, 4096),
+                    maxTokens = maxTokens.coerceIn(1, 8192),
                     imageBase64 = imageBase64
                 )
             ).collect { event ->

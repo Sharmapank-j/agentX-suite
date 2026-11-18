@@ -1,7 +1,7 @@
-# AgentX Suite v1.0.0 — Production AI Ecosystem for Android
+# AgentX Suite v1.1.0 — Production AI Ecosystem for Android
 
 [![Android CI](https://github.com/Sharmapank-j/agentX-suite/actions/workflows/android-ci.yml/badge.svg)](https://github.com/Sharmapank-j/agentX-suite/actions/workflows/android-ci.yml)
-[![Version](https://img.shields.io/badge/version-v1.0.0-00E5FF.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v1.1.0-00E5FF.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Architecture](https://img.shields.io/badge/architecture-Multi--Module%20Kotlin-8E24AA.svg)](docs/ARCHITECTURE.md)
 [![Security](https://img.shields.io/badge/security-Keystore%20AES--256--GCM-00C853.svg)](docs/SECURITY.md)
@@ -15,8 +15,32 @@
 | Application | Role & Package ID | Key Capabilities |
 | :--- | :--- | :--- |
 | **AgentX** | Flagship AI Assistant<br>`com.agentx` | • Dynamic local GGUF model hub & safe hot-swapping<br>• Multimodal vision engine (text + image reasoning)<br>• Multi-agent workflows & extensible tool calling<br>• Hardware profiler (TTFT, token/s, RAM PSS, thermals)<br>• Dynamic M3 Cyber Obsidian / Cyber Light UI |
-| **AgentX Medical** | Clinical AI Suite<br>`com.agentx.medical.debug` | • HIPAA-compliant offline-first clinical education<br>• Deterministic calculators (CHA2DS2-VASc, Wells, eGFR, MAP)<br>• Structured multi-agent clinical supervisor & diagnostic reasoning<br>• Non-diagnostic clinical safety disclaimers<br>• M3 Clinical Obsidian / Clinical Light UI |
-| **AgentX Serve** | On-Device Inference Server<br>`com.agentx.admin.debug` | • Embedded Ktor OpenAI-compatible REST server (`:8080`)<br>• Multimodal local vision serving via `/v1/chat/completions`<br>• Active reverse-proxy tunnel client (Pinggy SSH, Cloudflare, ngrok)<br>• WebRTC P2P direct zero-relay DataChannel streaming<br>• M3 Server Obsidian / Server Light UI |
+| **AgentX Medical** | Clinical AI Suite<br>`com.agentx.medical.debug` | • HIPAA-compliant offline-first clinical intelligence & education<br>• 21 medical specialties & 20+ query intents with dynamic prompt matrix (5 styles × 5 depths)<br>• Modular Component OTA updates for hot-patching clinical guidelines & formulas<br>• Deterministic calculators (CHA2DS2-VASc, Wells, eGFR, MAP, qSOFA)<br>• M3 Clinical Obsidian / Clinical Light UI |
+| **AgentX Serve** | Universal Edge AI Server<br>`com.agentx.admin.debug` | • Embedded Ktor OpenAI-compatible REST server (`:8080`)<br>• Universal Cross-Network Serving (any device, 4G/5G/Wi-Fi across CGNAT)<br>• In-App SSH reverse-tunnel broker with ephemeral RSA key generation & window draining<br>• OTA Component Distribution Hub (`/ota/manifest.json`, `/ota/download/{id}`)<br>• Embedded responsive Web Chat Client & M3 Cyber HUD UI |
+
+---
+
+## Key Platform Innovations in v1.1.0
+
+### 1. Universal Cross-Network Serving (AgentX Serve)
+- **Universal Multi-Network Access**: Serve AI models to any device anywhere (cellular 4G/5G, foreign Wi-Fi, or corporate networks) bypassing carrier-grade NATs (CGNAT) without router port-forwarding.
+- **Embedded Reverse SSH Tunneling**: In-app JSch tunnel engine auto-negotiating port 443 SSL failover (`a.pinggy.io:443`) with ephemeral in-memory 2048-bit RSA keypairs.
+- **Background IO Window Draining**: Dedicated coroutine stream draining preventing SSH channel window exhaustion and eliminating connection freeze.
+- **Zero-Trust Token Security**: IP-aware bearer authorization. Public WAN access using static developer keys is strictly rejected while allowing private LAN/loopback testing.
+
+### 2. Medical Intelligence Engine (AgentX Medical Phase 1)
+- **21 Clinical Disciplines**: Specialized prompt directives and keyword mappings covering Cardiology, Pulmonology, Endocrinology, Nephrology, Surgery, Pediatrics, and more.
+- **20+ Clinical Query Intents**: Structured clinical management, differential diagnosis, pharmacotherapy, resuscitation algorithms, and diagnostic evaluations.
+- **25 Matrix Generation Matrix**: Harmonization of 5 User Response Styles (Medical Student, Clinical Professional, Advanced, Research, Viva) with 5 Conversation Answer Depths (Brief, Standard, Detailed, Advanced, Expert).
+- **Word-Boundary Safe Classifier**: Regex-bounded entity extraction and intent prioritization preventing keyword collisions.
+- **Emergency ABCDE Triage Overrides**: Critical emergency alerts prepending resuscitation protocols for time-critical conditions.
+
+### 3. Modular Component-Level OTA Updates
+- **Hot-Patching Without APK Reinstalls**: Update medical intelligence packs, clinical guidelines, model weights, prompt templates, and web assets independently.
+- **Cryptographic Verification**: Streaming SHA-256 integrity validation and directory traversal prevention.
+- **Atomic Local Registry & Rollback**: Sandboxed version directories with 1-click rollback to compiled built-ins.
+- **Live In-Memory Hot-Reloading**: `DynamicMedicalKnowledgeManager` hot-reloads clinical guidelines and entity dictionaries in-memory immediately upon download.
+- **OTA Distribution Hub**: AgentX Serve exposes `/ota/manifest.json` and `/ota/download/{id}` for ecosystem client devices.
 
 ---
 

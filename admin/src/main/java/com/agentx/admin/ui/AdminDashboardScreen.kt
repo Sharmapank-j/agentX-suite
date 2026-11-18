@@ -157,6 +157,7 @@ fun AdminDashboardScreen(
     }
 
     val serverUrl = "http://${state.telemetry.ipAddress}:${state.telemetry.port}"
+    val globalUrl = state.tunnelConfig.publicUrl?.takeIf { state.tunnelConfig.isEnabled && it.isNotBlank() }
 
     val infiniteTransition = rememberInfiniteTransition(label = "serverPulse")
     val beaconAlpha by infiniteTransition.animateFloat(
@@ -242,6 +243,14 @@ fun AdminDashboardScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = if (state.telemetry.isRunning) MatrixGreenBright else ServerTextSecondary
                             )
+                            if (state.telemetry.isRunning && globalUrl != null) {
+                                Text(
+                                    "🌍 Universal Serving Active (Any Network / 4G / 5G / Wi-Fi)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF67E8F9)
+                                )
+                            }
                             Text(
                                 if (state.telemetry.isRunning) serverUrl else "Tap Start to host endpoints",
                                 fontFamily = FontFamily.Monospace,
@@ -268,6 +277,106 @@ fun AdminDashboardScreen(
 
                     if (state.telemetry.isRunning) {
                         Spacer(modifier = Modifier.height(10.dp))
+
+                        // SECTION A: Global Public WAN (Universal Serving)
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (globalUrl != null) Color(0xFF064E3B).copy(alpha = 0.25f) else ServerGlass,
+                            border = BorderStroke(1.dp, if (globalUrl != null) Color(0xFF10B981) else ServerBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("🌐", fontSize = 13.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            "GLOBAL PUBLIC WAN ENDPOINT",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (globalUrl != null) Color(0xFF67E8F9) else ServerTextSecondary
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = when (state.tunnelConfig.status) {
+                                            TunnelStatus.CONNECTED -> Color(0xFF10B981)
+                                            TunnelStatus.STARTING -> Color(0xFFF59E0B)
+                                            TunnelStatus.ERROR -> Color(0xFFEF4444)
+                                            TunnelStatus.STOPPED -> ServerBorder
+                                        }
+                                    ) {
+                                        Text(
+                                            if (state.tunnelConfig.status == TunnelStatus.CONNECTED) "ANY NETWORK" else state.tunnelConfig.status.label,
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                if (globalUrl != null) {
+                                    Text(
+                                        globalUrl,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF67E8F9)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { clipboard.setText(AnnotatedString(globalUrl)) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Copy Public WAN", fontSize = 10.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { clipboard.setText(AnnotatedString("$globalUrl/v1/chat/completions")) },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Copy /chat WAN", fontSize = 10.sp)
+                                        }
+                                    }
+                                } else if (state.tunnelConfig.status == TunnelStatus.STARTING) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFFF59E0B))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Allocating public HTTPS route for cellular & remote access...", fontSize = 11.sp, color = Color(0xFFF59E0B))
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Public route offline (LAN only)", fontSize = 11.sp, color = ServerTextSecondary)
+                                        TextButton(onClick = { viewModel.startTunnel(TunnelProvider.PINGGY) }) {
+                                            Text("Start Public Route", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MatrixGreenBright)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // SECTION B: Local LAN Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -276,28 +385,34 @@ fun AdminDashboardScreen(
                                 onClick = { clipboard.setText(AnnotatedString(serverUrl)) },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Copy Base URL", fontSize = 11.sp)
+                                Text("Copy Local LAN", fontSize = 10.sp)
                             }
                             OutlinedButton(
                                 onClick = { clipboard.setText(AnnotatedString("$serverUrl/v1/chat/completions")) },
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(13.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Copy Endpoint", fontSize = 11.sp)
+                                Text("Copy /chat LAN", fontSize = 10.sp)
                             }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
 
                         // Web Chat Client Access Button
+                        val webClientUrl = globalUrl ?: serverUrl
                         OutlinedButton(
-                            onClick = { clipboard.setText(AnnotatedString(serverUrl)) },
+                            onClick = { clipboard.setText(AnnotatedString(webClientUrl)) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("🌐 Open Web Chat Client ($serverUrl/) on any Laptop/TV", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (globalUrl != null) "🌐 Open Web Chat Client ($webClientUrl/) on Any Device Anywhere"
+                                else "🌐 Open Web Chat Client ($serverUrl/) on Local LAN",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

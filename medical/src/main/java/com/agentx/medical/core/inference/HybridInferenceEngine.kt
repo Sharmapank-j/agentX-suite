@@ -1,7 +1,8 @@
 package com.agentx.medical.core.inference
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
 
 enum class LocalBackendType {
     @Deprecated("Legacy alias, maps to LLAMA_CPP")
@@ -34,15 +35,11 @@ class HybridInferenceEngine(
         localEngine.loadModel(config)
     }
 
-    override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
-        when (inferenceMode) {
-            InferenceMode.LOCAL_ONLY -> {
-                localEngine.generate(request).collect { emit(it) }
-            }
-            InferenceMode.CLOUD_ONLY -> {
-                cloudEngine.generate(request).collect { emit(it) }
-            }
-            InferenceMode.HYBRID_AUTO -> {
+    override fun generate(request: InferenceRequest): Flow<GenerationEvent> {
+        return when (inferenceMode) {
+            InferenceMode.LOCAL_ONLY -> localEngine.generate(request)
+            InferenceMode.CLOUD_ONLY -> cloudEngine.generate(request)
+            InferenceMode.HYBRID_AUTO -> channelFlow {
                 val hasCloudKey = cloudEngine.config.provider == CloudProvider.CUSTOM_GATEWAY ||
                         cloudEngine.config.apiKeyFor(CloudProvider.GEMINI).isNotBlank()
 
@@ -55,33 +52,35 @@ class HybridInferenceEngine(
                             when (event) {
                                 is GenerationEvent.Token -> {
                                     hasEmittedCloudToken = true
-                                    emit(event)
+                                    send(event)
                                 }
                                 is GenerationEvent.Finished -> {
-                                    emit(event)
+                                    send(event)
                                 }
                                 is GenerationEvent.Error -> {
                                     if (!hasEmittedCloudToken) {
                                         cloudFailed = true
                                     } else {
-                                        emit(event)
+                                        send(event)
                                     }
                                 }
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         if (!hasEmittedCloudToken) {
                             cloudFailed = true
                         } else {
-                            emit(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
+                            send(GenerationEvent.Error(e, e.message ?: "Cloud generation failed"))
                         }
                     }
 
                     if (cloudFailed) {
-                        localEngine.generate(request).collect { emit(it) }
+                        localEngine.generate(request).collect { send(it) }
                     }
                 } else {
-                    localEngine.generate(request).collect { emit(it) }
+                    localEngine.generate(request).collect { send(it) }
                 }
             }
         }

@@ -17,7 +17,8 @@ class AgentXAdminServer(
     val localEngine: LocalModelServerEngine,
     val thermalManager: ThermalBatteryManager? = null,
     val tlsManager: LocalTlsManager? = null,
-    val tunnelManager: TunnelManager? = null
+    val tunnelManager: TunnelManager? = null,
+    val otaRegistry: com.agentx.core.ota.OtaComponentRegistry? = null
 ) {
     val ktorServer = KtorAgentXServer(
         clientManager = clientManager,
@@ -25,7 +26,8 @@ class AgentXAdminServer(
         localEngine = localEngine,
         thermalManager = thermalManager,
         tlsManager = tlsManager,
-        tunnelManager = tunnelManager
+        tunnelManager = tunnelManager,
+        otaRegistry = otaRegistry
     )
 
     val telemetry: StateFlow<ServerTelemetry>

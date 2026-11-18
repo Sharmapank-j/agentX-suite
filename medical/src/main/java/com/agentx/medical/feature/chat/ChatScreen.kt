@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -116,6 +117,11 @@ import com.agentx.medical.domain.models.Message
 import com.agentx.medical.domain.models.MessageRole
 import com.agentx.medical.domain.models.MessageStatus
 import com.agentx.medical.feature.chat.components.MarkdownText
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.ResponseStyle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Slider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -177,7 +183,7 @@ fun ChatScreen(
                 )
                 Surface(
                     onClick = {
-                        viewModel.createNewConversation()
+                        viewModel.startNewConversation()
                         scope.launch { drawerState.close() }
                     },
                     modifier = Modifier
@@ -289,6 +295,11 @@ fun ChatScreen(
                         }
                     },
                     actions = {
+                        // Quick Action: New Clinical Consult
+                        IconButton(onClick = { viewModel.startNewConversation() }) {
+                            Icon(Icons.Default.Add, contentDescription = "New Consultation", tint = ClinicalTealBright)
+                        }
+
                         // Model Pill Badge
                         val isLoadedPill = state.activeModel != null && (state.modelStatus.state == ModelLifecycleState.LOADED || state.modelStatus.state == ModelLifecycleState.GENERATING)
                         Surface(
@@ -327,6 +338,14 @@ fun ChatScreen(
                                 onDismissRequest = { showTopMenu = false }
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text("New Consult", color = ClinicalTealBright) },
+                                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = ClinicalTealBright) },
+                                    onClick = {
+                                        showTopMenu = false
+                                        viewModel.startNewConversation()
+                                    }
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Reasoning Monitor") },
                                     leadingIcon = { Icon(Icons.Default.Psychology, contentDescription = null) },
                                     onClick = {
@@ -352,8 +371,8 @@ fun ChatScreen(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Clear Messages") },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    text = { Text("Clear Messages", color = Color(0xFFFF5252)) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
                                     onClick = {
                                         showTopMenu = false
                                         viewModel.clearCurrentConversation()
@@ -421,18 +440,24 @@ fun ChatScreen(
                             onTextChanged = viewModel::onInputTextChanged,
                             onSend = viewModel::sendMessage,
                             onStop = viewModel::stopGeneration,
-                            isStreaming = state.isStreaming
+                            isStreaming = state.isStreaming,
+                            currentStyle = state.currentResponseStyle,
+                            currentDepth = state.currentAnswerDepth,
+                            onStyleSelected = viewModel::updateCurrentConversationStyle,
+                            onDepthSelected = viewModel::updateCurrentConversationDepth
                         )
                     }
                 }
             },
+            contentWindowInsets = WindowInsets(0),
             containerColor = MedicalVoid,
             modifier = modifier
         ) { paddingValues ->
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
+                    .padding(paddingValues)
+                    .imePadding(),
                 contentAlignment = Alignment.TopCenter
             ) {
                 val isWideScreen = maxWidth >= 640.dp
@@ -450,6 +475,8 @@ fun ChatScreen(
                         EmptyMedicalChatPlaceholder(
                             activeModel = state.activeModel,
                             modelStatus = state.modelStatus,
+                            currentStyle = state.currentResponseStyle,
+                            currentDepth = state.currentAnswerDepth,
                             onQuickPrompt = { prompt -> viewModel.onInputTextChanged(prompt) },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -854,7 +881,7 @@ fun ChatMessageItem(
             ),
             modifier = Modifier.fillMaxWidth(if (isUser) 0.88f else 0.94f)
         ) {
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 if (isUser) {
                     Text(
                         text = message.content,
@@ -863,70 +890,199 @@ fun ChatMessageItem(
                         lineHeight = 23.sp
                     )
                 } else {
-                    MarkdownText(
-                        markdown = message.content,
-                        textColor = ClinicalTextPrimary
-                    )
+                    Column {
+                        val rawContent = message.content
+                        val hasThinking = rawContent.contains("<think>")
+                        val thinkingText = if (hasThinking) {
+                            val afterThink = rawContent.substringAfter("<think>")
+                            if (afterThink.contains("</think>")) {
+                                afterThink.substringBefore("</think>").trim()
+                            } else {
+                                afterThink.trim()
+                            }
+                        } else null
+
+                        val mainContent = if (hasThinking) {
+                            if (rawContent.contains("</think>")) {
+                                rawContent.substringAfter("</think>").trim()
+                            } else {
+                                ""
+                            }
+                        } else {
+                            rawContent
+                        }
+
+                        if (!thinkingText.isNullOrBlank()) {
+                            ClinicalReasoningCard(
+                                thinkingText = thinkingText,
+                                isStreaming = message.status == MessageStatus.STREAMING && !rawContent.contains("</think>")
+                            )
+                        }
+
+                        if (mainContent.isNotBlank()) {
+                            MarkdownText(
+                                markdown = mainContent,
+                                textColor = ClinicalTextPrimary
+                            )
+                        } else if (message.status == MessageStatus.STREAMING && rawContent.contains("</think>")) {
+                            StreamingIndicator("MediMind")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Inline Discreet Footer Actions Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isUser) Arrangement.End else Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!isUser) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(message.content))
+                                    isCopied = true
+                                },
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                    contentDescription = "Copy text",
+                                    tint = if (isCopied) BioEmerald else ClinicalTextMuted,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            if (!isStreamingActive) {
+                                Spacer(modifier = Modifier.width(2.dp))
+                                IconButton(
+                                    onClick = onRegenerate,
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Regenerate",
+                                        tint = ClinicalTextMuted,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(2.dp))
+                            IconButton(
+                                onClick = onDelete,
+                                modifier = Modifier.size(22.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = ClinicalTextMuted.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(message.content))
+                                isCopied = true
+                            },
+                            modifier = Modifier.size(18.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                contentDescription = "Copy text",
+                                tint = if (isCopied) BioEmerald else ClinicalTextMuted.copy(alpha = 0.6f),
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+
+                    if (isCopied) {
+                        Text(
+                            text = "Copied",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = BioEmerald,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
+    }
+}
 
-        // Message Action Toolbar
-        Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = {
-                    clipboardManager.setText(AnnotatedString(message.content))
-                    isCopied = true
-                },
-                modifier = Modifier.size(28.dp)
+@Composable
+fun ClinicalReasoningCard(
+    thinkingText: String,
+    isStreaming: Boolean
+) {
+    var isExpanded by remember { mutableStateOf(isStreaming) }
+
+    LaunchedEffect(isStreaming) {
+        if (isStreaming) isExpanded = true
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF021722),
+        border = androidx.compose.foundation.BorderStroke(1.dp, ClinicalTealBright.copy(alpha = 0.35f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clickable { isExpanded = !isExpanded }
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
-                    contentDescription = "Copy text",
-                    tint = if (isCopied) BioEmerald else ClinicalTextMuted,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-
-            if (isCopied) {
-                Text(
-                    text = "Copied",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 10.sp,
-                    color = BioEmerald,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-            }
-
-            if (!isUser) {
-                IconButton(
-                    onClick = onRegenerate,
-                    enabled = !isStreamingActive,
-                    modifier = Modifier.size(28.dp)
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(ClinicalTealBright.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Regenerate",
-                        tint = if (!isStreamingActive) ClinicalTextMuted else ClinicalTextMuted.copy(alpha = 0.3f),
-                        modifier = Modifier.size(14.dp)
+                    Text("🧠", fontSize = 11.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isStreaming) "Clinical Diagnostic Reasoning..." else "Clinical Diagnostic Reasoning",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ClinicalTealBright,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isStreaming) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = ClinicalTealBright
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = ClinicalTealBright.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    Text(
+                        text = thinkingText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            color = ClinicalTextSecondary
+                        )
                     )
                 }
-            }
-
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = ClinicalTextMuted,
-                    modifier = Modifier.size(14.dp)
-                )
             }
         }
     }
@@ -966,16 +1122,88 @@ fun ChatInputBar(
     onTextChanged: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    isStreaming: Boolean
+    isStreaming: Boolean,
+    currentStyle: ResponseStyle = ResponseStyle.DEFAULT,
+    currentDepth: AnswerDepth = AnswerDepth.DEFAULT,
+    onStyleSelected: (ResponseStyle) -> Unit = {},
+    onDepthSelected: (AnswerDepth) -> Unit = {}
 ) {
-    Surface(
-        color = MedicalVoid,
+    var showStyleDialog by remember { mutableStateOf(false) }
+    var showDepthDialog by remember { mutableStateOf(false) }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
+        // Clinical Intelligence Control Bar: Response Style & Answer Depth
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Style Selector Pill
+            Surface(
+                onClick = { showStyleDialog = true },
+                shape = RoundedCornerShape(16.dp),
+                color = MedicalSurfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🎓 Style: ${currentStyle.title}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ClinicalTealBright,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Change Style",
+                        tint = ClinicalTealBright.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // Depth Selector Pill
+            Surface(
+                onClick = { showDepthDialog = true },
+                shape = RoundedCornerShape(16.dp),
+                color = MedicalSurfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📊 Depth: ${currentDepth.title}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = BioEmerald,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Change Depth",
+                        tint = BioEmerald.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+
+        // Input Surface & Text Field
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(26.dp),
             color = MedicalSurfaceElevated,
             border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder),
             modifier = Modifier.fillMaxWidth()
@@ -983,14 +1211,13 @@ fun ChatInputBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Caduceus Tag
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFF042F2E),
-                    modifier = Modifier.padding(end = 6.dp)
+                    modifier = Modifier.padding(end = 4.dp)
                 ) {
                     Text(
                         text = "⚕ MediMind",
@@ -1058,6 +1285,164 @@ fun ChatInputBar(
             }
         }
     }
+
+    // Response Style Picker Dialog
+    if (showStyleDialog) {
+        AlertDialog(
+            onDismissRequest = { showStyleDialog = false },
+            title = {
+                Text(
+                    "Select Response Style",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ClinicalTextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ResponseStyle.entries.forEach { style ->
+                        val isSelected = style == currentStyle
+                        Surface(
+                            onClick = {
+                                onStyleSelected(style)
+                                showStyleDialog = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Color(0xFF063342) else MedicalSurfaceElevated,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) ClinicalTealBright else MedicalSurfaceBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = style.title,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) ClinicalTealBright else ClinicalTextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = ClinicalTealBright,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = style.shortDescription,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ClinicalTextSecondary,
+                                    fontSize = 11.5.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Audience: ${style.targetAudience}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = ClinicalTextMuted,
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStyleDialog = false }) {
+                    Text("Close", color = ClinicalTealBright)
+                }
+            },
+            containerColor = MedicalSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    // Answer Depth Picker Dialog
+    if (showDepthDialog) {
+        AlertDialog(
+            onDismissRequest = { showDepthDialog = false },
+            title = {
+                Text(
+                    "Select Answer Depth",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ClinicalTextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AnswerDepth.entries.forEach { depth ->
+                        val isSelected = depth == currentDepth
+                        Surface(
+                            onClick = {
+                                onDepthSelected(depth)
+                                showDepthDialog = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) Color(0xFF042F2E) else MedicalSurfaceElevated,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) BioEmerald else MedicalSurfaceBorder
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = depth.title,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) BioEmerald else ClinicalTextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFF063342)
+                                    ) {
+                                        Text(
+                                            text = "${depth.tokenBudget} tokens",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 10.sp,
+                                            color = ClinicalTealBright,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = BioEmerald,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = depth.shortDescription,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ClinicalTextSecondary,
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDepthDialog = false }) {
+                    Text("Close", color = ClinicalTealBright)
+                }
+            },
+            containerColor = MedicalSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1067,6 +1452,8 @@ fun ChatInputBar(
 private fun EmptyMedicalChatPlaceholder(
     activeModel: com.agentx.medical.domain.models.GGUFModel?,
     modelStatus: com.agentx.medical.core.inference.ModelStatus,
+    currentStyle: ResponseStyle = ResponseStyle.DEFAULT,
+    currentDepth: AnswerDepth = AnswerDepth.DEFAULT,
     onQuickPrompt: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -1117,7 +1504,7 @@ private fun EmptyMedicalChatPlaceholder(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
         Text(
             "AgentX Medical",
             style = MaterialTheme.typography.headlineSmall,
@@ -1131,35 +1518,100 @@ private fun EmptyMedicalChatPlaceholder(
             color = ClinicalTextSecondary
         )
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Open Spacious Clinical Suggestion Cards
+        // Medimind Status Badge
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF042F2E),
+            border = androidx.compose.foundation.BorderStroke(1.dp, ClinicalTealBright.copy(alpha = 0.4f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(if (modelStatus.state == ModelLifecycleState.LOADED) BioEmerald else ClinicalAlert)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "MediMind v2 • Q5_K_M • ${if (modelStatus.state == ModelLifecycleState.LOADED) "Engine Loaded" else "Ready"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = ClinicalTealBright,
+                    fontSize = 11.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Active Preference Badges
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MedicalSurfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
+            ) {
+                Text(
+                    "🎓 ${currentStyle.title}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ClinicalTextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MedicalSurfaceElevated,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
+            ) {
+                Text(
+                    "📊 ${currentDepth.title} (${currentDepth.tokenBudget}t)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = BioEmerald,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Open Spacious Clinical Suggestion Cards (Core Clinical Benchmarks)
         Column(
-            modifier = Modifier.fillMaxWidth(0.92f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxWidth(0.94f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val suggestions = listOf(
-                "📋 Review Clinical Guidelines" to "Summarize the latest evidence-based clinical guidelines for managing this condition.",
-                "💊 Check Drug Interactions" to "Analyze potential pharmacokinetic and pharmacodynamic interactions and contraindications.",
-                "🔬 Differential Diagnosis Reasoning" to "Provide structured differential diagnoses considering patient age and symptoms.",
-                "🩺 Laboratory & Biomarker Review" to "Interpret these lab values, abnormal flags, and relevant diagnostic indicators."
+                "🫁 Acute COPD Exacerbation Management" to "Detail the comprehensive stepped management of acute exacerbation of COPD with respiratory acidosis, including oxygen titration, bronchodilators, systemic steroids, antibiotics, and indications for non-invasive ventilation (NIV).",
+                "🩸 Diabetic Ketoacidosis (DKA) Protocol" to "Provide the acute resuscitation protocol for adult diabetic ketoacidosis (DKA): fluid resuscitation regimen, fixed-rate IV insulin infusion titration, potassium replacement thresholds, and criteria for resolution.",
+                "🩺 Acute Kidney Injury (AKI) Workup & Staging" to "Outline the KDIGO staging criteria, diagnostic workup, and acute management of Acute Kidney Injury with hyperkalemia.",
+                "👶 Postpartum Haemorrhage (PPH) Algorithm" to "Detail the emergency resuscitation and 4T stepwise pharmacological (oxytocin, ergometrine, carboprost, misoprostol) and mechanical management of primary postpartum haemorrhage.",
+                "🔪 Acute Appendicitis Clinical Workup" to "Explain the Alvarado scoring system, differential diagnosis by age/sex, and surgical workup for suspected acute appendicitis.",
+                "💊 ACE Inhibitors: Mechanisms & Adverse Effects" to "Explain the mechanism of action, hemodynamic renal effects, clinical indications, adverse effects (dry cough, angioedema), and contraindications of ACE inhibitors."
             )
             suggestions.forEach { (label, prompt) ->
                 Surface(
                     onClick = { onQuickPrompt(prompt) },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = MedicalSurfaceElevated,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MedicalSurfaceBorder)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = label,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = ClinicalTextPrimary,
                             modifier = Modifier.weight(1f)
@@ -1168,7 +1620,7 @@ private fun EmptyMedicalChatPlaceholder(
                             Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             tint = ClinicalTealBright.copy(alpha = 0.7f),
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }

@@ -70,7 +70,7 @@ class LlamaCppEngine : InferenceEngine {
                 val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
                 pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "agentx:medical_inference_wakelock")?.apply {
                     setReferenceCounted(false)
-                    acquire(15 * 60 * 1000L)
+                    acquire(10 * 60 * 1000L) // 10 minutes max generation safeguard
                 }
             } catch (_: Throwable) { null }
         }
@@ -91,17 +91,26 @@ class LlamaCppEngine : InferenceEngine {
                         if (cancelled.get()) {
                             false
                         } else {
-                            trySend(GenerationEvent.Token(token))
+                            val res = trySend(GenerationEvent.Token(token))
+                            if (res.isFailure) {
+                                android.util.Log.w("LlamaCppEngine", "trySend failed for token: '$token'")
+                            }
                             !cancelled.get()
                         }
                     }
                 )
             }
+            android.util.Log.i("LlamaCppEngine", "nativeGenerate returned count=$count, cancelled=${cancelled.get()}")
             if (count < 0) throw IllegalStateException("llama.cpp failed during prompt evaluation or token generation.")
-            if (!cancelled.get()) send(GenerationEvent.Finished(
-                count, 0, count, System.currentTimeMillis() - started
-            ))
+            if (!cancelled.get()) {
+                android.util.Log.i("LlamaCppEngine", "sending GenerationEvent.Finished")
+                send(GenerationEvent.Finished(
+                    count, 0, count, System.currentTimeMillis() - started
+                ))
+                android.util.Log.i("LlamaCppEngine", "GenerationEvent.Finished delivered")
+            }
         } catch (error: Throwable) {
+            android.util.Log.e("LlamaCppEngine", "Caught exception in LlamaCppEngine.generate", error)
             send(GenerationEvent.Error(error, error.message ?: "Native inference failed"))
         } finally {
             try {

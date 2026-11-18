@@ -39,7 +39,9 @@ data class Conversation(
     val updatedAt: Long = System.currentTimeMillis(),
     val activeAgentId: String? = null,
     val activeTeamId: String? = null,
-    val isPinned: Boolean = false
+    val isPinned: Boolean = false,
+    val responseStyle: String = "MEDICAL_STUDENT",
+    val answerDepth: String = "DETAILED"
 )
 
 @Serializable

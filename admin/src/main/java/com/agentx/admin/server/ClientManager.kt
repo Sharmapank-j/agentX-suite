@@ -160,13 +160,35 @@ class ClientManager(
         }
     }
 
-    fun isKeyValid(key: String?): Boolean {
+    fun isKeyValid(key: String?, clientIp: String? = null): Boolean {
         if (!isAuthEnforced) return true
-        if (key.isNullOrBlank()) return true // Allow seamless local LAN & ecosystem pairing by default
+        if (key.isNullOrBlank()) return false
         val cleanKey = key.removePrefix("Bearer ").removePrefix("bearer ").trim()
-        if (cleanKey.isBlank() || cleanKey == "ax-master-serve-key") return true // Master developer key fallback for local ecosystem pairing
-        val record = keyMap[cleanKey] ?: return true // Permissive ecosystem fallback so serve app seamlessly serves agentX app
+        if (cleanKey.isBlank()) return false
+
+        // Master developer key fallback: permitted ONLY for internal tests or loopback/private subnets.
+        // Public WAN requests using this static key are strictly rejected to prevent unauthorized access.
+        if (cleanKey == "ax-master-serve-key") {
+            if (clientIp == null) return true // Test or internal programmatic check
+            return isPrivateOrLoopbackIp(clientIp)
+        }
+
+        val record = keyMap[cleanKey] ?: return false
         return !record.isRevoked
+    }
+
+    private fun isPrivateOrLoopbackIp(ip: String): Boolean {
+        val trimmed = ip.trim()
+        if (trimmed == "127.0.0.1" || trimmed == "::1" || trimmed.equals("localhost", ignoreCase = true)) return true
+        if (trimmed.startsWith("192.168.") || trimmed.startsWith("10.")) return true
+        if (trimmed.startsWith("172.")) {
+            val parts = trimmed.split(".")
+            if (parts.size >= 2) {
+                val second = parts[1].toIntOrNull()
+                if (second != null && second in 16..31) return true
+            }
+        }
+        return false
     }
 
     fun recordClientActivity(ipAddress: String, tokens: Int, deviceName: String = "Client Device") {

@@ -41,7 +41,9 @@ data class ConversationEntity(
     @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "active_agent_id") val activeAgentId: String? = null,
     @ColumnInfo(name = "active_team_id") val activeTeamId: String? = null,
-    @ColumnInfo(name = "is_pinned") val isPinned: Boolean = false
+    @ColumnInfo(name = "is_pinned") val isPinned: Boolean = false,
+    @ColumnInfo(name = "response_style") val responseStyle: String = "MEDICAL_STUDENT",
+    @ColumnInfo(name = "answer_depth") val answerDepth: String = "DETAILED"
 )
 
 @Entity(

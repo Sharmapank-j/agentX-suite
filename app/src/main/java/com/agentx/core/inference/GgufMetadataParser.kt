@@ -8,7 +8,7 @@ data class GgufMetadata(
     val isValid: Boolean,
     val version: Int = 0,
     val architecture: String = "unknown",
-    val contextLength: Int = 2048,
+    val contextLength: Int = 4096,
     val tensorCount: Long = 0L,
     val kvCount: Long = 0L,
     val quantization: String = "Q4_K_M",
@@ -65,7 +65,7 @@ object GgufMetadataParser {
 
             var architecture = "unknown"
             var name = ""
-            var contextLength = 2048
+            var contextLength = 4096
             var quantization = "Q4_K_M"
             var chatTemplate: String? = null
 

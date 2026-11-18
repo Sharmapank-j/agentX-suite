@@ -49,9 +49,16 @@ class PairingManager(
 
     init {
         setupP2pListener()
-        // Generate initial QR code
+        // Generate initial QR code and observe tunnel changes
         scope.launch {
             publishCoordinates()
+        }
+        scope.launch {
+            tunnelManager.config.collect { tun ->
+                if (tun.isEnabled && !tun.publicUrl.isNullOrBlank()) {
+                    publishCoordinates()
+                }
+            }
         }
     }
 
