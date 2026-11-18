@@ -87,6 +87,8 @@ class ChatViewModel(
     private val _modelStatus = MutableStateFlow(inferenceEngine.getModelStatus())
     private val _liveMetrics = MutableStateFlow(LiveInferenceMetrics())
     private val _lastClassification = MutableStateFlow<MedicalQueryClassification?>(null)
+    private val _selectedResponseStyle = MutableStateFlow<ResponseStyle?>(null)
+    private val _selectedAnswerDepth = MutableStateFlow<AnswerDepth?>(null)
     private var generationJob: Job? = null
     private var messagesJob: Job? = null
 
@@ -112,8 +114,21 @@ class ChatViewModel(
         Triple(active, all, status)
     }
 
-    private val inputFlow = combine(_messages, _inputText, _isStreaming, _liveMetrics, _lastClassification) { messages, inputText, isStreaming, metrics, classification ->
+    private val inputFlow = combine(
+        _messages,
+        _inputText,
+        _isStreaming,
+        _liveMetrics,
+        _lastClassification
+    ) { messages, inputText, isStreaming, metrics, classification ->
         InputState(messages, inputText, isStreaming, metrics, classification)
+    }
+
+    private val styleDepthFlow = combine(
+        _selectedResponseStyle,
+        _selectedAnswerDepth
+    ) { style, depth ->
+        Pair(style, depth)
     }
 
     private data class InputState(
@@ -128,10 +143,17 @@ class ChatViewModel(
         conversationFlow,
         modelFlow,
         inputFlow,
+        styleDepthFlow,
         executionFlow
-    ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState ->
-        val style = ResponseStyle.fromString(activeConv?.responseStyle)
-        val depth = AnswerDepth.fromString(activeConv?.answerDepth)
+    ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, (selStyle, selDepth), execState ->
+        val style = selStyle
+            ?: activeConv?.responseStyle?.let { ResponseStyle.fromString(it) }
+            ?: preferencesManager?.loadDefaultResponseStyle()
+            ?: ResponseStyle.DEFAULT
+        val depth = selDepth
+            ?: activeConv?.answerDepth?.let { AnswerDepth.fromString(it) }
+            ?: preferencesManager?.loadDefaultAnswerDepth()
+            ?: AnswerDepth.DEFAULT
         val safeMessages = if (activeConv != null) {
             inputState.messages.filter { it.conversationId == activeConv.id }
         } else {
@@ -233,6 +255,8 @@ class ChatViewModel(
         messagesJob?.cancel()
         _messages.value = emptyList()
         _currentConversationId.value = conversationId
+        _selectedResponseStyle.value = null
+        _selectedAnswerDepth.value = null
         _inputText.value = ""
         _lastClassification.value = null
         _liveMetrics.value = LiveInferenceMetrics()
@@ -246,6 +270,8 @@ class ChatViewModel(
         _inputText.value = ""
         _lastClassification.value = null
         _liveMetrics.value = LiveInferenceMetrics()
+        _selectedResponseStyle.value = preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT
+        _selectedAnswerDepth.value = preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT
     }
 
     fun createNewConversation(title: String = "Clinical Consult") {
@@ -254,14 +280,18 @@ class ChatViewModel(
         } else {
             viewModelScope.launch {
                 val newId = UUID.randomUUID().toString()
-                val defaultStyle = preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT
-                val defaultDepth = preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT
+                val initialStyle = _selectedResponseStyle.value
+                    ?: preferencesManager?.loadDefaultResponseStyle()
+                    ?: ResponseStyle.DEFAULT
+                val initialDepth = _selectedAnswerDepth.value
+                    ?: preferencesManager?.loadDefaultAnswerDepth()
+                    ?: AnswerDepth.DEFAULT
                 val newConv = Conversation(
                     id = newId,
                     title = title,
                     activeAgentId = _selectedAgentId.value,
-                    responseStyle = defaultStyle.name,
-                    answerDepth = defaultDepth.name
+                    responseStyle = initialStyle.name,
+                    answerDepth = initialDepth.name
                 )
                 conversationRepository.createConversation(newConv)
                 _currentConversationId.value = newId
@@ -270,16 +300,24 @@ class ChatViewModel(
     }
 
     fun updateCurrentConversationStyle(style: ResponseStyle) {
-        val conv = uiState.value.currentConversation ?: return
-        viewModelScope.launch {
-            conversationRepository.updateConversation(conv.copy(responseStyle = style.name))
+        _selectedResponseStyle.value = style
+        preferencesManager?.saveDefaultResponseStyle(style)
+        val conv = uiState.value.currentConversation
+        if (conv != null) {
+            viewModelScope.launch {
+                conversationRepository.updateConversation(conv.copy(responseStyle = style.name))
+            }
         }
     }
 
     fun updateCurrentConversationDepth(depth: AnswerDepth) {
-        val conv = uiState.value.currentConversation ?: return
-        viewModelScope.launch {
-            conversationRepository.updateConversation(conv.copy(answerDepth = depth.name))
+        _selectedAnswerDepth.value = depth
+        preferencesManager?.saveDefaultAnswerDepth(depth)
+        val conv = uiState.value.currentConversation
+        if (conv != null) {
+            viewModelScope.launch {
+                conversationRepository.updateConversation(conv.copy(answerDepth = depth.name))
+            }
         }
     }
 
@@ -386,16 +424,20 @@ class ChatViewModel(
             var convId = _currentConversationId.value
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
-                val defaultStyle = preferencesManager?.loadDefaultResponseStyle() ?: ResponseStyle.DEFAULT
-                val defaultDepth = preferencesManager?.loadDefaultAnswerDepth() ?: AnswerDepth.DEFAULT
+                val chosenStyle = _selectedResponseStyle.value
+                    ?: preferencesManager?.loadDefaultResponseStyle()
+                    ?: ResponseStyle.DEFAULT
+                val chosenDepth = _selectedAnswerDepth.value
+                    ?: preferencesManager?.loadDefaultAnswerDepth()
+                    ?: AnswerDepth.DEFAULT
                 val convTitle = if (text.length > 35) text.take(32) + "..." else text
                 conversationRepository.createConversation(
                     Conversation(
                         id = convId,
                         title = convTitle.replace("\n", " ").trim(),
                         activeAgentId = agent?.id,
-                        responseStyle = defaultStyle.name,
-                        answerDepth = defaultDepth.name
+                        responseStyle = chosenStyle.name,
+                        answerDepth = chosenDepth.name
                     )
                 )
                 _currentConversationId.value = convId
@@ -624,12 +666,25 @@ class ChatViewModel(
 
         // 2. Resolve Active Conversation Style & Depth
         val activeConv = conversationRepository.getConversationById(convId)
-        val style = ResponseStyle.fromString(activeConv?.responseStyle)
-        val depth = AnswerDepth.fromString(activeConv?.answerDepth)
+        val style = _selectedResponseStyle.value
+            ?: activeConv?.responseStyle?.let { ResponseStyle.fromString(it) }
+            ?: preferencesManager?.loadDefaultResponseStyle()
+            ?: ResponseStyle.DEFAULT
+        val depth = _selectedAnswerDepth.value
+            ?: activeConv?.answerDepth?.let { AnswerDepth.fromString(it) }
+            ?: preferencesManager?.loadDefaultAnswerDepth()
+            ?: AnswerDepth.DEFAULT
 
         // 3. Build Specialized Clinical System Prompt
         val synthesizedSystemPrompt = MedicalPromptBuilder.buildSystemPrompt(
             classification = classification,
+            style = style,
+            depth = depth
+        )
+
+        // Augment user prompt with style and depth anchors for local model steering
+        val augmentedUserPrompt = MedicalPromptBuilder.augmentUserPrompt(
+            userPrompt = userPrompt,
             style = style,
             depth = depth
         )
@@ -639,7 +694,7 @@ class ChatViewModel(
         val maxContext = (activeModelConfig?.contextLength ?: 3840).coerceIn(512, 8192)
 
         val estimatedSystemTokens = ContextManager.estimateTokens(synthesizedSystemPrompt)
-        val estimatedUserTokens = ContextManager.estimateTokens(userPrompt)
+        val estimatedUserTokens = ContextManager.estimateTokens(augmentedUserPrompt)
         val maxOutputTokens = MedicalPromptBuilder.computeMaxTokens(
             depth = depth,
             contextLength = maxContext,
@@ -649,13 +704,22 @@ class ChatViewModel(
         val contextualPrompt = ContextManager.buildPromptWithContext(
             systemPrompt = null, // Formatted in native chat template
             history = historyMessages,
-            currentPrompt = userPrompt,
+            currentPrompt = augmentedUserPrompt,
             budget = ContextBudget(
                 maxContextTokens = maxContext,
                 maxOutputTokens = maxOutputTokens,
                 reservedTokens = 64
             )
         )
+
+        val baseTemp = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f
+        val tunedTemp = when (style) {
+            ResponseStyle.RESEARCH -> (baseTemp * 0.7f).coerceIn(0.2f, 1.0f)
+            ResponseStyle.QUICK_REFERENCE_VIVA -> (baseTemp * 0.8f).coerceIn(0.3f, 1.0f)
+            ResponseStyle.CLINICAL_PROFESSIONAL -> (baseTemp * 0.85f).coerceIn(0.3f, 1.0f)
+            ResponseStyle.MEDICAL_STUDENT -> baseTemp
+            ResponseStyle.ADVANCED -> baseTemp
+        }
 
         val buffer = StringBuilder()
         val startTime = System.currentTimeMillis()
@@ -672,14 +736,14 @@ class ChatViewModel(
         )
 
         try {
-            logInfo("ChatViewModel", "Starting inferenceEngine.generate for msg ${assistantMsg.id}")
+            logInfo("ChatViewModel", "Starting inferenceEngine.generate for msg ${assistantMsg.id} with style=$style, depth=$depth, temp=$tunedTemp")
             val stopSeqs = (extendedConfig.stopSequences + listOf("<|im_end|>", "<|endoftext|>", "\nUser:", "\nClinician:")).distinct()
             inferenceEngine.generate(
                 InferenceRequest(
                     prompt = contextualPrompt,
                     systemPrompt = synthesizedSystemPrompt,
                     maxTokens = maxOutputTokens,
-                    temperature = activeModelConfig?.temperature ?: agent?.temperature ?: 0.7f,
+                    temperature = tunedTemp,
                     topP = activeModelConfig?.topP ?: agent?.topP ?: 0.9f,
                     topK = extendedConfig.topK,
                     repeatPenalty = extendedConfig.repetitionPenalty,

@@ -17,6 +17,9 @@ import com.agentx.medical.domain.models.Message
 import com.agentx.medical.domain.models.MessageRole
 import com.agentx.medical.domain.models.MessageStatus
 import com.agentx.medical.feature.chat.ChatViewModel
+import com.agentx.medical.intelligence.AnswerDepth
+import com.agentx.medical.intelligence.MedicalPromptBuilder
+import com.agentx.medical.intelligence.ResponseStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -161,6 +164,98 @@ class MedicalChatViewModelTest {
         assertEquals(null, viewModel.uiState.value.currentConversation)
         assertEquals(0, viewModel.uiState.value.messages.size)
     }
+
+    @Test
+    fun testStyleAndDepthSelectionOnNewConversationPersistsAndSteersInference() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+
+        // Verify fresh state before any conversation exists
+        assertEquals(null, viewModel.uiState.value.currentConversation)
+
+        // User changes style and depth before typing first message
+        viewModel.updateCurrentConversationStyle(ResponseStyle.QUICK_REFERENCE_VIVA)
+        viewModel.updateCurrentConversationDepth(AnswerDepth.BRIEF)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(ResponseStyle.QUICK_REFERENCE_VIVA, viewModel.uiState.value.currentResponseStyle)
+        assertEquals(AnswerDepth.BRIEF, viewModel.uiState.value.currentAnswerDepth)
+
+        // Send first message
+        viewModel.onInputTextChanged("Explain causes of acute pancreatitis")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+
+        val activeConv = viewModel.uiState.value.currentConversation
+        assertNotNull(activeConv)
+        assertEquals(ResponseStyle.QUICK_REFERENCE_VIVA.name, activeConv?.responseStyle)
+        assertEquals(AnswerDepth.BRIEF.name, activeConv?.answerDepth)
+
+        // Verify prompt sent to inference engine was augmented with exact style & depth
+        val req = inferenceEngine.lastRequest
+        assertNotNull("Inference request should have been generated", req)
+        assertTrue("User prompt must contain Quick Reference / Viva style anchor",
+            req!!.prompt.contains("Style: Quick Reference / Viva"))
+        assertTrue("User prompt must contain BRIEF depth anchor",
+            req.prompt.contains("Depth: BRIEF"))
+        assertTrue("System prompt must contain Quick Reference / Viva formatting directive",
+            req.systemPrompt!!.contains(ResponseStyle.QUICK_REFERENCE_VIVA.title.uppercase()) && req.systemPrompt!!.contains("Viva Questions"))
+        assertTrue("System prompt must contain BRIEF constraint",
+            req.systemPrompt!!.contains("BRIEF"))
+    }
+
+    @Test
+    fun testStyleAndDepthSelectionOnExistingConversationUpdatesAndReapplies() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+
+        // Create standard conversation
+        viewModel.onInputTextChanged("Initial cardiology query")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+
+        // Switch existing conversation to Research and Expert
+        viewModel.updateCurrentConversationStyle(ResponseStyle.RESEARCH)
+        viewModel.updateCurrentConversationDepth(AnswerDepth.EXPERT)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(ResponseStyle.RESEARCH, viewModel.uiState.value.currentResponseStyle)
+        assertEquals(AnswerDepth.EXPERT, viewModel.uiState.value.currentAnswerDepth)
+
+        // Send next query in existing conversation
+        viewModel.onInputTextChanged("Show evidence for SGLT2 inhibitors in heart failure")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+
+        val req = inferenceEngine.lastRequest
+        assertNotNull(req)
+        assertTrue("User prompt must contain Research Appraisal anchor",
+            req!!.prompt.contains("Style: Research Appraisal"))
+        assertTrue("User prompt must contain EXPERT depth anchor",
+            req.prompt.contains("Depth: EXPERT"))
+        assertTrue("System prompt must contain RESEARCH trial appraisal directive",
+            req.systemPrompt!!.contains("RESEARCH") && req.systemPrompt!!.contains("Landmark Randomized Controlled Trials"))
+        assertTrue("System prompt must contain EXPERT constraint",
+            req.systemPrompt!!.contains("EXPERT"))
+    }
+
+    @Test
+    fun testAllTwentyFiveAugmentationsGenerateDistinctDirectives() {
+        val userQuery = "What is acute appendicitis?"
+        val distinctAugmentations = mutableSetOf<String>()
+
+        for (style in ResponseStyle.entries) {
+            for (depth in AnswerDepth.entries) {
+                val augmented = MedicalPromptBuilder.augmentUserPrompt(userQuery, style, depth)
+                assertTrue("Augmented query must contain original text", augmented.contains(userQuery))
+                assertTrue("Augmented query must contain style title", augmented.contains(style.title))
+                assertTrue("Augmented query must contain depth title", augmented.contains(depth.title.uppercase()))
+                distinctAugmentations.add(augmented)
+            }
+        }
+
+        assertEquals("All 25 combinations must produce unique augmented prompt directives", 25, distinctAugmentations.size)
+    }
 }
 
 // --- Test Fakes ---
@@ -272,8 +367,10 @@ class FakeMedicalModelRepository : ModelRepository {
 class FakeMedicalInferenceEngine : InferenceEngine {
     var status = ModelStatus(ModelLifecycleState.LOADED)
     var stopped = false
+    var lastRequest: InferenceRequest? = null
 
     override fun generate(request: InferenceRequest): Flow<GenerationEvent> = flow {
+        lastRequest = request
         stopped = false
         emit(GenerationEvent.Token("Clinical analysis: "))
         emit(GenerationEvent.Token("Recommendation complete."))
