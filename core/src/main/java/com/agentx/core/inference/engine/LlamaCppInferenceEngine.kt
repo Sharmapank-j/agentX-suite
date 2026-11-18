@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
  * The native library is built for each configured Android ABI by CMake/NDK.
  */
 class LlamaCppInferenceEngine(
-    private val nThreads: Int = CpuTopologyInspector.inspect().recommendedInferenceThreads.coerceIn(1, 4),
+    private val nThreads: Int = (Runtime.getRuntime().availableProcessors() - 1).coerceAtLeast(1),
     private val defaultContextLength: Int = 2048,
     private val gpuLayers: Int = 0
 ) : InferenceEngine {
@@ -49,7 +49,8 @@ class LlamaCppInferenceEngine(
                 }
                 unloadModelInternal()
                 val targetContext = minOf(model.contextWindow.takeIf { it > 0 } ?: defaultContextLength, 3840).coerceAtLeast(512)
-                val targetThreads = nThreads.coerceIn(1, 4)
+                val maxAvailableCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+                val targetThreads = nThreads.coerceIn(1, maxAvailableCores)
                 val nativeHandle = LlamaCppNativeBridge.nativeLoadModel(
                     path.absolutePath,
                     targetContext,

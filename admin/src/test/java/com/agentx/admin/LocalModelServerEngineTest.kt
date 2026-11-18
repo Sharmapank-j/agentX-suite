@@ -39,4 +39,34 @@ class LocalModelServerEngineTest {
             assertTrue(expected.message.orEmpty().contains("Load a local GGUF model"))
         }
     }
+
+    @Test fun defaultCpuThreadsIsOneLessThanTotalCores() {
+        val engine = LocalModelServerEngine()
+        val expected = (Runtime.getRuntime().availableProcessors() - 1).coerceAtLeast(1)
+        assertEquals(expected, engine.cpuThreads)
+        assertEquals(Runtime.getRuntime().availableProcessors().coerceAtLeast(1), engine.totalCpuCores)
+    }
+
+    @Test fun setCpuThreadsClampsAndUpdates() = runTest {
+        val engine = LocalModelServerEngine()
+        val total = engine.totalCpuCores
+
+        // Set within valid range
+        assertTrue(engine.setCpuThreads(1))
+        assertEquals(1, engine.cpuThreads)
+
+        assertTrue(engine.setCpuThreads(total))
+        assertEquals(total, engine.cpuThreads)
+
+        // Underflow clamp
+        assertTrue(engine.setCpuThreads(0))
+        assertEquals(1, engine.cpuThreads)
+
+        assertTrue(engine.setCpuThreads(-5))
+        assertEquals(1, engine.cpuThreads)
+
+        // Overflow clamp
+        assertTrue(engine.setCpuThreads(total + 50))
+        assertEquals(total, engine.cpuThreads)
+    }
 }

@@ -78,6 +78,8 @@ data class AdminUiState(
     val tunnelConfig: TunnelConfig = TunnelConfig(),
     val cliHistory: List<CliEntry> = emptyList(),
     val isCliExecuting: Boolean = false,
+    val totalCpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+    val cpuThreads: Int = (Runtime.getRuntime().availableProcessors() - 1).coerceAtLeast(1),
     val pairingCode: String = "",
     val qrBitmap: android.graphics.Bitmap? = null,
     val isPairingPublished: Boolean = false
@@ -96,6 +98,19 @@ class AdminViewModel(
     val tunnelManager = app.tunnelManager
     val pairingManager = app.pairingManager
 
+    val totalCpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    private val defaultCpuThreads: Int = (totalCpuCores - 1).coerceAtLeast(1)
+    private val servePrefs by lazy {
+        try {
+            app.getSharedPreferences("agentx_serve_prefs", Context.MODE_PRIVATE)
+        } catch (_: Exception) {
+            null
+        }
+    }
+    private val _cpuThreads = MutableStateFlow(
+        servePrefs?.getInt("cpu_threads", defaultCpuThreads)?.coerceIn(1, totalCpuCores) ?: defaultCpuThreads
+    )
+
     init {
         // Universal Cross-Network Serving: Guarantee global public tunnel is active whenever server is running
         viewModelScope.launch {
@@ -110,6 +125,9 @@ class AdminViewModel(
                     )
                 }
             }
+        }
+        viewModelScope.launch {
+            localEngine.setCpuThreads(_cpuThreads.value)
         }
     }
 
@@ -150,17 +168,18 @@ class AdminViewModel(
         val isScanningStorage: Boolean,
         val activeModel: LocalServerModel,
         val status: LocalModelStatus,
-        val liveTest: LiveTestConsoleMetrics
+        val liveTest: LiveTestConsoleMetrics,
+        val cpuThreads: Int
     )
 
     private val localEnginePrefsFlow = combine(
         combine(_servingMode, _curatedLocalModels, _storageModels, _isScanningStorage, _activeLocalModel) { mode, catalog, storage, scanning, active ->
             Quintet(mode, catalog, storage, scanning, active)
         },
-        combine(_localModelStatus, _liveTest) { status, liveTest ->
-            Pair(status, liveTest)
+        combine(_localModelStatus, _liveTest, _cpuThreads) { status, liveTest, threads ->
+            Triple(status, liveTest, threads)
         }
-    ) { q1, (status, liveTest) ->
+    ) { q1, (status, liveTest, threads) ->
         LocalEnginePrefs(
             servingMode = q1.first,
             curatedCatalog = q1.second,
@@ -168,7 +187,8 @@ class AdminViewModel(
             isScanningStorage = q1.fourth,
             activeModel = q1.fifth,
             status = status,
-            liveTest = liveTest
+            liveTest = liveTest,
+            cpuThreads = threads
         )
     }
 
@@ -254,7 +274,9 @@ class AdminViewModel(
             isCliExecuting = subState.cliTunnelPrefs.isCliExecuting,
             pairingCode = pairingManager.pairingCode.value,
             qrBitmap = pairingManager.qrBitmap.value,
-            isPairingPublished = pairingManager.isPublished.value
+            isPairingPublished = pairingManager.isPublished.value,
+            totalCpuCores = totalCpuCores,
+            cpuThreads = subState.localPrefs.cpuThreads
         )
     }.stateIn(
         scope = viewModelScope,
@@ -265,9 +287,23 @@ class AdminViewModel(
             activeLocalModel = localEngine.activeModel,
             localModelStatus = localEngine.status,
             tunnelConfig = tunnelManager.config.value,
-            cliHistory = _cliHistory.value
+            cliHistory = _cliHistory.value,
+            totalCpuCores = totalCpuCores,
+            cpuThreads = defaultCpuThreads
         )
     )
+
+    fun setCpuThreads(threads: Int) {
+        val clamped = threads.coerceIn(1, totalCpuCores)
+        _cpuThreads.value = clamped
+        viewModelScope.launch {
+            localEngine.setCpuThreads(clamped)
+            try {
+                servePrefs?.edit()?.putInt("cpu_threads", clamped)?.apply()
+            } catch (_: Exception) {}
+            _notification.value = "⚡ Processor allocation set to $clamped of $totalCpuCores cores"
+        }
+    }
 
 
     fun refreshThermal() {

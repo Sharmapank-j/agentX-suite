@@ -86,6 +86,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -93,6 +95,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -219,7 +222,7 @@ fun AdminDashboardScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
                     .animateContentSize(),
                 colors = CardDefaults.cardColors(
                     containerColor = if (state.telemetry.isRunning) ServerGlassElevated else ServerSurface
@@ -228,25 +231,32 @@ fun AdminDashboardScreen(
                     1.dp,
                     if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = beaconAlpha) else ServerBorder
                 ),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(22.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
                             Text(
                                 if (state.telemetry.isRunning) "SERVER ONLINE • ${state.servingMode.label}" else "SERVER STOPPED",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium,
+                                fontSize = 17.sp,
                                 color = if (state.telemetry.isRunning) MatrixGreenBright else ServerTextSecondary
                             )
                             if (state.telemetry.isRunning && globalUrl != null) {
                                 Text(
                                     "🌍 Universal Serving Active (Any Network / 4G / 5G / Wi-Fi)",
-                                    fontSize = 11.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF67E8F9)
                                 )
@@ -254,8 +264,8 @@ fun AdminDashboardScreen(
                             Text(
                                 if (state.telemetry.isRunning) serverUrl else "Tap Start to host endpoints",
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 12.sp,
-                                color = if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = 0.8f) else ServerTextSecondary
+                                fontSize = 13.sp,
+                                color = if (state.telemetry.isRunning) MatrixGreenBright.copy(alpha = 0.85f) else ServerTextSecondary
                             )
                         }
 
@@ -263,47 +273,55 @@ fun AdminDashboardScreen(
                             onClick = { viewModel.toggleServer(!state.telemetry.isRunning, context) },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (state.telemetry.isRunning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                            )
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)
                         ) {
                             Icon(
                                 if (state.telemetry.isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (state.telemetry.isRunning) "Stop" else "Start")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (state.telemetry.isRunning) "Stop" else "Start", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     if (state.telemetry.isRunning) {
-                        Spacer(modifier = Modifier.height(10.dp))
-
                         // SECTION A: Global Public WAN (Universal Serving)
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(16.dp),
                             color = if (globalUrl != null) Color(0xFF064E3B).copy(alpha = 0.25f) else ServerGlass,
                             border = BorderStroke(1.dp, if (globalUrl != null) Color(0xFF10B981) else ServerBorder),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("🌐", fontSize = 13.sp)
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("🌐", fontSize = 15.sp)
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            "GLOBAL PUBLIC WAN ENDPOINT",
+                                            "PUBLIC WAN ROUTE",
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
                                             color = if (globalUrl != null) Color(0xFF67E8F9) else ServerTextSecondary
                                         )
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
-                                        shape = RoundedCornerShape(6.dp),
+                                        shape = RoundedCornerShape(8.dp),
                                         color = when (state.tunnelConfig.status) {
                                             TunnelStatus.CONNECTED -> Color(0xFF10B981)
                                             TunnelStatus.STARTING -> Color(0xFFF59E0B)
@@ -314,50 +332,50 @@ fun AdminDashboardScreen(
                                         Text(
                                             if (state.tunnelConfig.status == TunnelStatus.CONNECTED) "ANY NETWORK" else state.tunnelConfig.status.label,
                                             color = Color.White,
-                                            fontSize = 9.sp,
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            maxLines = 1,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                         )
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(6.dp))
 
                                 if (globalUrl != null) {
                                     Text(
                                         globalUrl,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
+                                        fontSize = 13.sp,
                                         color = Color(0xFF67E8F9)
                                     )
-                                    Spacer(modifier = Modifier.height(8.dp))
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         OutlinedButton(
                                             onClick = { clipboard.setText(AnnotatedString(globalUrl)) },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
                                         ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Copy Public WAN", fontSize = 10.sp)
+                                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Copy Public WAN", fontSize = 11.sp)
                                         }
                                         OutlinedButton(
                                             onClick = { clipboard.setText(AnnotatedString("$globalUrl/v1/chat/completions")) },
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(12.dp)
                                         ) {
-                                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(13.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Copy /chat WAN", fontSize = 10.sp)
+                                            Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Copy /chat WAN", fontSize = 11.sp)
                                         }
                                     }
                                 } else if (state.tunnelConfig.status == TunnelStatus.STARTING) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color(0xFFF59E0B))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Allocating public HTTPS route for cellular & remote access...", fontSize = 11.sp, color = Color(0xFFF59E0B))
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFF59E0B))
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text("Allocating public HTTPS route for cellular & remote access...", fontSize = 12.sp, color = Color(0xFFF59E0B))
                                     }
                                 } else {
                                     Row(
@@ -365,101 +383,129 @@ fun AdminDashboardScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Public route offline (LAN only)", fontSize = 11.sp, color = ServerTextSecondary)
+                                        Text("Public route offline (LAN only)", fontSize = 12.sp, color = ServerTextSecondary)
                                         TextButton(onClick = { viewModel.startTunnel(TunnelProvider.PINGGY) }) {
-                                            Text("Start Public Route", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MatrixGreenBright)
+                                            Text("Start Public Route", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MatrixGreenBright)
                                         }
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         // SECTION B: Local LAN Buttons
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             OutlinedButton(
                                 onClick = { clipboard.setText(AnnotatedString(serverUrl)) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Copy Local LAN", fontSize = 10.sp)
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Copy Local LAN", fontSize = 11.sp)
                             }
                             OutlinedButton(
                                 onClick = { clipboard.setText(AnnotatedString("$serverUrl/v1/chat/completions")) },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(13.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Copy /chat LAN", fontSize = 10.sp)
+                                Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Copy /chat LAN", fontSize = 11.sp)
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Web Chat Client Access Button
                         val webClientUrl = globalUrl ?: serverUrl
                         OutlinedButton(
                             onClick = { clipboard.setText(AnnotatedString(webClientUrl)) },
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                if (globalUrl != null) "🌐 Open Web Chat Client ($webClientUrl/) on Any Device Anywhere"
+                                if (globalUrl != null) "🌐 Open Web Chat Client ($webClientUrl/) Anywhere"
                                 else "🌐 Open Web Chat Client ($serverUrl/) on Local LAN",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         // Adaptive Thermal & Hardware Status HUD
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.15f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.5f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    "🌡️ ${state.thermalSnapshot.temperatureCelsius}°C • ${state.thermalSnapshot.status.label}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(state.thermalSnapshot.status.badgeColorHex),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MatrixGreenBright.copy(alpha = 0.15f),
+                                    border = BorderStroke(1.dp, MatrixGreenBright.copy(alpha = 0.4f)),
+                                    modifier = Modifier.weight(1.2f)
+                                ) {
+                                    Text(
+                                        "⚡ ${state.cpuThreads}/${state.totalCpuCores} CPU Cores Active",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MatrixGreenBright,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFF10B981).copy(alpha = 0.15f),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        "📡 mDNS Ready",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF10B981),
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
 
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    "🔋 ${state.thermalSnapshot.batteryPct}% ${if (state.thermalSnapshot.isCharging) "⚡" else ""}",
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.15f),
+                                    border = BorderStroke(1.dp, Color(state.thermalSnapshot.status.badgeColorHex).copy(alpha = 0.5f)),
+                                    modifier = Modifier.weight(1.4f)
+                                ) {
+                                    Text(
+                                        "🌡️ ${state.thermalSnapshot.temperatureCelsius}°C • ${state.thermalSnapshot.status.label}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(state.thermalSnapshot.status.badgeColorHex),
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
 
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFF10B981).copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    "📡 mDNS Ready",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF10B981),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        "🔋 ${state.thermalSnapshot.batteryPct}% ${if (state.thermalSnapshot.isCharging) "⚡" else ""}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -471,7 +517,7 @@ fun AdminDashboardScreen(
             ScrollableTabRow(
                 selectedTabIndex = state.selectedTab,
                 containerColor = ServerVoid,
-                edgePadding = 16.dp,
+                edgePadding = 20.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 tabs.forEachIndexed { index, title ->
@@ -482,7 +528,8 @@ fun AdminDashboardScreen(
                             Text(
                                 text = title,
                                 color = if (state.selectedTab == index) MatrixGreenBright else ServerTextSecondary,
-                                fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (state.selectedTab == index) FontWeight.Bold else FontWeight.Normal,
+                                modifier = Modifier.padding(vertical = 12.dp)
                             )
                         }
                     )
@@ -493,7 +540,7 @@ fun AdminDashboardScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 when (state.selectedTab) {
                     0 -> LocalModelsTab(
@@ -509,7 +556,8 @@ fun AdminDashboardScreen(
                             }
                         },
                         onScanStorage = { viewModel.scanDeviceStorage(context) },
-                        onRemoveStorageModel = { viewModel.removeStorageModel(it) }
+                        onRemoveStorageModel = { viewModel.removeStorageModel(it) },
+                        onThreadsChange = { viewModel.setCpuThreads(it) }
                     )
                     1 -> CliConsoleTab(
                         cliHistory = state.cliHistory,
@@ -608,13 +656,14 @@ private fun LocalModelsTab(
     onUnloadModel: () -> Unit,
     onPickModelFromStorage: () -> Unit,
     onScanStorage: () -> Unit,
-    onRemoveStorageModel: (String) -> Unit
+    onRemoveStorageModel: (String) -> Unit,
+    onThreadsChange: (Int) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // Section 1: Serving Mode Selector Card
         Card(
@@ -622,15 +671,21 @@ private fun LocalModelsTab(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Serving Engine Architecture", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Serving Architecture",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
                         color = when (state.servingMode) {
@@ -648,6 +703,7 @@ private fun LocalModelsTab(
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
+                            maxLines = 1,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -659,7 +715,7 @@ private fun LocalModelsTab(
                     color = MaterialTheme.colorScheme.outline
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -686,15 +742,22 @@ private fun LocalModelsTab(
             }
         }
 
-        // Section 2: Active Local Model Card
+        // Section 2: Processor & CPU Core Allocation Card (Hardware Acceleration)
+        ProcessorPerformanceCard(
+            totalCores = state.totalCpuCores,
+            allocatedThreads = state.cpuThreads,
+            onThreadsChange = onThreadsChange
+        )
+
+        // Section 3: Active Local Model Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
             ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -708,6 +771,8 @@ private fun LocalModelsTab(
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -723,12 +788,13 @@ private fun LocalModelsTab(
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
+                            maxLines = 1,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 state.activeLocalModel?.let { model ->
                     Row(
@@ -736,31 +802,31 @@ private fun LocalModelsTab(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("RAM Footprint", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                                 Text(if (model.memoryFootprintMb > 0L) "${model.memoryFootprintMb} MB" else "Not measured", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Architecture", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                                 Text("${model.architecture} ${model.parameterCount}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Quantization", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
                                 Text(model.quantization, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
@@ -770,7 +836,7 @@ private fun LocalModelsTab(
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -778,11 +844,11 @@ private fun LocalModelsTab(
                     ) {
                         if (state.localModelStatus == LocalModelStatus.LOADED) {
                             OutlinedButton(onClick = onUnloadModel) {
-                                Text("Unload From RAM", fontSize = 11.sp)
+                                Text("Unload From RAM", fontSize = 12.sp)
                             }
                         } else {
                             Button(onClick = { onLoadModel(model.id) }) {
-                                Text("Reload Model", fontSize = 11.sp)
+                                Text("Reload Model", fontSize = 12.sp)
                             }
                         }
                     }
@@ -790,15 +856,15 @@ private fun LocalModelsTab(
             }
         }
 
-        // Section 3: Choose Models from Phone Storage
+        // Section 4: Choose Models from Phone Storage
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             ),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(20.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -806,6 +872,7 @@ private fun LocalModelsTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Phone Storage Models (.gguf)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             "Choose or scan local models saved in your phone storage, Downloads, or SD Card.",
                             style = MaterialTheme.typography.bodySmall,
@@ -814,11 +881,11 @@ private fun LocalModelsTab(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
                         onClick = onPickModelFromStorage,
@@ -826,7 +893,7 @@ private fun LocalModelsTab(
                     ) {
                         Icon(Icons.Default.SdStorage, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pick Model File", fontSize = 11.sp)
+                        Text("Pick Model File", fontSize = 12.sp)
                     }
 
                     OutlinedButton(
@@ -837,19 +904,19 @@ private fun LocalModelsTab(
                         if (state.isScanningStorage) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scanning...", fontSize = 11.sp)
+                            Text("Scanning...", fontSize = 12.sp)
                         } else {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Scan Downloads", fontSize = 11.sp)
+                            Text("Scan Downloads", fontSize = 12.sp)
                         }
                     }
                 }
 
                 if (state.storageModels.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text("Imported Storage Models (${state.storageModels.size})", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Imported Storage Models (${state.storageModels.size})", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     state.storageModels.forEach { model ->
                         val isActive = state.activeLocalModel?.id == model.id && state.localModelStatus == LocalModelStatus.LOADED
@@ -858,18 +925,19 @@ private fun LocalModelsTab(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else MaterialTheme.colorScheme.surface
                             )
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(model.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text(model.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text(
                                             "${model.architecture} • ${model.parameterCount} • ${model.quantization} • ${formatFileSize(model.fileSizeBytes)}",
                                             style = MaterialTheme.typography.labelSmall,
@@ -897,20 +965,20 @@ private fun LocalModelsTab(
                                                     "Serving",
                                                     color = Color.White,
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 10.sp,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                                    fontSize = 11.sp,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                 )
                                             }
                                         } else {
                                             Button(
                                                 onClick = { onLoadModel(model.id) },
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                             ) {
-                                                Text("Load & Serve", fontSize = 11.sp)
+                                                Text("Load & Serve", fontSize = 12.sp)
                                             }
                                         }
                                         IconButton(onClick = { onRemoveStorageModel(model.id) }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -918,9 +986,9 @@ private fun LocalModelsTab(
                         }
                     }
                 } else {
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -928,14 +996,14 @@ private fun LocalModelsTab(
                             "No custom models selected yet. Tap 'Pick Model File' to select any .gguf or .bin file stored on your phone.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(14.dp)
                         )
                     }
                 }
             }
         }
 
-        // Section 4: Curated Models Catalog
+        // Section 5: Curated Models Catalog
         Text("Curated Open-Source Edge Models", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
 
         state.curatedLocalModels.forEach { model ->
@@ -943,11 +1011,12 @@ private fun LocalModelsTab(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant
                 )
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -965,16 +1034,16 @@ private fun LocalModelsTab(
 
                         if (isActive) {
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 color = Color(0xFF10B981)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 ) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Serving", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Serving", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                 }
                             }
                         } else {
@@ -982,17 +1051,206 @@ private fun LocalModelsTab(
                                 onClick = { onLoadModel(model.id) },
                                 enabled = state.localModelStatus != LocalModelStatus.LOADING
                             ) {
-                                Text("Load & Serve", fontSize = 11.sp)
+                                Text("Load & Serve", fontSize = 12.sp)
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
         }
+    }
+}
 
+@Composable
+private fun ProcessorPerformanceCard(
+    totalCores: Int,
+    allocatedThreads: Int,
+    onThreadsChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val defaultCores = (totalCores - 1).coerceAtLeast(1)
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MatrixGreenBright.copy(alpha = 0.15f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("⚡", fontSize = 18.sp)
+                        }
+                    }
+                    Column {
+                        Text(
+                            "Processor & Core Allocation",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            "On-device parallel compute speed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = when {
+                        allocatedThreads == totalCores -> Color(0xFFF59E0B)
+                        allocatedThreads == defaultCores -> MatrixGreenBright
+                        else -> MaterialTheme.colorScheme.primary
+                    }
+                ) {
+                    Text(
+                        text = "$allocatedThreads / $totalCores Cores",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = "Controls how many CPU threads drive matrix multiplication (GEMV) in llama.cpp. By default, AgentX Serve allocates 1 less than total cores ($defaultCores cores) to maximize generation speed while leaving 1 core dedicated to OS scheduling, UI, and network I/O.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "Allocation:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (allocatedThreads == defaultCores) MatrixGreenBright.copy(alpha = 0.18f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        ) {
+                            Text(
+                                "$allocatedThreads Threads (${if (allocatedThreads == defaultCores) "Recommended" else if (allocatedThreads == totalCores) "Overdrive" else "Custom"})",
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                color = if (allocatedThreads == defaultCores) MatrixGreenBright else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Slider(
+                        value = allocatedThreads.toFloat(),
+                        onValueChange = { onThreadsChange(it.roundToInt().coerceIn(1, totalCores)) },
+                        valueRange = 1f..totalCores.toFloat(),
+                        steps = (totalCores - 2).coerceAtLeast(0),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MatrixGreenBright,
+                            activeTrackColor = MatrixGreenBright,
+                            inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("1 Core (Low Power)", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                        Text("$defaultCores Cores (Default)", fontSize = 10.sp, color = MatrixGreenBright, fontWeight = FontWeight.Bold)
+                        Text("$totalCores Cores (Max)", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            }
+
+            // Quick Preset Selection Chips
+            Text(
+                "Speed & Power Presets",
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Power Saver (2T)
+                FilterChip(
+                    selected = allocatedThreads == 2.coerceAtMost(totalCores),
+                    onClick = { onThreadsChange(2.coerceAtMost(totalCores)) },
+                    label = { Text("Power Saver (2T)", fontSize = 11.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Default / High Speed (N-1 Cores)
+                FilterChip(
+                    selected = allocatedThreads == defaultCores,
+                    onClick = { onThreadsChange(defaultCores) },
+                    label = {
+                        Text(
+                            "High Speed (${defaultCores}T) ★",
+                            fontSize = 11.sp,
+                            fontWeight = if (allocatedThreads == defaultCores) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    modifier = Modifier.weight(1.3f)
+                )
+
+                // Max / Overdrive (Total Cores)
+                if (totalCores > defaultCores) {
+                    FilterChip(
+                        selected = allocatedThreads == totalCores,
+                        onClick = { onThreadsChange(totalCores) },
+                        label = { Text("Overdrive (${totalCores}T)", fontSize = 11.sp) },
+                        modifier = Modifier.weight(1.1f)
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1913,18 +2171,18 @@ print(response.choices[0].message.content)
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // Native Cross-Network 6-Digit Pairing & QR Card
         Card(
             colors = CardDefaults.cardColors(containerColor = ServerSurface),
             border = BorderStroke(1.dp, ServerBorder),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2063,36 +2321,45 @@ print(response.choices[0].message.content)
 
 @Composable
 private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge, fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
         }
     }
 }
 
 @Composable
 private fun SnippetCard(title: String, code: String, onCopy: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
-                OutlinedButton(onClick = onCopy, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(12.dp))
+                OutlinedButton(onClick = onCopy, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Copy", fontSize = 11.sp)
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Surface(
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = Color(0xFF1E1E2E),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -2101,7 +2368,7 @@ private fun SnippetCard(title: String, code: String, onCopy: () -> Unit) {
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     color = Color(0xFFCDD6F4),
-                    modifier = Modifier.padding(10.dp)
+                    modifier = Modifier.padding(12.dp)
                 )
             }
         }

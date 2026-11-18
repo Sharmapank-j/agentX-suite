@@ -30,7 +30,24 @@ class LocalModelServerEngine(
 
     private val mutex = Mutex()
     private val isCancelled = AtomicBoolean(false)
-    private val inferenceEngine = LlamaCppInferenceEngine()
+
+    val totalCpuCores: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    private var _cpuThreads: Int = (totalCpuCores - 1).coerceAtLeast(1)
+    val cpuThreads: Int get() = _cpuThreads
+
+    private var inferenceEngine = LlamaCppInferenceEngine(nThreads = _cpuThreads)
+
+    suspend fun setCpuThreads(threads: Int): Boolean = withContext(Dispatchers.IO) {
+        val clamped = threads.coerceIn(1, totalCpuCores)
+        if (_cpuThreads == clamped && inferenceEngine.isModelLoaded) return@withContext true
+        _cpuThreads = clamped
+        if (_activeModel.isLoaded && _activeModel.filePath != null) {
+            loadModel(_activeModel.id)
+        } else {
+            inferenceEngine = LlamaCppInferenceEngine(nThreads = _cpuThreads)
+            true
+        }
+    }
 
     val curatedCatalog = listOf(
         LocalServerModel(
@@ -242,6 +259,7 @@ class LocalModelServerEngine(
               ?: return@withLock false
             val path = selected.filePath ?: return@withLock false
             _status = LocalModelStatus.LOADING
+            inferenceEngine = LlamaCppInferenceEngine(nThreads = _cpuThreads)
             val modelInfo = ModelInfo(
                 id = selected.id,
                 name = selected.name,

@@ -301,14 +301,15 @@ Java_com_agentx_core_inference_llamacpp_LlamaCppNativeBridge_nativeLoadModel(
     contextParams.n_batch = std::min<uint32_t>(contextParams.n_ctx, 512);
     contextParams.n_ubatch = std::min<uint32_t>(contextParams.n_batch, 256);
 
-    // Mobile threading: snap to hardware-detected performance cores to prevent severe
-    // thread synchronization barrier stalls across weak asymmetric Cortex-A55 efficiency cores on mobile SoCs.
-    const int perfCores = detectPerformanceCores();
+    // Processor core allocation: default to totalCpus - 1 for max throughput while leaving 1 core for OS/network serving, or use user-specified threads up to totalCpus
+    const int totalCpus = std::max(1, static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN)));
     int threads = static_cast<int>(nThreads);
-    if (threads <= 0 || threads > perfCores) {
-        threads = perfCores;
+    if (threads <= 0) {
+        threads = std::max(1, totalCpus - 1);
+    } else {
+        threads = std::clamp(threads, 1, totalCpus);
     }
-    contextParams.n_threads = std::clamp(threads, 1, 4);
+    contextParams.n_threads = threads;
     contextParams.n_threads_batch = contextParams.n_threads;
 
     state->context = llama_init_from_model(state->model, contextParams);
