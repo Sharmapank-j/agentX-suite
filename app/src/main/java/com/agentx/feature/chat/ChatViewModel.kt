@@ -95,6 +95,7 @@ class ChatViewModel(
     private val _inferenceMode = MutableStateFlow((inferenceEngine as? HybridInferenceEngine)?.inferenceMode ?: InferenceMode.LOCAL_ONLY)
     private val _cloudConfig = MutableStateFlow((inferenceEngine as? HybridInferenceEngine)?.cloudEngine?.config ?: CloudModelConfig())
     private var generationJob: Job? = null
+    private var messagesJob: Job? = null
 
     private val executionFlow: StateFlow<ExecutionState> =
         executionQueue?.state ?: MutableStateFlow(ExecutionState())
@@ -159,10 +160,15 @@ class ChatViewModel(
             _attachedImagePath.value = null
             _attachedImageMimeType.value = null
         }
+        val safeMessages = if (activeConv != null) {
+            inputState.messages.filter { it.conversationId == activeConv.id }
+        } else {
+            emptyList()
+        }
         ChatUiState(
             conversations = conversations,
             currentConversation = activeConv,
-            messages = inputState.messages,
+            messages = safeMessages,
             availableAgents = agentPair.first,
             selectedAgent = agentPair.second,
             inputText = inputState.inputText,
@@ -249,9 +255,12 @@ class ChatViewModel(
 
         viewModelScope.launch {
             _currentConversationId.collect { convId ->
+                messagesJob?.cancel()
                 if (convId != null) {
-                    conversationRepository.getMessagesForConversation(convId).collect {
-                        _messages.value = it
+                    messagesJob = viewModelScope.launch {
+                        conversationRepository.getMessagesForConversation(convId).collect { msgList ->
+                            _messages.value = msgList.filter { it.conversationId == convId }
+                        }
                     }
                 } else {
                     _messages.value = emptyList()
@@ -296,15 +305,26 @@ class ChatViewModel(
     }
 
     fun selectConversation(conversationId: String) {
+        if (_currentConversationId.value == conversationId) return
+        stopGeneration()
+        messagesJob?.cancel()
+        _messages.value = emptyList()
         _currentConversationId.value = conversationId
+        _inputText.value = ""
+        _attachedImagePath.value = null
+        _attachedImageMimeType.value = null
+        _liveMetrics.value = LiveInferenceMetrics()
     }
 
     fun startNewConversation() {
+        stopGeneration()
+        messagesJob?.cancel()
         _currentConversationId.value = null
         _messages.value = emptyList()
         _inputText.value = ""
         _attachedImagePath.value = null
         _attachedImageMimeType.value = null
+        _liveMetrics.value = LiveInferenceMetrics()
     }
 
     fun createNewConversation(title: String = "New Conversation") {
@@ -348,7 +368,9 @@ class ChatViewModel(
     fun clearCurrentConversation() {
         val convId = _currentConversationId.value ?: return
         viewModelScope.launch {
+            stopGeneration()
             conversationRepository.clearMessagesForConversation(convId)
+            _messages.value = emptyList()
         }
     }
 
@@ -359,11 +381,13 @@ class ChatViewModel(
     }
 
     fun stopGeneration() {
+        generationJob?.cancel()
+        _isStreaming.value = false
         viewModelScope.launch {
-            inferenceEngine.stopGeneration()
-            generationJob?.cancel()
-            _isStreaming.value = false
-            _modelStatus.value = inferenceEngine.getModelStatus()
+            try {
+                inferenceEngine.stopGeneration()
+                _modelStatus.value = inferenceEngine.getModelStatus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -454,6 +478,7 @@ class ChatViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
+            val isNewConv = (_currentConversationId.value == null)
             var convId = _currentConversationId.value
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
@@ -490,7 +515,13 @@ class ChatViewModel(
                 attachmentMimeType = attachmentMime
             )
             conversationRepository.sendMessage(userMsg)
-            _messages.value = _messages.value.filter { it.status != MessageStatus.STREAMING || it.content.isNotBlank() } + userMsg
+            _messages.value = if (isNewConv) {
+                listOf(userMsg)
+            } else {
+                _messages.value.filter {
+                    it.conversationId == convId && (it.status != MessageStatus.STREAMING || it.content.isNotBlank())
+                } + userMsg
+            }
             _inputText.value = ""
 
             if (agent != null && agent.role == AgentRole.SUPERVISOR && clinicalSupervisor != null) {
@@ -568,6 +599,7 @@ class ChatViewModel(
             status = MessageStatus.STREAMING
         )
         conversationRepository.sendMessage(assistantMsg)
+        _messages.value = _messages.value.filter { it.conversationId == convId } + assistantMsg
         _isStreaming.value = true
 
         try {
@@ -622,7 +654,7 @@ class ChatViewModel(
             status = MessageStatus.STREAMING
         )
         conversationRepository.sendMessage(assistantMsg)
-        _messages.value = _messages.value + assistantMsg
+        _messages.value = _messages.value.filter { it.conversationId == convId } + assistantMsg
         _isStreaming.value = true
 
         // Ensure active model is loaded in memory
@@ -787,8 +819,10 @@ class ChatViewModel(
                                 tokenCount = tokenCount,
                                 status = MessageStatus.STREAMING
                             )
-                            _messages.value = _messages.value.map {
-                                if (it.id == assistantMsg.id) assistantMsg else it
+                            if (_currentConversationId.value == convId) {
+                                _messages.value = _messages.value.map {
+                                    if (it.id == assistantMsg.id) assistantMsg else it
+                                }
                             }
                         }
 
@@ -815,8 +849,10 @@ class ChatViewModel(
                             ttftMs = calculatedTtft,
                             tokensPerSecond = calculatedTps
                         )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
+                        if (_currentConversationId.value == convId) {
+                            _messages.value = _messages.value.map {
+                                if (it.id == assistantMsg.id) assistantMsg else it
+                            }
                         }
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false
@@ -849,8 +885,10 @@ class ChatViewModel(
                             content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
                             status = MessageStatus.ERROR
                         )
-                        _messages.value = _messages.value.map {
-                            if (it.id == assistantMsg.id) assistantMsg else it
+                        if (_currentConversationId.value == convId) {
+                            _messages.value = _messages.value.map {
+                                if (it.id == assistantMsg.id) assistantMsg else it
+                            }
                         }
                         conversationRepository.updateMessage(assistantMsg)
                         _isStreaming.value = false

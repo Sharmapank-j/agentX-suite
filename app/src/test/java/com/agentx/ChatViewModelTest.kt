@@ -227,6 +227,100 @@ class ChatViewModelTest {
         testScheduler.advanceUntilIdle()
         assertEquals("/path/to/diagram.png", viewModel.uiState.value.attachedImagePath)
     }
+
+    @Test
+    fun testStartNewConversationSeparatesMessagesFromPreviousConversation() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+
+        // Conversation 1
+        viewModel.onInputTextChanged("Query for Session 1")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+
+        val conv1Id = viewModel.uiState.value.currentConversation?.id
+        assertNotNull("Session 1 should have a valid conversation ID", conv1Id)
+        val conv1Messages = viewModel.uiState.value.messages
+        assertEquals(2, conv1Messages.size)
+        assertTrue(conv1Messages.any { it.content == "Query for Session 1" })
+
+        // Start New Conversation
+        viewModel.startNewConversation()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.currentConversation)
+        assertEquals(0, viewModel.uiState.value.messages.size)
+
+        // Conversation 2
+        viewModel.onInputTextChanged("Query for Session 2")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+
+        val conv2Id = viewModel.uiState.value.currentConversation?.id
+        assertNotNull("Session 2 should have a valid conversation ID", conv2Id)
+        assertTrue("Session 2 ID must be distinct from Session 1", conv1Id != conv2Id)
+
+        val conv2Messages = viewModel.uiState.value.messages
+        assertEquals(2, conv2Messages.size)
+        assertTrue("Session 2 messages must contain Session 2 query", conv2Messages.any { it.content == "Query for Session 2" })
+        assertTrue("Session 2 messages must NOT contain Session 1 content", conv2Messages.none { it.content.contains("Session 1") })
+    }
+
+    @Test
+    fun testSwitchingConversationsLoadsOnlySelectedConversationMessages() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+
+        // Create Chat A
+        viewModel.onInputTextChanged("Chat A Prompt")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+        val chatAId = viewModel.uiState.value.currentConversation!!.id
+
+        // Start New Conversation and Create Chat B
+        viewModel.startNewConversation()
+        testScheduler.advanceUntilIdle()
+        viewModel.onInputTextChanged("Chat B Prompt")
+        viewModel.sendMessage()
+        testScheduler.advanceUntilIdle()
+        val chatBId = viewModel.uiState.value.currentConversation!!.id
+
+        // Switch back to Chat A
+        viewModel.selectConversation(chatAId)
+        testScheduler.advanceUntilIdle()
+
+        val loadedA = viewModel.uiState.value.messages
+        assertTrue("Loaded Chat A must have messages", loadedA.isNotEmpty())
+        assertTrue("Loaded Chat A must only contain Chat A messages", loadedA.all { it.conversationId == chatAId })
+        assertTrue("Loaded Chat A must not contain Chat B messages", loadedA.none { it.content.contains("Chat B") })
+
+        // Switch to Chat B
+        viewModel.selectConversation(chatBId)
+        testScheduler.advanceUntilIdle()
+
+        val loadedB = viewModel.uiState.value.messages
+        assertTrue("Loaded Chat B must have messages", loadedB.isNotEmpty())
+        assertTrue("Loaded Chat B must only contain Chat B messages", loadedB.all { it.conversationId == chatBId })
+        assertTrue("Loaded Chat B must not contain Chat A messages", loadedB.none { it.content.contains("Chat A") })
+    }
+
+    @Test
+    fun testStartNewConversationWhileStreamingCancelsActiveInference() = runTest(testDispatcher) {
+        backgroundScope.launch { viewModel.uiState.collect { } }
+        testScheduler.advanceUntilIdle()
+
+        // Send message
+        viewModel.onInputTextChanged("Streaming test prompt")
+        viewModel.sendMessage()
+
+        // Start new conversation while generation might be in-flight
+        viewModel.startNewConversation()
+        testScheduler.advanceUntilIdle()
+
+        assertFalse("Streaming should be terminated", viewModel.uiState.value.isStreaming)
+        assertEquals(null, viewModel.uiState.value.currentConversation)
+        assertEquals(0, viewModel.uiState.value.messages.size)
+    }
 }
 
 // --- Test Fakes ---

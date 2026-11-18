@@ -151,6 +151,15 @@ fun ChatScreen(
         }
     }
 
+    // Clean scroll reset when switching consultation or starting a new one
+    LaunchedEffect(state.currentConversation?.id) {
+        if (state.messages.isNotEmpty()) {
+            listState.scrollToItem(state.messages.size - 1)
+        } else {
+            listState.scrollToItem(0)
+        }
+    }
+
     // Auto-scroll on new message added
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {

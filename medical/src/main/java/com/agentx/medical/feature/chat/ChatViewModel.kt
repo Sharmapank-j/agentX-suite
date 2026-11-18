@@ -132,10 +132,15 @@ class ChatViewModel(
     ) { (conversations, activeConv, agentPair), (activeModel, allModels, modelStatus), inputState, execState ->
         val style = ResponseStyle.fromString(activeConv?.responseStyle)
         val depth = AnswerDepth.fromString(activeConv?.answerDepth)
+        val safeMessages = if (activeConv != null) {
+            inputState.messages.filter { it.conversationId == activeConv.id }
+        } else {
+            emptyList()
+        }
         ChatUiState(
             conversations = conversations,
             currentConversation = activeConv,
-            messages = inputState.messages,
+            messages = safeMessages,
             availableAgents = agentPair.first,
             selectedAgent = agentPair.second,
             inputText = inputState.inputText,
@@ -176,8 +181,8 @@ class ChatViewModel(
                 messagesJob?.cancel()
                 if (convId != null) {
                     messagesJob = viewModelScope.launch {
-                        conversationRepository.getMessagesForConversation(convId).collect {
-                            _messages.value = it
+                        conversationRepository.getMessagesForConversation(convId).collect { list ->
+                            _messages.value = list.filter { it.conversationId == convId }
                         }
                     }
                 } else {
@@ -223,14 +228,24 @@ class ChatViewModel(
     }
 
     fun selectConversation(conversationId: String) {
+        if (_currentConversationId.value == conversationId) return
+        stopGeneration()
+        messagesJob?.cancel()
+        _messages.value = emptyList()
         _currentConversationId.value = conversationId
+        _inputText.value = ""
+        _lastClassification.value = null
+        _liveMetrics.value = LiveInferenceMetrics()
     }
 
     fun startNewConversation() {
+        stopGeneration()
+        messagesJob?.cancel()
         _currentConversationId.value = null
         _messages.value = emptyList()
         _inputText.value = ""
         _lastClassification.value = null
+        _liveMetrics.value = LiveInferenceMetrics()
     }
 
     fun createNewConversation(title: String = "Clinical Consult") {
@@ -290,7 +305,9 @@ class ChatViewModel(
     fun clearCurrentConversation() {
         val convId = _currentConversationId.value ?: return
         viewModelScope.launch {
+            stopGeneration()
             conversationRepository.clearMessagesForConversation(convId)
+            _messages.value = emptyList()
         }
     }
 
@@ -301,11 +318,13 @@ class ChatViewModel(
     }
 
     fun stopGeneration() {
+        generationJob?.cancel()
+        _isStreaming.value = false
         viewModelScope.launch {
-            inferenceEngine.stopGeneration()
-            generationJob?.cancel()
-            _isStreaming.value = false
-            _modelStatus.value = inferenceEngine.getModelStatus()
+            try {
+                inferenceEngine.stopGeneration()
+                _modelStatus.value = inferenceEngine.getModelStatus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -363,6 +382,7 @@ class ChatViewModel(
 
         generationJob?.cancel()
         generationJob = viewModelScope.launch {
+            val isNewConv = (_currentConversationId.value == null)
             var convId = _currentConversationId.value
             if (convId == null) {
                 convId = UUID.randomUUID().toString()
@@ -401,7 +421,13 @@ class ChatViewModel(
                 status = MessageStatus.COMPLETED
             )
             conversationRepository.sendMessage(userMsg)
-            _messages.value = _messages.value.filter { it.status != MessageStatus.STREAMING || it.content.isNotBlank() } + userMsg
+            _messages.value = if (isNewConv) {
+                listOf(userMsg)
+            } else {
+                _messages.value.filter {
+                    it.conversationId == convId && (it.status != MessageStatus.STREAMING || it.content.isNotBlank())
+                } + userMsg
+            }
             _inputText.value = ""
 
             if (agent != null && agent.role == com.agentx.medical.domain.models.AgentRole.SUPERVISOR && clinicalSupervisor != null) {
@@ -473,7 +499,7 @@ class ChatViewModel(
             status = MessageStatus.STREAMING
         )
         conversationRepository.sendMessage(assistantMsg)
-        _messages.value = _messages.value + assistantMsg
+        _messages.value = _messages.value.filter { it.conversationId == convId } + assistantMsg
         _isStreaming.value = true
 
         try {
@@ -525,9 +551,9 @@ class ChatViewModel(
             agentId = agent?.id,
             status = MessageStatus.STREAMING
         )
-        android.util.Log.i("ChatViewModel", "executeInference: inserting initial assistantMsg $assistantMsgId for conv $convId")
+        logInfo("ChatViewModel", "executeInference: inserting initial assistantMsg $assistantMsgId for conv $convId")
         conversationRepository.sendMessage(assistantMsg)
-        _messages.value = _messages.value + assistantMsg
+        _messages.value = _messages.value.filter { it.conversationId == convId } + assistantMsg
         _isStreaming.value = true
 
         // Ensure active model is loaded in memory
@@ -646,7 +672,7 @@ class ChatViewModel(
         )
 
         try {
-            android.util.Log.i("ChatViewModel", "Starting inferenceEngine.generate for msg ${assistantMsg.id}")
+            logInfo("ChatViewModel", "Starting inferenceEngine.generate for msg ${assistantMsg.id}")
             val stopSeqs = (extendedConfig.stopSequences + listOf("<|im_end|>", "<|endoftext|>", "\nUser:", "\nClinician:")).distinct()
             inferenceEngine.generate(
                 InferenceRequest(
@@ -683,12 +709,14 @@ class ChatViewModel(
                                 tokenCount = tokenCount,
                                 status = MessageStatus.STREAMING
                             )
-                            val current = _messages.value
-                            if (current.none { it.id == assistantMsg.id }) {
-                                _messages.value = current + assistantMsg
-                            } else {
-                                _messages.value = current.map {
-                                    if (it.id == assistantMsg.id) assistantMsg else it
+                            if (_currentConversationId.value == convId) {
+                                val current = _messages.value
+                                if (current.none { it.id == assistantMsg.id }) {
+                                    _messages.value = current + assistantMsg
+                                } else {
+                                    _messages.value = current.map {
+                                        if (it.id == assistantMsg.id) assistantMsg else it
+                                    }
                                 }
                             }
                         }
@@ -699,7 +727,7 @@ class ChatViewModel(
                         }
                     }
                     is GenerationEvent.Finished -> {
-                        android.util.Log.i("ChatViewModel", "Finished event! totalTokens=${event.totalTokens}, buffer length=${buffer.length}")
+                        logInfo("ChatViewModel", "Finished event! totalTokens=${event.totalTokens}, buffer length=${buffer.length}")
                         val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
                         val finalTps = (event.completionTokens.coerceAtLeast(tokenCount) * 1000f) / elapsedMs
                         _liveMetrics.value = _liveMetrics.value.copy(
@@ -713,12 +741,14 @@ class ChatViewModel(
                             tokenCount = event.totalTokens,
                             status = MessageStatus.COMPLETED
                         )
-                        val current = _messages.value
-                        if (current.none { it.id == assistantMsg.id }) {
-                            _messages.value = current + assistantMsg
-                        } else {
-                            _messages.value = current.map {
-                                if (it.id == assistantMsg.id) assistantMsg else it
+                        if (_currentConversationId.value == convId) {
+                            val current = _messages.value
+                            if (current.none { it.id == assistantMsg.id }) {
+                                _messages.value = current + assistantMsg
+                            } else {
+                                _messages.value = current.map {
+                                    if (it.id == assistantMsg.id) assistantMsg else it
+                                }
                             }
                         }
                         conversationRepository.updateMessage(assistantMsg)
@@ -726,7 +756,7 @@ class ChatViewModel(
                         _modelStatus.value = inferenceEngine.getModelStatus()
                     }
                     is GenerationEvent.Error -> {
-                        android.util.Log.e("ChatViewModel", "Error event received: ${event.message}")
+                        logError("ChatViewModel", "Error event received: ${event.message}")
                         _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
                         val currentText = buffer.toString()
                         val errorDetail = event.message.orEmpty()
@@ -743,12 +773,14 @@ class ChatViewModel(
                             content = if (currentText.isNotEmpty()) currentText else "⚠️ Connection / Clinical Inference Notice:\n$diagnostic\n\nTip: You can change model providers or configure endpoints in Settings.",
                             status = MessageStatus.ERROR
                         )
-                        val current = _messages.value
-                        if (current.none { it.id == assistantMsg.id }) {
-                            _messages.value = current + assistantMsg
-                        } else {
-                            _messages.value = current.map {
-                                if (it.id == assistantMsg.id) assistantMsg else it
+                        if (_currentConversationId.value == convId) {
+                            val current = _messages.value
+                            if (current.none { it.id == assistantMsg.id }) {
+                                _messages.value = current + assistantMsg
+                            } else {
+                                _messages.value = current.map {
+                                    if (it.id == assistantMsg.id) assistantMsg else it
+                                }
                             }
                         }
                         conversationRepository.updateMessage(assistantMsg)
@@ -757,12 +789,12 @@ class ChatViewModel(
                     }
                 }
             }
-            android.util.Log.i("ChatViewModel", "Inference collect finished normally for msg ${assistantMsg.id}")
+            logInfo("ChatViewModel", "Inference collect finished normally for msg ${assistantMsg.id}")
         } catch (e: Throwable) {
-            android.util.Log.e("ChatViewModel", "Inference collect exception for msg ${assistantMsg.id}", e)
+            logError("ChatViewModel", "Inference collect exception for msg ${assistantMsg.id}", e)
             throw e
         } finally {
-            android.util.Log.i("ChatViewModel", "finally block: status=${assistantMsg.status}, bufferLen=${buffer.length}")
+            logInfo("ChatViewModel", "finally block: status=${assistantMsg.status}, bufferLen=${buffer.length}")
             _isStreaming.value = false
             _liveMetrics.value = _liveMetrics.value.copy(isLive = false)
             _modelStatus.value = inferenceEngine.getModelStatus()
@@ -780,11 +812,39 @@ class ChatViewModel(
                     }
                     conversationRepository.updateMessage(finalized)
                 } else {
-                    android.util.Log.w("ChatViewModel", "Deleting streaming message ${assistantMsg.id} because buffer is blank!")
+                    logWarn("ChatViewModel", "Deleting streaming message ${assistantMsg.id} because buffer is blank!")
                     _messages.value = _messages.value.filter { it.id != assistantMsg.id }
                     conversationRepository.deleteMessage(assistantMsg.id)
                 }
             }
+        }
+    }
+
+    private fun logInfo(tag: String, message: String) {
+        try {
+            android.util.Log.i(tag, message)
+        } catch (_: Throwable) {
+            println("[$tag] $message")
+        }
+    }
+
+    private fun logWarn(tag: String, message: String) {
+        try {
+            android.util.Log.w(tag, message)
+        } catch (_: Throwable) {
+            println("[$tag] WARN: $message")
+        }
+    }
+
+    private fun logError(tag: String, message: String, throwable: Throwable? = null) {
+        try {
+            if (throwable != null) {
+                android.util.Log.e(tag, message, throwable)
+            } else {
+                android.util.Log.e(tag, message)
+            }
+        } catch (_: Throwable) {
+            System.err.println("[$tag] ERROR: $message ${throwable?.message.orEmpty()}")
         }
     }
 }
