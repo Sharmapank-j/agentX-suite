@@ -112,10 +112,24 @@ For complete technical specifications, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 
 - [Brand Guidelines](docs/BRAND_GUIDELINES.md) — Logo marks, color palette, typography, icon geometry, and asset specifications.
 - [Design System](docs/DESIGN_SYSTEM.md) — Reusable components, theme tokens, typography, and responsive layouts.
-- [Security Architecture](docs/SECURITY.md) — Threat models, Keystore encryption, manifest boundaries, and clinical safeguards.
+- [Security Architecture](SECURITY.md) — Threat models, Keystore encryption, manifest boundaries, and clinical safeguards.
+- [Privacy Policy](PRIVACY_POLICY.md) — Local-first privacy architecture, zero-telemetry commitment, and permission justifications.
+- [Regulatory & Clinical Disclaimer](DISCLAIMER.md) — Non-diagnostic status, clinical validation protocols, and liability limits.
 - [Local GGUF Guide](docs/LOCAL_GGUF_GUIDE.md) — Local model deployment, quantization formats, and memory tuning.
 - [Networking & P2P Guide](docs/NETWORKING.md) — Embedded Ktor server, reverse tunneling, and WebRTC streaming.
-- [Changelog](CHANGELOG.md) — Comprehensive v1.0.0 release log.
+- [Changelog](CHANGELOG.md) — Comprehensive v1.1.0 release log.
+
+---
+
+## Privacy & Data Sovereignty
+
+AgentX Suite is engineered on the principle that your intelligence belongs solely to you:
+- **Zero Telemetry:** No user analytics, no crash trackers, no advertising SDKs, and no background reporting.
+- **Local-First Execution:** Neural inference executes directly on physical device silicon via upstream `llama.cpp`.
+- **Encrypted Local Storage:** All keys and tokens are protected via AES-256-GCM backed by the **Android Keystore System**.
+- **Clinical Confidentiality:** Patient queries and medical calculations never leave your hardware.
+
+For detailed privacy guarantees, data retention rights, and permission justifications, please review our official [Privacy Policy](PRIVACY_POLICY.md).
 
 ---
 
