@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
+    id("maven-publish")
 }
 
 android {
@@ -37,6 +38,12 @@ android {
         }
     }
 
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -44,6 +51,29 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            register<MavenPublication>("release") {
+                from(components["release"])
+                groupId = "com.agentx"
+                artifactId = "core"
+                version = "1.1.0"
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Sharmapank-j/agentX-suite")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR") ?: System.getenv("USERNAME")
+                    password = System.getenv("GITHUB_TOKEN") ?: System.getenv("TOKEN")
+                }
+            }
+        }
     }
 }
 

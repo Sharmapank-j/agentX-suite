@@ -5,27 +5,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [1.1.0] — 2026-11-18
+## [1.1.0] — 2026-11-19
 
-### 🚀 Universal Serving, Medical Intelligence, and Modular Component OTA
+### 🚀 Universal Serving, Medical Intelligence, Processor Allocation & Roomy UI Experience
 
-#### 1. Universal Cross-Network Serving (AgentX Serve)
+#### 1. Universal Cross-Network Serving & Hardware Controls (AgentX Serve)
 - **Universal Multi-Network Serving**: AgentX Serve now serves any device anywhere across 4G/5G/Wi-Fi without local subnet restrictions or router port-forwarding.
 - **In-App SSH Reverse Tunneling**: Embedded pure-Java/Kotlin SSH reverse proxy (`TunnelManager`) connecting via port 443 SSL failover (`a.pinggy.io:443`), generating dynamic 2048-bit RSA keypairs in-memory.
+- **CPU Thread Processor Allocation**: Dynamic processor core allocation slider in the UI, defaulting to `max(1, availableProcessors - 1)` for maximum throughput and thermal stability.
 - **Background IO Window Draining**: Dedicated coroutine stream draining preventing JSch SSH channel window exhaustion and eliminating server stalls.
 - **5-Second NAT Keep-Alives**: Proactive keep-alive loop (`sendKeepAliveMsg()`) to prevent cellular carrier NAT timeouts.
 - **Zero-Trust Token Validation & Security**: Injected IP-aware bearer authorization. Public WAN access using static developer keys is strictly rejected while allowing private LAN/loopback testing.
 - **CORS Preflight Caching**: Cached OPTIONS preflight handshakes (`maxAge = 3600s`) preventing gateway flooding.
+- **Roomy & Spacy Serve Dashboard**: Expanded layout with generous card paddings, tactile touch targets, and clear telemetry cards.
 - **Embedded Web Chat Client**: Full responsive HTML/CSS/JS client served at `/` and `/chat`.
 
-#### 2. Medical Intelligence Engine (AgentX Medical Phase 1)
+#### 2. Medical Intelligence Engine & Dynamic Style Steering (AgentX Medical)
 - **21 Clinical Disciplines**: Specialized prompt directives and keyword mappings covering Cardiology, Pulmonology, Endocrinology, Nephrology, Surgery, Pediatrics, and more.
 - **20+ Clinical Query Intents**: Structured clinical management, differential diagnosis, pharmacotherapy, resuscitation algorithms, and diagnostic evaluations.
 - **25 Matrix Generation Matrix**: Seamless harmonization of 5 User Response Styles (Medical Student, Clinical Professional, Advanced, Research, Viva) with 5 Conversation Answer Depths (Brief, Standard, Detailed, Advanced, Expert).
+- **Dynamic Runtime Style Steering**: Interactive dropdowns dynamically steer prompt directives in real-time, persisting user preferences cleanly across consultations without hardcoded restarts.
 - **Word-Boundary Safe Classifier**: Regex-bounded entity extraction and intent prioritization preventing keyword collisions (e.g. `overdose` correctly routing to `TOXICOLOGY` instead of `PHARMACOTHERAPY`).
 - **Emergency ABCDE Triage Overrides**: Critical emergency alerts prepending resuscitation protocols for time-critical conditions.
 
-#### 3. Modular Component-Level OTA Update Subsystem
+#### 3. Strict Conversation Separation & Context Isolation (AgentX & AgentX Medical)
+- **Zero Conversation Intermingling**: Completely isolated memory spaces ensuring facts and turn histories from previous sessions never leak into new chats.
+- **Synthesized Fallback State**: Eliminated null active conversation race conditions upon clicking New Conversation.
+- **Prompt Deduplication**: Eliminated duplicate user turn injection in the LLM context buffer by excluding the active message ID prior to inference appending.
+- **Isolated Memory Queries**: Scoped episodic memory queries to `MemoryType.PROFILE` only, preserving cross-session profile facts without cross-contaminating chat threads.
+
+#### 4. Edge-to-Edge Navigation, Responsive Keyboard & Roomy UI Polish
+- **Dynamic Navigation Bar Auto-Hiding**: Integrated modern `enableEdgeToEdge()` and responsive IME visibility detection to automatically hide the root navigation bar (`Consult`/`Chat`, `Models`, `Settings`) when typing, resting the chat input cleanly directly above the keyboard.
+- **Unclipped Top Bars**: Polish to `"New Chat"` / `"New Consult"` headers with flexible weights (`Modifier.weight(1f, fill = false)`), displaying titles and `"Clinical Assistant • Online"` with zero clipping.
+- **Dedicated Quick-Action Touch Targets**: 40dp dedicated tap targets for `+` new consultation action, eliminating accidental clicks on the compact status-dot model badges.
+- **Roomy Session History Drawer**: Expanded `ModalDrawerSheet` (320dp–360dp) with generous 40dp delete button tap targets.
+
+#### 5. Modular Component-Level OTA Update Subsystem
 - **Component-Level Updates**: Granular OTA updates for intelligence packs, clinical guidelines, model weights, prompt templates, and web assets without full APK rebuilds.
 - **Cryptographic Verification**: Streaming SHA-256 integrity validation and directory traversal prevention in `OtaVerifier`.
 - **Atomic Local Registry**: `OtaComponentRegistry` with sandboxed versioned directories (`baseDir/components/{id}/{versionCode}/`) and 1-click rollback.
@@ -33,7 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Serve Hub Distribution**: AgentX Serve endpoints (`GET /ota/manifest.json`, `GET /ota/download/{id}`, `POST /ota/publish`).
 - **Settings UI Dashboard**: Live component update card in AgentX Medical with auto-update toggle, Wi-Fi only restriction for large weights, and download progress tracking.
 
-#### 4. Hardware Verification & Reliability
+#### 6. Hardware Verification & Reliability
 - **Tested Physical Hardware**: Verified end-to-end on Xiaomi Redmi Note 11 Pro+ 5G (`5eb1d795a3b4`, Android 13, `arm64-v8a`).
 - **Battery Safeguards**: Reduced inference wake-lock timeout from 60 minutes to 10 minutes to protect battery health against edge-case process kills.
 - **Full Unit Test Suite**: Clean pass across all 4 modules (`:core`, `:admin`, `:medical`, `:app`).

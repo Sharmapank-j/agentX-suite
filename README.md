@@ -138,9 +138,9 @@ For complete technical specifications, see [docs/ARCHITECTURE.md](docs/ARCHITECT
 ```
 
 Built APK outputs:
-- `app/build/outputs/apk/debug/app-debug.apk` (`AgentX-v1.0.0-debug.apk`)
-- `medical/build/outputs/apk/debug/medical-debug.apk` (`AgentX-Medical-v1.0.0-debug.apk`)
-- `admin/build/outputs/apk/debug/admin-debug.apk` (`AgentX-Serve-v1.0.0-debug.apk`)
+- `app/build/outputs/apk/debug/app-debug.apk` (`AgentX-v1.1.0-debug.apk`)
+- `medical/build/outputs/apk/debug/medical-debug.apk` (`AgentX-Medical-v1.1.0-debug.apk`)
+- `admin/build/outputs/apk/debug/admin-debug.apk` (`AgentX-Serve-v1.1.0-debug.apk`)
 
 ---
 
