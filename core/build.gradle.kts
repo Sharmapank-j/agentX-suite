@@ -19,6 +19,19 @@ android {
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
         }
+
+        externalNativeBuild {
+            cmake {
+                val candidateDirs = listOf(
+                    file(".cxx/Debug/6o2c554k/arm64-v8a/_deps/llama_cpp-src"),
+                    file(".cxx/Debug/6o2c554k/x86_64/_deps/llama_cpp-src")
+                )
+                val found = candidateDirs.firstOrNull { File(it, "CMakeLists.txt").exists() }
+                if (found != null) {
+                    arguments("-DFETCHCONTENT_SOURCE_DIR_LLAMA_CPP=${found.absolutePath.replace('\\', '/')}")
+                }
+            }
+        }
     }
 
     externalNativeBuild {
