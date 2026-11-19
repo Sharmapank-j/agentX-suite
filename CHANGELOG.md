@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.1.1] — 2026-11-20
+
+### 📦 Official Release Variant Build & Distribution
+- **First Production Release Binaries**: Full distribution of release variant APKs (`AgentX-v1.1.1.apk`, `AgentX-Medical-v1.1.1.apk`, `AgentX-Serve-v1.1.1.apk`) compiled with ProGuard optimizations, resource shrinking, APK Signature Scheme v2, and non-debuggable manifests (`com.agentx`, `com.agentx.medical`, `com.agentx.admin`).
+- **Eliminated Debug Build Artifacts**: CI/CD pipeline migrated from debug builds to release builds, ensuring published GitHub release assets are clean, non-debuggable production artifacts.
+- **CMake Source Cache Optimization**: Native build caching for `llama.cpp` source tree, accelerating release compilation across both local development and CI environments.
+- **Published Core 1.1.1 Library**: Published updated `com.agentx:core:1.1.1` artifact to GitHub Packages.
+
 ## [1.1.0] — 2026-11-19
 
 ### 🚀 Universal Serving, Medical Intelligence, Processor Allocation & Roomy UI Experience

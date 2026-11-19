@@ -74,7 +74,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.agentx"
                 artifactId = "core"
-                version = "1.1.0"
+                version = "1.1.1"
             }
         }
         repositories {
