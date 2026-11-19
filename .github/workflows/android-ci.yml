@@ -39,6 +39,12 @@ jobs:
       - name: Build Debug APKs (All 3 Applications)
         if: always()
         run: ./gradlew assembleDebug --no-daemon
+      - name: Publish Core Package to GitHub Packages
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: ./gradlew :core:publishReleasePublicationToGitHubPackagesRepository --no-daemon
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -59,39 +65,11 @@ jobs:
             medical/build/outputs/apk/debug/medical-debug.apk
             admin/build/outputs/apk/debug/admin-debug.apk
 
-  publish-package:
-    name: Publish Core Library to GitHub Packages
-    needs: build-and-test
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-and-test.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Grant Execute Permission to Gradlew
-        run: chmod +x gradlew
-      - name: Publish Core Package to GitHub Packages
-        run: ./gradlew :core:publishReleasePublicationToGitHubPackagesRepository --no-daemon
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   publish-release:
     name: Publish GitHub Release
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/v') && needs.build-and-test.result == 'success'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -113,19 +91,7 @@ jobs:
           sha256sum *.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
           cd ..
-          python3 -c "
-import re
-with open('CHANGELOG.md', 'r') as f:
-    text = f.read()
-tag = '${VERSION}'.lstrip('v')
-m = re.search(r'## \[' + re.escape(tag) + r'\].*?\n(.*?)(?=\n## \[|\Z)', text, re.DOTALL)
-if m:
-    with open('RELEASE_BODY.md', 'w') as out:
-        out.write(m.group(1).strip())
-else:
-    with open('RELEASE_BODY.md', 'w') as out:
-        out.write('Automated release for ' + '${VERSION}')
-"
+          python3 scripts/extract_release_notes.py "${VERSION}"
       - name: Create GitHub Release and upload APKs
         uses: softprops/action-gh-release@v2
         with:
