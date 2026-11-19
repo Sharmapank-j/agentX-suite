@@ -42,18 +42,22 @@ static jstring utf8ToJString(JNIEnv * env, const char * bytes, size_t length) {
             codepoint = c;
         } else if ((c & 0xE0) == 0xC0) {
             if (i >= length) break;
-            codepoint = ((c & 0x1F) << 6) | (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+            codepoint = ((c & 0x1F) << 6) |
+                        (static_cast<unsigned char>(bytes[i]) & 0x3F);
+            i += 1;
         } else if ((c & 0xF0) == 0xE0) {
             if (i + 1 >= length) break;
             codepoint = ((c & 0x0F) << 12) |
-                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 6) |
-                        (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+                        ((static_cast<unsigned char>(bytes[i]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(bytes[i + 1]) & 0x3F);
+            i += 2;
         } else if ((c & 0xF8) == 0xF0) {
             if (i + 2 >= length) break;
             codepoint = ((c & 0x07) << 18) |
-                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 12) |
-                        ((static_cast<unsigned char>(bytes[i++]) & 0x3F) << 6) |
-                        (static_cast<unsigned char>(bytes[i++]) & 0x3F);
+                        ((static_cast<unsigned char>(bytes[i]) & 0x3F) << 12) |
+                        ((static_cast<unsigned char>(bytes[i + 1]) & 0x3F) << 6) |
+                        (static_cast<unsigned char>(bytes[i + 2]) & 0x3F);
+            i += 3;
         }
         if (codepoint <= 0xFFFF) {
             utf16.push_back(static_cast<jchar>(codepoint));
