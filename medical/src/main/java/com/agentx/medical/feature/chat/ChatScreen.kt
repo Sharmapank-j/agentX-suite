@@ -184,7 +184,9 @@ fun ChatScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                modifier = Modifier.widthIn(min = 320.dp, max = 360.dp)
+            ) {
                 Text(
                     text = "Clinical Consultations",
                     style = MaterialTheme.typography.titleMedium,
@@ -222,7 +224,13 @@ fun ChatScreen(
                     items(state.conversations) { conv ->
                         val isSelected = conv.id == state.currentConversation?.id
                         NavigationDrawerItem(
-                            label = { Text(conv.title, maxLines = 1) },
+                            label = {
+                                Text(
+                                    conv.title,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
                             selected = isSelected,
                             onClick = {
                                 viewModel.selectConversation(conv.id)
@@ -234,13 +242,13 @@ fun ChatScreen(
                                         conversationToDeleteId = conv.id
                                         showDeleteConfirmDialog = true
                                     },
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = "Delete",
                                         tint = MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             },
@@ -256,10 +264,12 @@ fun ChatScreen(
                 TopAppBar(
                     title = {
                         Column(
-                            modifier = Modifier.clickable {
-                                renameText = state.currentConversation?.title ?: ""
-                                showRenameDialog = true
-                            }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    renameText = state.currentConversation?.title ?: ""
+                                    showRenameDialog = true
+                                }
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Surface(
@@ -278,10 +288,12 @@ fun ChatScreen(
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = state.currentConversation?.title ?: "AgentX Medical",
+                                    text = state.currentConversation?.title ?: "New Consult",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(
@@ -294,7 +306,9 @@ fun ChatScreen(
                             Text(
                                 text = "Clinical Assistant • Online",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     },
@@ -305,7 +319,10 @@ fun ChatScreen(
                     },
                     actions = {
                         // Quick Action: New Clinical Consult
-                        IconButton(onClick = { viewModel.startNewConversation() }) {
+                        IconButton(
+                            onClick = { viewModel.startNewConversation() },
+                            modifier = Modifier.size(40.dp)
+                        ) {
                             Icon(Icons.Default.Add, contentDescription = "New Consultation", tint = ClinicalTealBright)
                         }
 
@@ -313,12 +330,12 @@ fun ChatScreen(
                         val isLoadedPill = state.activeModel != null && (state.modelStatus.state == ModelLifecycleState.LOADED || state.modelStatus.state == ModelLifecycleState.GENERATING)
                         Surface(
                             onClick = { showModelSwitcherSheet = true },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.padding(end = 4.dp)
+                            modifier = Modifier.padding(horizontal = 2.dp)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
@@ -327,10 +344,9 @@ fun ChatScreen(
                                         .clip(CircleShape)
                                         .background(if (isLoadedPill) Color(0xFF10B981) else Color(0xFFFF9800))
                                 )
-                                Spacer(modifier = Modifier.width(5.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isLoadedPill) "${state.activeModel?.name?.take(10) ?: "Engine"} (RAM)"
-                                           else (state.activeModel?.name?.take(10) ?: "llama.cpp"),
+                                    text = state.activeModel?.name?.take(9) ?: "MediMind",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
@@ -339,7 +355,10 @@ fun ChatScreen(
                         }
 
                         Box {
-                            IconButton(onClick = { showTopMenu = true }) {
+                            IconButton(
+                                onClick = { showTopMenu = true },
+                                modifier = Modifier.size(40.dp)
+                            ) {
                                 Icon(Icons.Default.MoreVert, contentDescription = "Options")
                             }
                             DropdownMenu(
@@ -465,8 +484,7 @@ fun ChatScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .imePadding(),
+                    .padding(paddingValues),
                 contentAlignment = Alignment.TopCenter
             ) {
                 val isWideScreen = maxWidth >= 640.dp

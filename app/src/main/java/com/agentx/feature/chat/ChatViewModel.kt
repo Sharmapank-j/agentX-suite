@@ -106,7 +106,9 @@ class ChatViewModel(
         agentRepository.getAllAgents(),
         _selectedAgentId
     ) { conversations, currentId, agents, selectedAgentId ->
-        val activeConv = if (currentId != null) conversations.find { it.id == currentId } else null
+        val activeConv = if (currentId != null) {
+            conversations.find { it.id == currentId } ?: Conversation(id = currentId, title = "New Chat")
+        } else null
         val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.find { it.id == "agent_assistant" } ?: agents.firstOrNull()
         Triple(conversations, activeConv, Pair(agents, activeAgent))
     }
@@ -259,7 +261,10 @@ class ChatViewModel(
                 if (convId != null) {
                     messagesJob = viewModelScope.launch {
                         conversationRepository.getMessagesForConversation(convId).collect { msgList ->
-                            _messages.value = msgList.filter { it.conversationId == convId }
+                            val forThisConv = msgList.filter { it.conversationId == convId }
+                            if (forThisConv.isNotEmpty() || _messages.value.none { it.conversationId == convId }) {
+                                _messages.value = forThisConv
+                            }
                         }
                     }
                 } else {
@@ -327,8 +332,8 @@ class ChatViewModel(
         _liveMetrics.value = LiveInferenceMetrics()
     }
 
-    fun createNewConversation(title: String = "New Conversation") {
-        if (title == "New Conversation") {
+    fun createNewConversation(title: String = "New Chat") {
+        if (title == "New Chat" || title == "New Conversation") {
             // UI trigger: resets chat view without inserting empty DB ghost row
             startNewConversation()
         } else {
@@ -537,7 +542,8 @@ class ChatViewModel(
                     agent = agent,
                     agentName = agentName,
                     attachmentPath = attachmentPath,
-                    attachmentMime = attachmentMime
+                    attachmentMime = attachmentMime,
+                    excludeUserMsgId = userMsg.id
                 )
             }
         }
@@ -641,7 +647,8 @@ class ChatViewModel(
         agent: Agent?,
         agentName: String,
         attachmentPath: String? = null,
-        attachmentMime: String? = null
+        attachmentMime: String? = null,
+        excludeUserMsgId: String? = null
     ) {
         val assistantMsgId = UUID.randomUUID().toString()
         val assistantMsg = Message(
@@ -703,7 +710,7 @@ class ChatViewModel(
             }
         } catch (_: Throwable) { }
 
-        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg, attachmentPath, attachmentMime)
+        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg, attachmentPath, attachmentMime, excludeUserMsgId)
     }
 
     private suspend fun streamInferenceIntoMessage(
@@ -712,13 +719,14 @@ class ChatViewModel(
         agent: Agent?,
         initialMsg: Message,
         attachmentPath: String? = null,
-        attachmentMime: String? = null
+        attachmentMime: String? = null,
+        excludeUserMsgId: String? = null
     ) {
         var assistantMsg = initialMsg
 
         // Context Attention & Memory Management: Multi-layer attention allocation
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
-            .filter { it.id != assistantMsg.id && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
+            .filter { it.id != assistantMsg.id && (excludeUserMsgId == null || it.id != excludeUserMsgId) && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
 
         val activeModelConfig = modelRepository.getActiveModel().first()
         val extendedConfig = ExtendedModelConfig.parse(activeModelConfig?.capabilityProfile)
@@ -736,7 +744,11 @@ class ChatViewModel(
         }
 
         val relevantMemories = try {
-            memoryManager?.search(com.agentx.core.memory.MemoryQuery(query = userPrompt, limit = 3)) ?: emptyList()
+            memoryManager?.search(com.agentx.core.memory.MemoryQuery(
+                query = userPrompt,
+                types = setOf(com.agentx.core.memory.MemoryType.PROFILE),
+                limit = 3
+            )) ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }

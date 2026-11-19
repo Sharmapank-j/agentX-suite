@@ -290,7 +290,7 @@ fun ChatScreen(
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = WA_SURFACE,
-                modifier = Modifier.width(300.dp)
+                modifier = Modifier.widthIn(min = 320.dp, max = 360.dp)
             ) {
                 // Drawer Header — green gradient avatar + app name
                 Box(
@@ -400,13 +400,13 @@ fun ChatScreen(
                                         conversationToDeleteId = conv.id
                                         showDeleteConfirmDialog = true
                                     },
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(40.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = "Delete",
                                         tint = if (isSelected) WA_ACCENT.copy(alpha = 0.7f) else WA_TEXT_SECONDARY,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             },
@@ -457,7 +457,7 @@ fun ChatScreen(
         Scaffold(
             topBar = {
                 WhatsAppTopBar(
-                    conversationTitle = state.currentConversation?.title ?: "AgentX Chat",
+                    conversationTitle = state.currentConversation?.title ?: "New Chat",
                     activeModel = state.activeModel,
                     modelStatus = state.modelStatus,
                     gatewayHealth = state.gatewayHealth,
@@ -530,12 +530,11 @@ fun ChatScreen(
             containerColor = WA_BG,
             modifier = modifier
         ) { paddingValues ->
-            // FIX 1: imePadding on content column ensures list scrolls above keyboard
+            // Scaffold bottomBar already includes imePadding; padding(paddingValues) aligns content perfectly
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
-                    .imePadding(),
+                    .padding(paddingValues),
                 contentAlignment = Alignment.TopCenter
             ) {
                 val screenWidth = maxWidth
@@ -816,12 +815,14 @@ private fun WhatsAppTopBar(
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { onTitleClick() }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onTitleClick() }
             ) {
                 // Avatar circle
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(WA_ACCENT, Color(0xFF007A63)))),
                     contentAlignment = Alignment.Center
@@ -829,12 +830,12 @@ private fun WhatsAppTopBar(
                     Text(
                         text = "X",
                         fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         color = Color.White
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = conversationTitle,
                         fontWeight = FontWeight.Bold,
@@ -869,17 +870,25 @@ private fun WhatsAppTopBar(
             }
         },
         actions = {
-            // Model Pill Badge
+            // Functional New Chat Quick Action with dedicated 40dp touch target
+            IconButton(
+                onClick = onNewChatClick,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New Conversation", tint = WA_ACCENT)
+            }
+
+            // Compact Model Pill Badge
             val isLoadedPill = activeModel != null &&
                 (modelStatus?.state == ModelLifecycleState.LOADED || modelStatus?.state == ModelLifecycleState.GENERATING)
             Surface(
                 onClick = onModelBadgeClick,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = WA_BORDER,
-                modifier = Modifier.padding(end = 2.dp)
+                modifier = Modifier.padding(horizontal = 2.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -888,10 +897,9 @@ private fun WhatsAppTopBar(
                             .clip(CircleShape)
                             .background(if (isLoadedPill) WA_ACCENT else Color(0xFFFF9800))
                     )
-                    Spacer(modifier = Modifier.width(5.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isLoadedPill) "${activeModel?.name?.take(10) ?: "Engine"} (RAM)"
-                               else (activeModel?.name?.take(10) ?: "llama.cpp"),
+                        text = activeModel?.name?.take(9) ?: "Ready",
                         style = MaterialTheme.typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -900,13 +908,11 @@ private fun WhatsAppTopBar(
                 }
             }
 
-            // Functional New Chat Quick Action
-            IconButton(onClick = onNewChatClick) {
-                Icon(Icons.Default.Add, contentDescription = "New Conversation", tint = WA_ACCENT)
-            }
-
             Box {
-                IconButton(onClick = { showMenu = true }) {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = WA_TEXT_PRIMARY)
                 }
                 DropdownMenu(

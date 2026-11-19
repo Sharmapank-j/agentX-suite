@@ -1,5 +1,9 @@
 package com.agentx.navigation
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -9,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -33,6 +38,7 @@ import com.agentx.feature.teams.TeamBuilderScreen
 import com.agentx.feature.teams.TeamsScreen
 import com.agentx.feature.teams.TeamsViewModel
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AgentXNavGraph(
     chatViewModel: ChatViewModel,
@@ -46,7 +52,9 @@ fun AgentXNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val isBottomBarVisible = Screen.bottomNavItems.any { it.route == currentRoute }
+    val density = LocalDensity.current
+    val isImeVisible = WindowInsets.isImeVisible || WindowInsets.ime.getBottom(density) > 0
+    val isBottomBarVisible = Screen.bottomNavItems.any { it.route == currentRoute } && !isImeVisible
 
     Scaffold(
         bottomBar = {

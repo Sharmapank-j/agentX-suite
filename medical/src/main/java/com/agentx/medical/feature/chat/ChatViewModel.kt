@@ -101,7 +101,9 @@ class ChatViewModel(
         agentRepository.getAllAgents(),
         _selectedAgentId
     ) { conversations, currentId, agents, selectedAgentId ->
-        val activeConv = if (currentId != null) conversations.find { it.id == currentId } else null
+        val activeConv = if (currentId != null) {
+            conversations.find { it.id == currentId } ?: Conversation(id = currentId, title = "New Clinical Consult")
+        } else null
         val activeAgent = agents.find { it.id == selectedAgentId } ?: agents.find { it.id == "agent_assistant" } ?: agents.firstOrNull()
         Triple(conversations, activeConv, Pair(agents, activeAgent))
     }
@@ -204,7 +206,10 @@ class ChatViewModel(
                 if (convId != null) {
                     messagesJob = viewModelScope.launch {
                         conversationRepository.getMessagesForConversation(convId).collect { list ->
-                            _messages.value = list.filter { it.conversationId == convId }
+                            val forThisConv = list.filter { it.conversationId == convId }
+                            if (forThisConv.isNotEmpty() || _messages.value.none { it.conversationId == convId }) {
+                                _messages.value = forThisConv
+                            }
                         }
                     }
                 } else {
@@ -483,7 +488,8 @@ class ChatViewModel(
                     convId = convId,
                     userPrompt = text,
                     agent = agent,
-                    agentName = agentName
+                    agentName = agentName,
+                    excludeUserMsgId = userMsg.id
                 )
             }
         }
@@ -581,7 +587,8 @@ class ChatViewModel(
         convId: String,
         userPrompt: String,
         agent: Agent?,
-        agentName: String
+        agentName: String,
+        excludeUserMsgId: String? = null
     ) {
         val assistantMsgId = UUID.randomUUID().toString()
         val assistantMsg = Message(
@@ -645,20 +652,21 @@ class ChatViewModel(
             }
         } catch (_: Throwable) { }
 
-        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg)
+        streamInferenceIntoMessage(convId, userPrompt, agent, assistantMsg, excludeUserMsgId)
     }
 
     private suspend fun streamInferenceIntoMessage(
         convId: String,
         userPrompt: String,
         agent: Agent?,
-        initialMsg: Message
+        initialMsg: Message,
+        excludeUserMsgId: String? = null
     ) {
         var assistantMsg = initialMsg
 
         // Context Budgeting & Sliding Window Construction: only feed completed non-empty messages
         val historyMessages = conversationRepository.getMessagesForConversation(convId).first()
-            .filter { it.id != assistantMsg.id && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
+            .filter { it.id != assistantMsg.id && (excludeUserMsgId == null || it.id != excludeUserMsgId) && it.status == MessageStatus.COMPLETED && it.content.isNotBlank() }
 
         // 1. Dynamic Medical Query Classification
         val classification = MedicalQueryClassifier.classify(userPrompt)
